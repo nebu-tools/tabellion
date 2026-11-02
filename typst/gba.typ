@@ -6,6 +6,8 @@
 // Die Vorschau ist eine Lesehilfe. Maßgeblich ist die aus der Word-Vorlage
 // erzeugte docx.
 
+#import "methoden.typ": bausteine
+
 #let _grau = luma(235)
 #let _dunkel = luma(170)
 
@@ -57,6 +59,18 @@
   } else {
     inhalt
   }
+}
+
+// Inhalt eines Textbausteins aus methoden.typ.
+#let baustein-inhalt(name, werte) = {
+  assert(name in bausteine, message: "Unbekannter Textbaustein: " + name)
+  _nummern((bausteine.at(name))(werte))
+}
+
+// Textbaustein im Fließtext. Über `tag:` findet `gba.R apply` ihn später wieder.
+#let baustein(name, werte: (:), tag: none) = {
+  let inhalt = baustein-inhalt(name, werte)
+  _reg((kind: "text", tag: tag, body: inhalt), inhalt)
 }
 
 #let absatz(id, inhalt) = _reg((kind: "block", id: id, body: _nummern(inhalt)), par(inhalt))
@@ -154,8 +168,8 @@
 )
 
 // Neue Abbildung, z. B. ein Kaplan-Meier- oder Forest-Plot aus R.
-#let abbildung(bild, beschriftung: none) = _reg(
-  (kind: "abbildung", bild: bild, titel: beschriftung),
+#let abbildung(bild, beschriftung: none, tag: none) = _reg(
+  (kind: "abbildung", bild: bild, titel: beschriftung, tag: tag),
   figure(bild, caption: beschriftung),
 )
 

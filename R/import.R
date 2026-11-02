@@ -75,7 +75,7 @@ gba_import <- function(modul, dir) {
   on.exit(unlink(tpl$dir, recursive = TRUE))
   tname <- basename(template)
   file.copy(template, file.path(dir, tname), overwrite = TRUE)
-  file.copy(file.path(gba_root(), "typst/gba.typ"), file.path(dir, "gba.typ"), overwrite = TRUE)
+  file.copy(file.path(gba_root(), "typst", c("gba.typ", "methoden.typ")), dir, overwrite = TRUE)
   mod <- guess_module(template)
   out <- c(
     sprintf("// Erzeugt aus %s", tname),

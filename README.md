@@ -20,6 +20,8 @@ rv run gba.R migrate old/m4.typ modul4 dossier/m4-new        # move to a new tem
 
 Modules: `modul1`, `modul1-checkliste`, `modul2`, `modul3`, `modul4`, `k1`, `k1-checkliste`, `k2`, `k3`, `k4`.
 
+Illustrated guide: [docs/how-to-use.html](docs/how-to-use.html).
+
 Example with R tables and Kaplan-Meier plots: [examples/modul4/demo.R](examples/modul4/demo.R).
 
 Page numbers depend on Word's layout. Before you create the PDF, update all fields in Word (`Ctrl+A`, `F9`). With a non-German Word UI, the update drops the chapter 1 TOC entry.
@@ -33,7 +35,8 @@ Page numbers depend on Word's layout. Before you create the PDF, update all fiel
 | `#tabelle("b0430", daten: rows, spalten: (2, 1))` | Replace the body rows of a template table |
 | `#neue-tabelle(beschriftung: [...], kopf: (...), zeilen: rows)` | Add a captioned table |
 | `#neue-tabelle(tabelle: json("os.json"))` | Add a table from `gba_tabelle()`, with merged cells |
-| `#abbildung(image("km.png"), beschriftung: [...])` | Add a captioned figure |
+| `#abbildung(image("km.png"), beschriftung: [...], tag: "abb_os")` | Add a captioned figure |
+| `#baustein("ereigniszeit", werte: (n: 12, studie: "A"), tag: "met_km")` | Add a text block from `typst/methoden.typ` inside `#antwort` |
 | `#mit(("<Endpunkt xxx>": name), [...])` | Replace placeholders in a repeated section |
 | `#kreuz(0, true)` | Tick a checkbox |
 
@@ -46,7 +49,7 @@ R helpers: `gba_json()`, `gba_zeilen()`, `gba_tabelle()`, `gba_zelle()`, `gba_za
 For a docx that people work on in Word, skip Typst. These commands change only their target and write tracked changes under the author `Automatisierung`.
 
 ```sh
-rv run gba.R outline modul4.docx                    # headings, tables, placeholders as JSON
+rv run gba.R outline modul4.docx                    # headings, text, tables, figures, placeholders as JSON
 rv run gba.R apply modul4.docx ops.json out.docx    # prints a report as JSON
 ```
 
@@ -57,6 +60,11 @@ rv run gba.R apply modul4.docx ops.json out.docx    # prints a report as JSON
     {"op": "werte", "ziel": {"tag": "tab_os"}, "tabelle": {"kopf": [["Arm", "N"]], "zeilen": [["A", "12"]]}},
     {"op": "ersetzen", "ziel": {"block": "b0145"}, "tabelle": {"kopf": [["Arm"]], "zeilen": [["A"]]}},
     {"op": "einfuegen", "platzhalter": "tab:os", "tabelle": {"titel": "OS", "tag": "tab_os", "kopf": [["Arm"]], "zeilen": [["A"]]}},
+    {"op": "einfuegen", "platzhalter": "abb:km", "abbildung": {"datei": "km.png", "titel": "KM OS", "tag": "abb_km", "breite": "14cm"}},
+    {"op": "einfuegen", "platzhalter": "met:km", "text": {"baustein": "ereigniszeit", "werte": {"n": 12, "studie": "A"}, "tag": "met_km"}},
+    {"op": "ersetzen", "ziel": {"tag": "abb_km"}, "abbildung": {"datei": "km2.png"}},
+    {"op": "ersetzen", "ziel": {"block": "b0150", "bis": "b0152"}, "text": {"baustein": "subgruppen", "werte": {"alpha": 0.05}}},
+    {"op": "titel", "ziel": {"tag": "tab_os"}, "titel": "Neuer Titel"},
     {"op": "felder"}
   ]
 }
@@ -65,13 +73,20 @@ rv run gba.R apply modul4.docx ops.json out.docx    # prints a report as JSON
 | Operation | Effect |
 | --- | --- |
 | `werte` | Changes the cells that differ. Needs the same table shape |
-| `ersetzen` | Marks the old table as deleted and adds the new one after it. The caption stays |
-| `einfuegen` | Replaces a paragraph that holds only `{{name}}` with a captioned table |
-| `felder` | Updates numbering, cross references, and contents text |
+| `ersetzen` | Marks the old table, figure, or text as deleted and adds the new one after it |
+| `einfuegen` | Replaces a paragraph that holds only `{{name}}` with a table, a figure, or a text block |
+| `titel` | Changes the text of a table's or figure's caption. The number stays |
+| `felder` | Updates numbering, cross references, and contents text without any other change |
 
-Any failed check stops the run and writes nothing: an unknown target, a duplicate tag, a different table shape, or pending changes by someone else in a table to replace. `werte` skips cells it cannot change safely and lists them under `offen`: cells with another author's pending change, and cells with a field, citation, footnote, or several paragraphs. EndNote fields stay as they are, so add citations in Word.
+A `titel` in a `tabelle` or `abbildung` of `werte` or `ersetzen` changes the caption too. These caption edits are tracked.
 
-A tag is stored in the table's alt text as `gba:<tag>`. After Word saves the file, the tag still finds the table. Run `felder` or update fields in Word after rejecting changes, because Word keeps old caption numbers until then.
+Fields update after every run that changes the document, and those updates are not tracked. A run that changes nothing returns the file unchanged, so use `felder` after rejecting changes in Word.
+
+Text blocks live in `typst/methoden.typ`, so they support bold, lists, formulas, and footnotes. A missing value stops the run. Relative figure paths start at the ops file.
+
+Any failed check stops the run and writes nothing: an unknown target, a duplicate tag, a different table shape, or pending changes by someone else in a target to replace. `ersetzen` also stops on EndNote citations unless the change sets `"zitate_loeschen": true`, and on text that holds a formula or section break or sits inside a field. Only text and answer paragraphs can be replaced, not questions, explanations, or headings. `werte` skips cells it cannot change safely and lists them under `offen`: cells with another author's pending change, and cells with a field, citation, footnote, or several paragraphs. EndNote fields stay as they are, so add citations in Word.
+
+Tables and figures store a tag in their alt text as `gba:<tag>`, and each text paragraph holds a hidden bookmark `_gba_<tag>_<n>`. Tags still find their target after Word saves the file. Text tags use letters, digits, and `_`, up to 27 characters.
 
 ## How it works
 

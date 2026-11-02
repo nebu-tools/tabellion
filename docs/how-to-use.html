@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>newga: how to use it</title>
+<style>
+:root {
+  --rose: #e11d48; --rose-soft: #ffe4ea; --ink: #1c1917; --muted: #6b6461; --line: #e7e2df;
+  --paper: #fbf9f8; --card: #ffffff; --code: #f4f0ee; --ins: #0f766e; --ins-bg: #d9f3ef; --del: #b91c1c; --del-bg: #fde4e4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --rose: #fb7185; --rose-soft: #4c1524; --ink: #f4f0ee; --muted: #a8a09c; --line: #38322f;
+    --paper: #171413; --card: #201c1a; --code: #2a2523; --ins: #5eead4; --ins-bg: #123b37; --del: #fca5a5; --del-bg: #4a1d1d;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 860px; margin: 0 auto; padding: 48px 20px 72px; }
+header { display: flex; gap: 16px; align-items: center; margin-bottom: 12px; }
+.logo { flex: none; width: 52px; height: 52px; border-radius: 12px; background: #e11d48; color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 26px; }
+h1 { font-size: 32px; line-height: 1.15; margin: 0; letter-spacing: -.02em; }
+h2 { font-size: 21px; margin: 48px 0 8px; letter-spacing: -.01em; }
+h3 { font-size: 16px; margin: 20px 0 6px; }
+p { margin: 8px 0; }
+.lead { color: var(--muted); font-size: 18px; margin-bottom: 24px; }
+code { font: .88em ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; background: var(--code); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { background: var(--code); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 10px 0; font: 13.5px/1.5 ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; }
+pre code { background: none; padding: 0; font: inherit; overflow-wrap: normal; }
+.flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 16px 0; }
+.step { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 14px; position: relative; }
+.step b { display: block; color: var(--rose); font-size: 13px; }
+.routes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px; min-width: 0; }
+.card h3 { margin-top: 0; }
+.card p { font-size: 15px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; margin: 10px 0; }
+td code { overflow-wrap: normal; white-space: nowrap; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; }
+.doc { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; margin: 12px 0; font-size: 15px; }
+.doc .cap { font-weight: 600; font-size: 14px; }
+ins { color: var(--ins); background: var(--ins-bg); text-decoration: underline; }
+del { color: var(--del); background: var(--del-bg); }
+.fig { height: 70px; border-radius: 4px; margin: 8px 0; display: grid; place-items: center; font-size: 13px; }
+.fig.old { color: var(--del); background: var(--del-bg); opacity: .75; text-decoration: line-through; }
+.fig.new { color: var(--ins); background: var(--ins-bg); }
+.note { border-left: 3px solid var(--rose); background: var(--rose-soft); padding: 10px 14px; border-radius: 0 8px 8px 0; margin: 14px 0; font-size: 15px; }
+@media (max-width: 640px) {
+  main { padding: 28px 16px 56px; }
+  h1 { font-size: 26px; }
+  .flow { grid-template-columns: 1fr 1fr; }
+  .routes { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<main>
+<header><div class="logo" aria-hidden="true">N</div><h1>How to use newga</h1></header>
+<p class="lead">Put analysis results into G-BA dossier modules on Linux, without Word. Every edit to an existing docx comes back as tracked changes for the team to review.</p>
+
+<h2>Pick a route</h2>
+<div class="routes">
+  <div class="card">
+    <h3>Start a module from the template</h3>
+    <p>You write Typst and <code>build</code> makes the docx. Use this for a first draft.</p>
+<pre><code>rv run gba.R import modul4 dossier/m4
+rv run gba.R build dossier/m4/modul4.typ</code></pre>
+  </div>
+  <div class="card">
+    <h3>Edit a docx the team works on</h3>
+    <p>You describe the changes as JSON and <code>apply</code> edits only those targets. Use this after the first handover.</p>
+<pre><code>rv run gba.R outline in.docx
+rv run gba.R apply in.docx ops.json out.docx</code></pre>
+  </div>
+</div>
+
+<h2>The edit loop</h2>
+<div class="flow">
+  <div class="step"><b>1 Mark</b>The team types <code>{{abb:km}}</code> alone in a paragraph</div>
+  <div class="step"><b>2 Look</b><code>outline</code> lists text, tables, figures, placeholders</div>
+  <div class="step"><b>3 Describe</b>You write <code>ops.json</code></div>
+  <div class="step"><b>4 Apply</b>A failed check stops the run, with no output</div>
+  <div class="step"><b>5 Review</b>The team accepts or rejects in Word</div>
+</div>
+<p>The loop repeats. In a later round, your own pending changes are replaced, not stacked, and other people's changes are never overwritten.</p>
+
+<h2>Write <code>ops.json</code></h2>
+<p>One file can hold many edits. Relative figure paths start at the folder of <code>ops.json</code>.</p>
+<pre><code>{
+  "aenderungen": [
+    {"op": "einfuegen", "platzhalter": "met:km",
+     "text": {"baustein": "ereigniszeit", "werte": {"n": 12, "studie": "A"}, "tag": "met_km"}},
+    {"op": "einfuegen", "platzhalter": "abb:km",
+     "abbildung": {"datei": "km.png", "titel": "Kaplan-Meier OS", "tag": "abb_km", "breite": "14cm"}},
+    {"op": "einfuegen", "platzhalter": "tab:os",
+     "tabelle": {"titel": "OS", "tag": "tab_os", "kopf": [["Arm", "N"]], "zeilen": [["A", "12"]]}},
+    {"op": "werte", "ziel": {"tag": "tab_pfs"},
+     "tabelle": {"kopf": [["Arm", "N"]], "zeilen": [["A", "13"]]}},
+    {"op": "titel", "ziel": {"tag": "tab_pfs"}, "titel": "Progressionsfreies Überleben"}
+  ]
+}</code></pre>
+
+<div class="scroll"><table>
+  <tr><th>Operation</th><th>Target</th><th>Effect</th></tr>
+  <tr><td><code>einfuegen</code></td><td><code>{{name}}</code></td><td>Turns the placeholder into a table, figure, or text block</td></tr>
+  <tr><td><code>ersetzen</code></td><td>tag or block</td><td>Marks the old table, figure, or text as deleted and adds the new one</td></tr>
+  <tr><td><code>werte</code></td><td>table</td><td>Changes only the cells that differ. Needs the same table shape</td></tr>
+  <tr><td><code>titel</code></td><td>table or figure</td><td>Changes the caption text. The number stays</td></tr>
+  <tr><td><code>felder</code></td><td>whole file</td><td>Refreshes fields with no other change, for example after a reject in Word</td></tr>
+</table></div>
+
+<h2>What the team sees in Word</h2>
+<div class="doc">
+  <div class="fig old">old Kaplan-Meier plot</div>
+  <div class="fig new">new Kaplan-Meier plot</div>
+  <p class="cap">Abbildung 1: <del>Kaplan-Meier OS</del> <ins>Kaplan-Meier OS, Datenschnitt 2</ins></p>
+  <p class="cap">Tabelle 4-1: <del>OS</del> <ins>Gesamtüberleben</ins></p>
+  <p><del>Analysiert wurden 12 Personen aus A.</del> <ins>Analysiert wurden 99 Personen aus A und B.</ins></p>
+</div>
+<p>Everything is under the author <code>Automatisierung</code>. Numbers, cross-references, and contents text refresh on every run that changes the file. Those refreshes are not tracked.</p>
+
+<h2>Target by tag or by block</h2>
+<div class="routes">
+  <div class="card">
+    <h3>Tag</h3>
+    <p>Anything newga inserted can carry a <code>tag</code>. Tags survive Word saves, so one <code>ops.json</code> works round after round.</p>
+<pre><code>"ziel": {"tag": "abb_km"}</code></pre>
+  </div>
+  <div class="card">
+    <h3>Block</h3>
+    <p>For untagged content, take the id from <code>outline</code>. It only holds for that exact file, so <code>sha256</code> goes with it.</p>
+<pre><code>{"sha256": "&lt;from outline&gt;", "aenderungen": [
+  {"op": "ersetzen",
+   "ziel": {"block": "b0150", "bis": "b0152"},
+   "text": {"baustein": "subgruppen",
+            "werte": {"alpha": 0.05}}}]}</code></pre>
+  </div>
+</div>
+
+<h2>Add a text block</h2>
+<p>Text blocks live in <code>typst/methoden.typ</code>. The ones there are lorem ipsum for now. Each takes values from your analysis, and a missing value stops the run.</p>
+<pre><code>#let bausteine = (
+  ereigniszeit: w => [
+    Analysiert wurden #w.n Personen aus #w.studie.
+  ],
+)</code></pre>
+<p>The same blocks work in Typst, inside an answer:</p>
+<pre><code>#antwort("b0141")[#baustein("ereigniszeit", werte: (n: 12, studie: "A"), tag: "met_km")]</code></pre>
+
+<h2>When a run stops</h2>
+<div class="scroll"><table>
+  <tr><th>Situation</th><th>What to do</th></tr>
+  <tr><td>Someone else has pending changes in the target</td><td>Accept or reject them in Word, then run again</td></tr>
+  <tr><td>The target holds an EndNote citation</td><td>Change it in Word, or confirm with <code>"zitate_loeschen": true</code></td></tr>
+  <tr><td>The text holds a formula or section break, or sits inside a field</td><td>Change it in Word</td></tr>
+  <tr><td>The target is a question, explanation, or heading</td><td>Leave it. The G-BA rules require those blocks</td></tr>
+  <tr><td>The table has a different shape</td><td>Use <code>ersetzen</code> instead of <code>werte</code></td></tr>
+</table></div>
+<div class="note"><b>Still needs Word:</b> page numbers, and adding citations. After rejecting changes, run <code>felder</code> or press F9 in Word to refresh numbers and contents text.</div>
+</main>
+</body>
+</html>

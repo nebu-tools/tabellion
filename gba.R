@@ -2,7 +2,7 @@
 # rv run gba.R import <modul> <ordner>     Typst-Projekt aus einer Vorlage erzeugen
 # rv run gba.R build <dossier.typ>         docx bauen
 # rv run gba.R migrate <alt.typ> <modul> <ordner>  auf eine neue Vorlage umziehen
-# rv run gba.R outline <in.docx>           Überschriften, Tabellen, Platzhalter als JSON
+# rv run gba.R outline <in.docx>           Überschriften, Text, Tabellen, Abbildungen, Platzhalter als JSON
 # rv run gba.R apply <in.docx> <ops.json> <out.docx>  Änderungen nachverfolgt anwenden
 # rv run gba.R check-templates             Vorlagen mit der G-BA-Seite abgleichen
 a <- commandArgs(TRUE)
