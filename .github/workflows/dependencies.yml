@@ -24,7 +24,7 @@ jobs:
           curl -sSfL https://raw.githubusercontent.com/A2-ai/rv/refs/heads/main/scripts/install.sh | bash
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: rv upgrade
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@v8
         with:
           branch: update-r-dependencies
           commit-message: Update R dependencies
