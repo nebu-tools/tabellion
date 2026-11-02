@@ -9,6 +9,7 @@ block_key <- function(b) {
     })))
     return(paste("tabelle", gsub("\\s+", " ", paste(cells, collapse = "|"))))
   }
+  if (b$type == "sdt") return(paste("fest", b$xml))
   paste(b$style, gsub("\\s+", " ", trimws(tokens_plain(b$para$tokens))))
 }
 
@@ -49,6 +50,7 @@ gba_migrate <- function(typ, modul, dir) {
   }, "", USE.NAMES = FALSE))
   for (r in keep) src <- sub("\u0001", r, src, fixed = TRUE)
   src <- gsub(name, basename(gba_template(modul)), src, fixed = TRUE)
+  src <- sub("pruefsumme: \"[0-9a-f]+\"", sprintf("pruefsumme: \"%s\"", unname(tools::sha256sum(gba_template(modul)))), src)
   write_text(src, frisch)
   # Data, figures, and includes stay reachable by their relative paths.
   skip <- c(basename(typ), "gba.typ", name)

@@ -2,7 +2,14 @@
 # numbers, cross references and the text of all tables of contents. Page numbers
 # need a layout engine; TOC entries keep the last known page until F9 in Word.
 
+# Text a tracked change removed stays in the file but is no longer document text.
+drop_removed <- function(x) {
+  x <- gsub("<w:delText(?: [^>]*)?>.*?</w:delText>", "", x, perl = TRUE)
+  gsub("<w:moveFrom (?:[^>]*[^/])?>.*?</w:moveFrom>", "", x, perl = TRUE)
+}
+
 para_text <- function(x) {
+  x <- drop_removed(x)
   x <- gsub("<w:instrText.*?</w:instrText>", "", x, perl = TRUE)
   x <- gsub("<w:noBreakHyphen/>", "‑", x, fixed = TRUE)
   x <- gsub("<w:softHyphen/>", "­", x, fixed = TRUE)
@@ -303,7 +310,8 @@ toc_protos <- function(paras) {
 
 rebuild_tocs <- function(blocks, styles, numbers, ctx) {
   is_toc_style <- grepl(TOC_RE, styles)
-  starts <- which(grepl("<w:instrText[^>]*>\\s*TOC\\b", blocks, perl = TRUE))
+  # A list inside a content control is opaque and waits for Word.
+  starts <- which(startsWith(blocks, "<w:p") & grepl("<w:instrText[^>]*>\\s*TOC\\b", blocks, perl = TRUE))
   # A list that starts empty has no entry to copy, so it borrows from another.
   fallback <- toc_protos(blocks[is_toc_style])
   for (s in rev(starts)) {

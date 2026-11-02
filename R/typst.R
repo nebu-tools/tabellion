@@ -75,7 +75,8 @@ content_tokens <- function(x, fmt = no_fmt, where = "") {
       v <- x$value
       if (isTRUE(v[["gba-nummer"]])) return(list(list(type = "nummer")))
       if (!is.null(v[["gba-atom"]])) {
-        list(list(type = "atom", key = v[["gba-atom"]], on = isTRUE(v$on)))
+        cached <- if (is.null(v$on)) tokens_plain(Filter(function(t) t$type == "text", content_tokens(v$cached, where = where)))
+        list(list(type = "atom", key = v[["gba-atom"]], on = isTRUE(v$on), cached = cached))
       } else if (identical(x$label, "<gba>")) {
         list(list(type = "block", node = v))
       } else {

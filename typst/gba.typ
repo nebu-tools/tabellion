@@ -120,14 +120,36 @@
   )
 }
 
+// Geschützter Block: bleibt unverändert, z. B. ein Inhaltssteuerelement aus Word.
+#let fest(id) = _reg((kind: "fest", id: id, body: none), [_(Geschützter Inhalt aus Word)_])
+
+// Zelle aus gba_tabelle(): Text oder Dictionary mit text, spalte, zeile, fett.
+#let _zelle(z) = {
+  if type(z) != dictionary { return [#z] }
+  let t = if z.at("fett", default: false) { strong[#z.at("text", default: "")] } else { [#z.at("text", default: "")] }
+  table.cell(colspan: z.at("spalte", default: 1), rowspan: z.at("zeile", default: 1), t)
+}
+
+#let _spec-vorschau(s) = {
+  let breite = calc.max(1, ..(s.kopf + s.zeilen).map(r => r.map(z =>
+    if type(z) == dictionary { z.at("spalte", default: 1) } else { 1 }).sum(default: 0)))
+  table(columns: breite, table.header(..s.kopf.flatten().map(_zelle)), ..s.zeilen.flatten().map(_zelle))
+}
+
 // Neue Tabelle mit Beschriftung im Stil der Vorlage (Beschriftung + SEQ-Feld).
-#let neue-tabelle(beschriftung: none, kopf: (), zeilen: (), vorlage: none, spalten: none) = _reg(
+// `tabelle:` nimmt das Ergebnis von gba_tabelle() mit verbundenen Zellen.
+#let neue-tabelle(beschriftung: none, kopf: (), zeilen: (), vorlage: none, spalten: none, tabelle: none) = _reg(
   (kind: "neue-tabelle", titel: beschriftung, kopf: kopf.map(_nummern), zeilen: _zeilen(zeilen),
-   vorlage: vorlage, spalten: spalten),
+   vorlage: vorlage, spalten: spalten, tabelle: tabelle),
   {
-    block(sticky: true, text(weight: "bold", size: 10pt)[Tabelle: #beschriftung])
+    let titel = if tabelle != none { tabelle.at("titel", default: none) } else { beschriftung }
+    block(sticky: true, text(weight: "bold", size: 10pt)[Tabelle: #titel])
     set text(size: 9pt)
-    table(columns: _spalten((kopf,) + zeilen), table.header(..kopf), ..zeilen.flatten())
+    if tabelle != none {
+      _spec-vorschau(tabelle)
+    } else {
+      table(columns: _spalten((kopf,) + zeilen), table.header(..kopf), ..zeilen.flatten())
+    }
   },
 )
 
@@ -145,6 +167,7 @@
 
 #let dossier(
   vorlage: none,
+  pruefsumme: none,
   felder: (:),
   kapitel: 1,
   praefix: "",
@@ -168,6 +191,6 @@
   set heading(numbering: (..n) => praefix + n.pos().map(str).join("."))
   show heading: set text(size: 12pt)
   counter(heading).update(kapitel - 1)
-  _reg((kind: "konfig", vorlage: vorlage, felder: felder))
+  _reg((kind: "konfig", vorlage: vorlage, pruefsumme: pruefsumme, felder: felder))
   inhalt
 }

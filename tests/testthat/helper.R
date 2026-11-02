@@ -29,3 +29,42 @@ subst <- function(src, alt, neu) {
   stopifnot(grepl(alt, src, fixed = TRUE))
   sub(alt, neu, src, fixed = TRUE)
 }
+
+# A filled module, as the dossier team would upload it: one tagged table and a
+# placeholder paragraph.
+gefuellt <- local({
+  pfad <- NULL
+  function() {
+    if (is.null(pfad)) {
+      pfad <<- bauen("modul4", function(s) {
+        id <- regmatches(s, regexpr("#antwort\\(\"b[0-9]+\"\\)", s))
+        sub(id, paste0(id, "[Betrachtet werden.\n\n{{tab:neu}}\n\n",
+                       "#neue-tabelle(tabelle: (tag: \"tab_os\", titel: \"OS\", kopf: ((\"A\", \"B\"),), ",
+                       "zeilen: ((\"eins\", \"zwei\"), (\"drei\", \"vier\"))))]"), s, fixed = TRUE)
+      })$out
+    }
+    pfad
+  }
+})
+
+# Rewrites word/document.xml of a docx.
+aendere_docx <- function(docx, f) {
+  d <- tempfile(); dir.create(d)
+  n <- utils::unzip(docx, list = TRUE)$Name
+  utils::unzip(docx, exdir = d)
+  p <- file.path(d, "word/document.xml")
+  write_text(f(read_text(p)), p)
+  ziel <- tempfile(fileext = ".docx")
+  l <- tempfile(); writeLines(n, l)
+  old <- setwd(d); on.exit(setwd(old))
+  stopifnot(system2("zip", c("-X", "-q", shQuote(ziel), "-@"), stdin = l) == 0L)
+  ziel
+}
+
+anwenden <- function(docx, ...) {
+  out <- tempfile(fileext = ".docx")
+  rep <- gba_apply(docx, list(aenderungen = list(...)), out)
+  list(out = out, rep = rep, xml = dokument(out))
+}
+
+xml_gueltig <- function(x) xml2::read_xml(x)
