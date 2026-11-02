@@ -82,6 +82,19 @@ clone_xml <- function(xml, ctx, occ) {
 
 para_sig <- function(p) token_signature(p$tokens)
 
+# #feld shows content that build copies from the docx, so a text edit there
+# would be lost without a trace.
+check_atoms <- function(toks, orig, where) {
+  squeeze <- function(x) gsub("[[:space:]\u00A0]+", "", x, perl = TRUE)
+  for (t in toks) {
+    if (!identical(t$type, "atom") || is.null(t$cached)) next
+    a <- Filter(function(o) identical(o$type, "atom") && identical(as.character(o$key), as.character(t$key)), orig)
+    if (length(a) && is.na(a[[1]]$on) && !identical(squeeze(a[[1]]$cached), squeeze(t$cached))) {
+      stop(sprintf("%s: #feld(%s) ist geschützt und lässt sich hier nicht ändern. Inhalt in Word bearbeiten.", where, t$key))
+    }
+  }
+}
+
 #' Content for a paragraph prototype -> XML of one or more paragraphs/blocks.
 fill_from_tokens <- function(proto, toks, ctx) {
   paras <- split_paragraphs(toks)
@@ -192,6 +205,7 @@ native_table <- function(node) {
 
 fill_cell <- function(cell, content, ctx, where) {
   toks <- content_tokens(content, where = where)
+  check_atoms(toks, unlist(lapply(cell$paras, `[[`, "tokens"), recursive = FALSE), where)
   new <- split_paragraphs(toks)
   new_sig <- vapply(new, token_signature, "")
   old_sig <- vapply(cell$paras, para_sig, "")
@@ -378,6 +392,12 @@ default_table <- function(ctx) {
 render_new_table <- function(node, ctx) {
   id <- node$vorlage %||% default_table(ctx)
   tbl <- block_of(ctx, id)$table
+  if (!is.null(node$tabelle)) {
+    mark_changed(ctx, "neu")
+    titel <- node$titel %||% node$tabelle$titel
+    cap <- if (!is.null(titel)) caption_xml(titel, "Tabelle", ctx) else ""
+    return(paste0(cap, spec_table(node$tabelle, tbl, ctx), "<w:p>", style_ppr("TextkrperDossier"), "</w:p>"))
+  }
   kopf <- as.list(node$kopf)
   zeilen <- as_rows(node$zeilen)
   nc <- max(length(kopf), if (length(zeilen)) length(zeilen[[1]]) else 0L)
@@ -497,12 +517,13 @@ render_item <- function(item, ctx) {
   b <- block_of(ctx, id)
   ctx$seen[[id]] <- (ctx$seen[[id]] %||% 0L) + 1L
   occ <- ctx$seen[[id]]
-  if (kind == "antwort" && is.null(item$body)) {
+  if (kind %in% c("antwort", "fest") && is.null(item$body)) {
     ctx$stats$verbatim <- ctx$stats$verbatim + 1L
     x <- if (occ > 1L) clone_xml(b$xml, ctx, occ) else b$xml
     return(apply_mit(paste0(x, b$trail), ctx))
   }
   toks <- content_tokens(item$body, where = paste("Block", id))
+  check_atoms(toks, b$para$tokens, paste("Block", id))
   if (kind == "block" && identical(token_signature(toks), token_signature(b$para$tokens)) &&
       !has_special(toks)) {
     ctx$stats$verbatim <- ctx$stats$verbatim + 1L
@@ -525,7 +546,11 @@ gba_build <- function(file, out = sub("\\.typ$", "_gefuellt.docx", file)) {
   kinds <- vapply(items, function(i) i$kind %||% "", "")
   cfg <- items[[match("konfig", kinds)]]
   proj <- dirname(normalizePath(file))
-  tpl <- read_template(file.path(proj, cfg$vorlage))
+  vorlage <- file.path(proj, cfg$vorlage)
+  if (!is.null(cfg$pruefsumme) && !identical(cfg$pruefsumme, unname(tools::sha256sum(vorlage)))) {
+    stop(cfg$vorlage, " wurde seit dem Import geändert. Neu importieren, sonst gehen Änderungen verloren.")
+  }
+  tpl <- read_template(vorlage)
   on.exit(unlink(tpl$dir, recursive = TRUE))
   ctx <- new_ctx(tpl, proj)
   used <- character()
@@ -577,7 +602,7 @@ clean_bookmarks <- function(x) {
 }
 
 gba_report <- function(tpl, ctx, xml, missing) {
-  tt <- gsub("<[^>]+>", "", gsub("</w:p>", "\n", gsub("<w:instrText.*?</w:instrText>", "", xml, perl = TRUE), fixed = TRUE))
+  tt <- gsub("<[^>]+>", "", gsub("</w:p>", "\n", gsub("<w:instrText.*?</w:instrText>", "", drop_removed(xml), perl = TRUE), fixed = TRUE))
   tt <- xml_unescape(tt)
   offen <- regmatches(tt, gregexpr("<<[^<>]*>>", tt))[[1]]
   beispiele <- regmatches(tt, gregexpr("<[^<>\n]{2,60}>", tt))[[1]]

@@ -35,7 +35,7 @@ read_template <- function(path) {
   blocks <- list()
   trail <- character()
   for (i in seq_along(kids)) {
-    if (nm[i] %in% c("w:p", "w:tbl")) {
+    if (nm[i] %in% c("w:p", "w:tbl", "w:sdt")) {
       blocks[[length(blocks) + 1L]] <- list(xml = kids[i], type = sub("w:", "", nm[i]), trail = "")
     } else if (length(blocks)) {
       n <- length(blocks)
@@ -66,12 +66,12 @@ style_ids <- function(path) {
 analyse_block <- function(b, tpl) {
   st <- new.env(parent = emptyenv())
   st$n <- 0L
+  b$style <- ""
   if (b$type == "p") {
     b$para <- parse_para(b$xml, tpl$root_tag, st)
     b$style <- b$para$style
-  } else {
+  } else if (b$type == "tbl") {
     b$table <- parse_table(b$xml, tpl$root_tag, st)
-    b$style <- ""
   }
   b
 }
@@ -100,7 +100,13 @@ parse_table <- function(xml, root_tag, st) {
       header = grepl("<w:tblHeader", paste(rs$children[rn == "w:trPr"], collapse = ""), fixed = TRUE)
     )
   })
-  list(xml = xml, open = sl$open, close = sl$close, head = head, rows = rows)
+  # Rows or cells wrapped in a content control are invisible to this model.
+  fest <- any(!nm %in% c("w:tblPr", "w:tblGrid", "w:tr", "w:bookmarkStart", "w:bookmarkEnd")) ||
+    any(unlist(lapply(rows, function(r) lapply(r$cells, `[[`, "other")))) ||
+    any(vapply(rows, function(r) {
+      any(!elem_name(xml_slice(r$xml)$children) %in% c("w:trPr", "w:tblPrEx", "w:tc", "w:bookmarkStart", "w:bookmarkEnd"))
+    }, NA))
+  list(xml = xml, open = sl$open, close = sl$close, head = head, rows = rows, fest = fest)
 }
 
 # ---- block classification --------------------------------------------------
@@ -108,7 +114,8 @@ parse_table <- function(xml, root_tag, st) {
 TOC_RE <- "^(Verzeichnis[1-9]|Abbildungsverzeichnis)$"
 
 block_kind <- function(b) {
-  if (b$type == "tbl") return("tabelle")
+  if (b$type == "sdt") return("fest")
+  if (b$type == "tbl") return(if (b$table$fest) "fest" else "tabelle")
   st <- b$style
   txt <- tokens_plain(b$para$tokens)
   if (grepl("^<<\\s*Angaben.*>>$", trimws(txt))) return("antwort")

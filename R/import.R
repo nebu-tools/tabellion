@@ -43,7 +43,6 @@ tokens_typst <- function(toks) {
 }
 
 cell_typst <- function(cell) {
-  if (isTRUE(cell$other)) stop("Verschachtelte Inhalte in Tabellenzellen werden nicht unterstützt.")
   paste0("[", paste(vapply(cell$paras, function(p) tokens_typst(p$tokens), ""), collapse = "\n\n"), "]")
 }
 
@@ -65,12 +64,12 @@ guess_module <- function(path) {
   list(kapitel = as.integer(sub(".*([0-9])$", "\\1", m)), praefix = if (grepl("K", m)) "K" else "")
 }
 
-#' Generates a Typst project for a template.
+#' Generates a Typst project for a template or any docx based on one.
 #'
-#' Compiling the result without changes yields a docx whose parts are
+#' `modul` is a module name or the path of a docx. Compiling the result without changes yields a docx whose parts are
 #' byte-identical to the template.
 gba_import <- function(modul, dir) {
-  template <- gba_template(modul)
+  template <- if (file.exists(modul)) modul else gba_template(modul)
   dir.create(dir, recursive = TRUE, showWarnings = FALSE)
   tpl <- read_template(template)
   on.exit(unlink(tpl$dir, recursive = TRUE))
@@ -85,6 +84,7 @@ gba_import <- function(modul, dir) {
     "#import \"gba.typ\": *",
     "#show: dossier.with(",
     sprintf("  vorlage: \"%s\",", tname),
+    sprintf("  pruefsumme: \"%s\",", unname(tools::sha256sum(template))),
     sprintf("  kapitel: %d, praefix: \"%s\",", mod$kapitel, mod$praefix),
     "  felder: (:",
     "    // wirkstoff: \"...\", handelsname: \"...\", unternehmer: \"...\",",
@@ -109,6 +109,7 @@ gba_import <- function(modul, dir) {
     line <- switch(kind,
       tabelle = table_typst(id, b$table),
       antwort = sprintf("#antwort(\"%s\")", id),
+      fest = sprintf("#fest(\"%s\")", id),
       heading = sprintf("#ueberschrift(%d, \"%s\")[%s]", heading_level(b$style), id, tokens_typst(b$para$tokens)),
       "heading-frei" = sprintf("#ueberschrift-frei(1, \"%s\")[%s]", id, tokens_typst(b$para$tokens)),
       sprintf("#%s(\"%s\")[%s]", kind, id, tokens_typst(b$para$tokens))
