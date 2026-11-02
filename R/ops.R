@@ -255,6 +255,11 @@ table_removed <- function(b) {
   all(vapply(b$table$rows, function(r) grepl("<w:del [^>]*/>", r$pre, perl = TRUE), NA))
 }
 
+check_editable <- function(id, tpl) {
+  if (tpl$blocks[[id]]$table$fest) stop("Block ", id, " enthält geschützte Inhalte.")
+  id
+}
+
 find_target <- function(ziel, tpl, sha) {
   if (!is.null(ziel$tag)) {
     ids <- Filter(function(id) {
@@ -263,7 +268,7 @@ find_target <- function(ziel, tpl, sha) {
     }, tpl$ids)
     if (!length(ids)) stop("Keine Tabelle mit der Kennung ", ziel$tag, ". In der Web-App auswählen.")
     if (length(ids) > 1L) stop("Kennung ", ziel$tag, " kommt mehrfach vor: ", paste(ids, collapse = ", "))
-    return(ids)
+    return(check_editable(ids, tpl))
   }
   if (is.null(ziel$block)) stop("Das Ziel braucht `tag` oder `block`.")
   # Block ids are positions and hold only for the file they were read from.
@@ -272,8 +277,7 @@ find_target <- function(ziel, tpl, sha) {
   }
   b <- tpl$blocks[[ziel$block]]
   if (is.null(b) || b$type != "tbl") stop("Block ", ziel$block, " ist keine Tabelle.")
-  if (b$table$fest) stop("Block ", ziel$block, " enthält geschützte Inhalte.")
-  ziel$block
+  check_editable(ziel$block, tpl)
 }
 
 find_placeholder <- function(name, tpl) {
@@ -306,6 +310,10 @@ gba_apply <- function(docx, ops, out, autor = "Automatisierung") {
   ctx$autor <- autor
   ctx$autor_xml <- xml_escape(autor)
   ctx$autor_re <- gsub("([.^$|()*+?{}\\[\\]\\\\])", "\\\\\\1", ctx$autor_xml, perl = TRUE)
+  # Revision ids must not repeat those of earlier rounds.
+  roh <- read_text(file.path(tpl$dir, "word/document.xml"))
+  belegt <- regmatches(roh, gregexpr("(?<= w:id=\")[0-9]+(?=\")", roh, perl = TRUE))[[1]]
+  ctx$uniq <- max(ctx$uniq, as.numeric(belegt))
   ctx$datum <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
   xml <- vapply(tpl$blocks, `[[`, "", "xml")
   erledigt <- character()
