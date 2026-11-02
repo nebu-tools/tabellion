@@ -24,11 +24,11 @@ jobs:
       - name: Install Typst
         run: |
           curl -sSfL "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ --strip-components=1 -C "$HOME/.local/bin" --wildcards '*/typst'
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: rv/library
           key: rv-${{ runner.os }}-${{ hashFiles('rv.lock') }}
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: templates
           key: templates-${{ hashFiles('templates.csv') }}
