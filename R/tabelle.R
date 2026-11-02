@@ -88,13 +88,17 @@ spec_row <- function(row, cells, widths, ctx) {
     tc$tcpr <- if (grepl("<w:tcW ", pr, fixed = TRUE)) sub("<w:tcW [^>]*/>", add, pr) else sub("<w:tcPr>", paste0("<w:tcPr>", add), pr, fixed = TRUE)
     tc$open <- gsub(" w14:(paraId|textId)=\"[^\"]*\"", "", tc$open, perl = TRUE)
     tc$xml <- ""
+    tc$paras <- lapply(tc$paras, function(p) { p$ppr <- strip_rev(p$ppr); p })
     inhalt <- list(func = "text", text = z$text)
     if (z$fett) inhalt <- list(func = "strong", body = inhalt)
     clone_cell_ids(fill_cell(tc, inhalt, ctx, "Tabelle"))
   }, "")
   open <- gsub(" w14:(paraId|textId)=\"[^\"]*\"", "", row$open, perl = TRUE)
-  paste0(open, row$pre, paste(xml, collapse = ""), row$post, row$close)
+  paste0(open, strip_rev(row$pre), paste(xml, collapse = ""), row$post, row$close)
 }
+
+# The prototype may be a table with pending revisions.
+strip_rev <- function(x) gsub("<w:(ins|del) [^>]*/>", "", x, perl = TRUE)
 
 #' A table's tag lives in its alt text: Word keeps it on the table, and editing
 #' the caption around it cannot remove it.

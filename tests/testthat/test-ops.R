@@ -135,6 +135,23 @@ test_that("ersetzen behält die alte Tabelle als Löschung, Wiederholung bleibt 
   xml_gueltig(r2$xml)
   expect_equal(zaehle(r2$xml, "gba:tab_os"), 2L)
   expect_equal(zaehle(r2$xml, "<w:ins [^>]*/></w:trPr>"), 2L)
+  expect_equal(zaehle(r2$xml, "<w:ins [^>]*/><w:ins [^>]*/>"), 0L)
+  expect_equal(zaehle(r2$xml, "<w:rPr><w:ins [^>]*/><w:ins "), 0L)
+})
+
+test_that("Revisions-IDs bleiben über Runden hinweg eindeutig", {
+  r <- anwenden(gefuellt(), werte(list(list("eins", "X"), list("drei", "vier"))))
+  r2 <- anwenden(r$out, werte(list(list("eins", "X"), list("drei", "Y"))))
+  ids <- regmatches(r2$xml, gregexpr("(?<=<w:(?:ins|del) w:id=\")[0-9]+", r2$xml, perl = TRUE))[[1]]
+  expect_gte(length(ids), 4L)
+  expect_false(anyDuplicated(ids) > 0L)
+})
+
+test_that("Getaggte Tabelle mit geschütztem Inhalt stoppt", {
+  doc <- aendere_docx(gefuellt(), function(x) {
+    sub("(<w:tblDescription w:val=\"gba:tab_os\"/>.*?</w:tcPr>)", "\\1<w:sdt><w:sdtPr/><w:sdtContent><w:p/></w:sdtContent></w:sdt>", x, perl = TRUE)
+  })
+  expect_error(anwenden(doc, werte(list(list("eins", "X"), list("drei", "vier")))), "geschützte")
 })
 
 test_that("einfuegen füllt den Platzhalter mit Beschriftung und nummeriert neu", {
