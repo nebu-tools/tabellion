@@ -38,7 +38,7 @@ gefuellt <- local({
     if (is.null(pfad)) {
       pfad <<- bauen("modul4", function(s) {
         id <- regmatches(s, regexpr("#antwort\\(\"b[0-9]+\"\\)", s))
-        sub(id, paste0(id, "[Betrachtet werden.\n\n{{tab:neu}}\n\n",
+        sub(id, paste0(id, "[Betrachtet werden.\n\n{{tab:neu}}\n\n{{met}}\n\n{{abb}}\n\n",
                        "#neue-tabelle(tabelle: (tag: \"tab_os\", titel: \"OS\", kopf: ((\"A\", \"B\"),), ",
                        "zeilen: ((\"eins\", \"zwei\"), (\"drei\", \"vier\"))))]"), s, fixed = TRUE)
       })$out

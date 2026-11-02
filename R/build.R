@@ -12,6 +12,10 @@ new_ctx <- function(tpl, proj_dir) {
   ctx$fn_new <- character()
   ctx$num_new <- character()
   ctx$media <- list()
+  # An edited file may already hold figures from an earlier round.
+  rels <- read_text(file.path(tpl$dir, "word/_rels/document.xml.rels"))
+  belegt <- regmatches(rels, gregexpr("(?<=gba_abbildung|rIdGba)[0-9]+", rels, perl = TRUE))[[1]]
+  ctx$media_base <- max(0L, as.integer(belegt))
   fp <- file.path(tpl$dir, "word/footnotes.xml")
   ctx$fn_xml <- if (file.exists(fp)) read_text(fp) else ""
   ids <- regmatches(ctx$fn_xml, gregexpr("w:id=\"-?[0-9]+\"", ctx$fn_xml))[[1]]
@@ -180,6 +184,7 @@ render_block_node <- function(node, proto, ctx) {
   kind <- node$kind %||% ""
   if (kind == "neue-tabelle") return(render_new_table(node, ctx))
   if (kind == "abbildung") return(render_figure(node, ctx))
+  if (kind == "text") return(render_text(node, proto, ctx))
   if (kind == "tabelle") return(render_table(node, ctx))
   if (kind == "block") return(render_item(node, ctx))
   stop("Blockelement '", f, kind, "' wird nicht unterstützt.")
@@ -479,14 +484,15 @@ render_figure <- function(node, ctx) {
   cx <- if (!is.null(img$width)) parse_length(img$width) else NA_real_
   if (is.na(cx)) cx <- min(page_w, sz$w / sz$dpi * 914400)
   cy <- cx * sz$h / sz$w
-  n <- length(ctx$media) + 1L
+  n <- ctx$media_base + length(ctx$media) + 1L
   name <- sprintf("gba_abbildung%d.%s", n, sz$ext)
   rid <- sprintf("rIdGba%d", n)
-  ctx$media[[n]] <- list(path = path, name = name, rid = rid, ext = sz$ext)
+  ctx$media[[length(ctx$media) + 1L]] <- list(path = path, name = name, rid = rid, ext = sz$ext)
   did <- ctx$next_id()
+  alt <- if (is.null(node$tag)) "" else sprintf(" descr=\"gba:%s\"", check_tag(node$tag))
   draw <- sprintf(paste0(
     "<w:r><w:drawing><wp:inline distT=\"0\" distB=\"0\" distL=\"0\" distR=\"0\">",
-    "<wp:extent cx=\"%d\" cy=\"%d\"/><wp:docPr id=\"%d\" name=\"Abbildung %d\"/>",
+    "<wp:extent cx=\"%d\" cy=\"%d\"/><wp:docPr id=\"%d\" name=\"Abbildung %d\"%s/>",
     "<a:graphic xmlns:a=\"http://schemas.openxmlformats.org/drawingml/2006/main\">",
     "<a:graphicData uri=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
     "<pic:pic xmlns:pic=\"http://schemas.openxmlformats.org/drawingml/2006/picture\">",
@@ -495,11 +501,46 @@ render_figure <- function(node, ctx) {
     "<pic:spPr><a:xfrm><a:off x=\"0\" y=\"0\"/><a:ext cx=\"%d\" cy=\"%d\"/></a:xfrm>",
     "<a:prstGeom prst=\"rect\"><a:avLst/></a:prstGeom></pic:spPr></pic:pic>",
     "</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>"
-  ), round(cx), round(cy), did, n, did, name, rid, round(cx), round(cy))
+  ), round(cx), round(cy), did, n, alt, did, name, rid, round(cx), round(cy))
   style <- if ("AbbildungDossier" %in% ctx$tpl$styles) style_ppr("AbbildungDossier") else ""
   mark_changed(ctx, "neu")
   cap <- if (!is.null(node$titel)) caption_xml(node$titel, "Abbildung", ctx) else ""
   paste0("<w:p>", style, draw, "</w:p>", cap)
+}
+
+# ---- text blocks ------------------------------------------------------------
+
+baustein_eval <- function(name, werte) {
+  out <- tempfile(fileext = ".json")
+  err <- tempfile()
+  st <- system2(typst_bin(), c(
+    "eval", shQuote("import \"gba.typ\": baustein-inhalt; baustein-inhalt(sys.inputs.name, json(bytes(sys.inputs.werte)))"),
+    "--root", shQuote(file.path(gba_root(), "typst")),
+    "--input", shQuote(paste0("name=", name)),
+    "--input", shQuote(paste0("werte=", jsonlite::toJSON(werte %||% list(), auto_unbox = TRUE, null = "null")))
+  ), stdout = out, stderr = err)
+  if (st != 0L) stop("Textbaustein ", name, ": ", paste(readLines(err), collapse = "\n"))
+  jsonlite::fromJSON(read_text(out), simplifyVector = FALSE)
+}
+
+#' Tags paragraphs with a hidden bookmark each. One bookmark per paragraph, because
+#' Word moves the end of a range across paragraphs to a place outside them.
+tag_paras <- function(xml, tag, ctx) {
+  if (!grepl("^[A-Za-z0-9_]{1,27}$", tag)) stop("Ungültige Kennung für Text: ", tag)
+  map_matches(open_paras(xml), PARA_RE, function(p) {
+    id <- ctx$next_id()
+    s <- sprintf("<w:bookmarkStart w:id=\"%d\" w:name=\"_gba_%s_%d\"/>", id, tag, id)
+    p <- if (grepl("</w:pPr>", p, fixed = TRUE)) sub("</w:pPr>", paste0("</w:pPr>", s), p, fixed = TRUE)
+         else sub("^(<w:p(?: [^>]*)?>)", paste0("\\1", s), p, perl = TRUE)
+    sub("</w:p>$", sprintf("<w:bookmarkEnd w:id=\"%d\"/></w:p>", id), p, perl = TRUE)
+  })
+}
+
+render_text <- function(node, proto, ctx) {
+  xml <- fill_from_tokens(proto, content_tokens(node$body, where = "Textbaustein"), ctx)
+  if (grepl("<w:tbl[ >]|<w:drawing>", xml, perl = TRUE)) stop("Ein Textbaustein enthält nur Text.")
+  mark_changed(ctx, "neu")
+  if (is.null(node$tag)) xml else tag_paras(xml, node$tag, ctx)
 }
 
 # ---- block dispatch ---------------------------------------------------------
