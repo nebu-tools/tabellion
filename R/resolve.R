@@ -287,9 +287,25 @@ ensure_toc_mark <- function(block, ctx) {
   list(block = block, name = nm)
 }
 
+#' One entry per style, with and without a number, to copy from.
+toc_protos <- function(paras) {
+  protos <- list()
+  for (x in paras) {
+    h <- regmatches(x, regexpr("<w:hyperlink .*</w:hyperlink>", x, perl = TRUE))
+    if (!length(h)) next
+    ts <- regmatches(x, gregexpr("<w:t(?: [^>]*)?>[^<]*</w:t>", x, perl = TRUE))[[1]]
+    ppr <- first_match("(<w:pPr>.*?</w:pPr>)", x)
+    key <- paste(first_match("<w:pStyle w:val=\"([^\"]+)\"", x), length(ts) >= 3L)
+    if (is.null(protos[[key]])) protos[[key]] <- paste0("<w:p>", if (is.na(ppr)) "" else ppr, h, "</w:p>")
+  }
+  protos
+}
+
 rebuild_tocs <- function(blocks, styles, numbers, ctx) {
   is_toc_style <- grepl(TOC_RE, styles)
   starts <- which(grepl("<w:instrText[^>]*>\\s*TOC\\b", blocks, perl = TRUE))
+  # A list that starts empty has no entry to copy, so it borrows from another.
+  fallback <- toc_protos(blocks[is_toc_style])
   for (s in rev(starts)) {
     code <- trimws(first_match("<w:instrText[^>]*>\\s*(TOC[^<]*)<", blocks[s]))
     e <- s
@@ -297,24 +313,18 @@ rebuild_tocs <- function(blocks, styles, numbers, ctx) {
     old <- blocks[s:e]
     spec <- toc_spec(code, ctx$st)
     pages <- list()
-    protos <- list()
     for (x in old) {
       a <- first_match("w:anchor=\"([^\"]+)\"", x)
       if (is.na(a)) next
       ts <- regmatches(x, gregexpr("<w:t(?: [^>]*)?>[^<]*</w:t>", x, perl = TRUE))[[1]]
       pages[[a]] <- gsub("<[^>]+>", "", ts[length(ts)])
-      sty <- first_match("<w:pStyle w:val=\"([^\"]+)\"", x)
-      ppr <- first_match("(<w:pPr>.*?</w:pPr>)", x)
-      h <- regmatches(x, regexpr("<w:hyperlink .*</w:hyperlink>", x, perl = TRUE))
-      if (!length(h)) next
-      p <- paste0("<w:p>", if (is.na(ppr)) "" else ppr, h, "</w:p>")
-      num_like <- length(ts) >= 3L
-      key <- paste(sty, num_like)
-      if (is.null(protos[[key]])) protos[[key]] <- p
     }
+    protos <- toc_protos(old)
+    empty <- !length(protos)
+    if (empty) protos <- fallback
     if (!length(protos)) next
     wanted <- list()
-    last_page <- ""
+    last_page <- "1"
     for (i in seq_along(blocks)) {
       if (i >= s && i <= e) next
       if (is_toc_style[i] || !startsWith(blocks[i], "<w:p")) next
@@ -336,11 +346,17 @@ rebuild_tocs <- function(blocks, styles, numbers, ctx) {
       sty <- if (lvl == 0L) "Abbildungsverzeichnis" else paste0("Verzeichnis", lvl)
       wanted[[length(wanted) + 1L]] <- entry_para(protos, sty, r$name, numbers[i], title, pg)
     }
+    if (empty && !length(wanted)) next
     pre <- first_match("^<w:p(?: [^>]*)?>(?:<w:pPr>.*?</w:pPr>)?(.*?)<w:hyperlink ", old[1])
     # The TOC field usually ends in a trailing paragraph without an entry; that
     # paragraph carries the closing fldChar and has to stay.
     last <- old[length(old)]
-    if (grepl("<w:hyperlink ", last, fixed = TRUE)) {
+    if (empty) {
+      # The only paragraph holds Word's empty message between the field marks.
+      pre <- first_match("^<w:p(?: [^>]*)?>(?:<w:pPr>.*?</w:pPr>)?(.*?w:fldCharType=\"separate\"/></w:r>)", old[1])
+      post <- first_match("(<w:r(?: [^>]*)?>(?:(?!</w:r>).)*w:fldCharType=\"end\"/></w:r>)</w:p>$", last)
+      keep <- character()
+    } else if (grepl("<w:hyperlink ", last, fixed = TRUE)) {
       post <- first_match("</w:hyperlink>((?:(?!</w:hyperlink>).)*)</w:p>$", last)
       keep <- character()
     } else {

@@ -193,6 +193,11 @@ normalise_tokens <- function(toks) {
       segs[[length(segs) + 1L]] <- list(kind = "atom", key = t$key, on = t$on)
       next
     }
+    if (t$type != "text") {
+      # Formulas and new footnotes have no template counterpart.
+      segs[[length(segs) + 1L]] <- list(kind = "atom", key = paste0("neu-", t$type), on = NA)
+      next
+    }
     text <- gsub("[ \t\r\n]+", " ", t$text)
     code <- fmt_code(t)
     if (code == "") {

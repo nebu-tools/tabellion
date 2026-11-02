@@ -42,7 +42,24 @@
   _reg((kind: "mit-ende"))
 }
 
-#let absatz(id, inhalt) = _reg((kind: "block", id: id, body: inhalt), par(inhalt))
+// Typst exportiert `-` und `+` gleich, deshalb markiert das hier die Aufzählung.
+#let _nummern(inhalt) = {
+  if type(inhalt) != content {
+    inhalt
+  } else if inhalt.func() == enum.item {
+    [#metadata((gba-nummer: true))#inhalt]
+  } else if inhalt.func() == [].func() {
+    inhalt.children.map(_nummern).join()
+  } else if inhalt.func() == align {
+    align(inhalt.alignment, _nummern(inhalt.body))
+  } else if inhalt.func() in (block, box, pad) {
+    (inhalt.func())(_nummern(inhalt.body))
+  } else {
+    inhalt
+  }
+}
+
+#let absatz(id, inhalt) = _reg((kind: "block", id: id, body: _nummern(inhalt)), par(inhalt))
 
 #let ueberschrift(ebene, id, inhalt) = _reg(
   (kind: "block", id: id, body: inhalt),
@@ -68,12 +85,14 @@
 
 // Ohne Inhalt bleibt der Platzhalter << Angaben ... >> der Vorlage stehen.
 #let antwort(id, ..pos) = {
-  let body = if pos.pos().len() > 0 { pos.pos().first() } else { none }
+  let body = if pos.pos().len() > 0 { _nummern(pos.pos().first()) } else { none }
   _reg(
     (kind: "antwort", id: id, body: body),
     if body == none { box(fill: _dunkel, inset: 2pt)[\<\< Angaben des pharmazeutischen Unternehmers \>\>] } else { body },
   )
 }
+
+#let _zeilen(zeilen) = zeilen.map(z => z.map(_nummern))
 
 #let _spalten(zeilen) = calc.max(1, ..zeilen.map(z => z.len()))
 
@@ -86,7 +105,7 @@
   let alle = if daten == none { rows } else { rows + daten }
   _reg(
     (
-      kind: "tabelle", id: id, rows: rows, daten: daten,
+      kind: "tabelle", id: id, rows: _zeilen(rows), daten: if daten != none { _zeilen(daten) },
       kopf: if kopf == auto { none } else { kopf },
       zeile: if zeile == auto { none } else { zeile },
       spalten: spalten,
@@ -103,7 +122,7 @@
 
 // Neue Tabelle mit Beschriftung im Stil der Vorlage (Beschriftung + SEQ-Feld).
 #let neue-tabelle(beschriftung: none, kopf: (), zeilen: (), vorlage: none, spalten: none) = _reg(
-  (kind: "neue-tabelle", titel: beschriftung, kopf: kopf, zeilen: zeilen,
+  (kind: "neue-tabelle", titel: beschriftung, kopf: kopf.map(_nummern), zeilen: _zeilen(zeilen),
    vorlage: vorlage, spalten: spalten),
   {
     block(sticky: true, text(weight: "bold", size: 10pt)[Tabelle: #beschriftung])
