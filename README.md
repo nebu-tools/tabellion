@@ -1,60 +1,58 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# G-BA-Dossiers in Typst und R
+# G-BA dossiers in Typst and R
 
-Mit diesem Werkzeug schreibst du Dossier-Module in Typst und befüllst sie aus R. Es baut daraus eine `.docx` auf Basis der Original-Dokumentvorlage des G-BA. Das Dossier-Team öffnet die Datei in Word und arbeitet dort wie mit einer ausgefüllten Vorlage weiter.
+Write German G-BA benefit dossier modules in Typst, fill them from R, and build a `.docx` from the official G-BA Word template. The dossier team opens the file in Word and works with it like a filled-in template.
 
-English version: [README.en.md](README.en.md)
+The build runs on Linux and does not need Word.
 
-Word ist für den Build nicht nötig. Der Build läuft auf Linux.
+## Set up
 
-## Einrichten
-
-Du brauchst `rv`, `typst`, `curl` und `zip`.
+You need `rv`, `typst`, `curl`, and `zip`.
 
 ```sh
 rv sync
 rv run gba.R fetch
 ```
 
-`fetch` lädt die Vorlagen vom G-BA nach `templates/` und prüft ihre Prüfsummen. Dieses Repository enthält keine Vorlagen. Es verweist in [templates.csv](templates.csv) nur auf ihre Download-Adressen.
+`fetch` downloads the templates from the G-BA to `templates/` and verifies their checksums. This repository does not contain the templates. [templates.csv](templates.csv) lists their URLs.
 
-## Modul erstellen
+## Create a module
 
-1. Erzeuge ein Typst-Projekt:
+1. Generate a Typst project:
 
    ```sh
    rv run gba.R import modul4 dossier/m4
    ```
 
-2. Bearbeite die erzeugte `.typ`-Datei in `dossier/m4/`.
-3. Baue die docx:
+2. Edit the generated `.typ` file in `dossier/m4/`.
+3. Build the docx:
 
    ```sh
    rv run gba.R build dossier/m4/2025-11-18_Anl2_6_Modul4.typ
    ```
 
-Die docx liegt danach als `<name>_gefuellt.docx` neben der Quelle. Der Build nennt die Zahl offener Platzhalter und warnt, wenn eine Fragestellung, Erläuterung oder Überschrift der Vorlage fehlt.
+The build writes `<name>_gefuellt.docx` next to the source. It reports the number of open placeholders and warns if a question, an explanation, or a heading from the template is missing.
 
-Für eine Lesevorschau beim Schreiben führst du `typst watch` auf der `.typ`-Datei aus. Die Vorschau zeigt den Inhalt, aber nicht das Word-Layout.
+To preview while you write, run `typst watch` on the `.typ` file. The preview shows the content, not the Word layout.
 
-Das Beispiel [examples/modul4/demo.R](examples/modul4/demo.R) füllt Modul 4 mit öffentlichen Daten aus `survival::colon`. Es zeigt R-Tabellen, Kaplan-Meier-Plots und einen je Endpunkt wiederholten Abschnitt.
+[examples/modul4/demo.R](examples/modul4/demo.R) fills Modul 4 with public data from `survival::colon`. It shows R tables, Kaplan-Meier plots, and a section repeated for each endpoint.
 
-Verfügbare Module: `modul1`, `modul1-checkliste`, `modul2`, `modul3`, `modul4`, `k1`, `k1-checkliste`, `k2`, `k3`, `k4`.
+Available modules: `modul1`, `modul1-checkliste`, `modul2`, `modul3`, `modul4`, `k1`, `k1-checkliste`, `k2`, `k3`, `k4`.
 
-## Seitenzahlen in Word aktualisieren
+## Update page numbers in Word
 
-Der Build schreibt Tabellen- und Abbildungsnummern, Querverweise und die Texte aller Verzeichnisse selbst in die docx. Seitenzahlen kann er nicht berechnen, weil dafür das Word-Layout nötig ist. Neue Einträge in den Verzeichnissen tragen deshalb eine geschätzte Seite.
+The build writes table and figure numbers, cross references, and the text of all tables of contents into the docx. It cannot compute page numbers, because those depend on Word's layout. New entries in a table of contents carry an estimated page.
 
-Bevor du das Einreichungs-PDF erzeugst, drücke in Word `Strg+A` und dann `F9`. Wähle bei jedem Verzeichnis **Gesamtes Verzeichnis aktualisieren**.
+Before you create the submission PDF, press `Ctrl+A` and then `F9` in Word. For each table of contents, choose **Update entire table**.
 
-Wenn deine Word-Oberfläche nicht deutsch ist, verliert das Inhaltsverzeichnis dabei den Eintrag für Kapitel 1. Der Feldcode nennt die Formatvorlage "Überschrift 1" wörtlich. Dasselbe passiert bei einer von Hand ausgefüllten Vorlage.
+If your Word UI is not German, this update drops the chapter 1 entry from the table of contents. The field code names the style "Überschrift 1" literally. A template filled in by hand behaves the same way.
 
-## Inhalte in der .typ-Datei ändern
+## Edit the .typ file
 
-Jeder Block trägt die Kennung seines Gegenstücks in der Vorlage, zum Beispiel `"b0141"`. Lösche keine Fragestellungen und Erläuterungen, denn die G-BA-Vorgaben verlangen sie im Dokument.
+Each block carries the ID of its counterpart in the template, for example `"b0141"`. Do not delete questions and explanations, because the G-BA rules require them in the document.
 
-Deckblatt, Kopf- und Fußzeilen füllst du über `felder`:
+Fill the cover page, headers, and footers with `felder`:
 
 ```typst
 #show: dossier.with(vorlage: "...", felder: (
@@ -63,32 +61,32 @@ Deckblatt, Kopf- und Fußzeilen füllst du über `felder`:
 ))
 ```
 
-Eine Antwort ersetzt den Platzhalter `<< Angaben des pharmazeutischen Unternehmers >>`. Sie darf Text, Listen, Fußnoten, Tabellen und Abbildungen enthalten:
+An answer replaces the placeholder `<< Angaben des pharmazeutischen Unternehmers >>`. It can contain text, lists, footnotes, tables, and figures:
 
 ```typst
 #antwort("b0141")[
-	Text mit Fußnote#footnote[Quelle].
+	Text with a footnote#footnote[Source].
 
-	- Listenpunkt
+	- List item
 ]
 ```
 
-Daten aus R ersetzen alle Zeilen unterhalb des Tabellenkopfs einer Vorlagentabelle. In R schreibst du sie mit `gba_json()`:
+Data from R replaces all rows below the header of a template table. Write the data in R with `gba_json()`:
 
 ```typst
 #tabelle("b0430", daten: json("ergebnisse.json").at(0).zeilen)
 ```
 
-Weicht die Spaltenzahl von der Vorlage ab, übergib `spalten:` mit relativen Breiten.
+If the number of columns differs from the template, pass relative widths with `spalten:`.
 
-Neue Tabellen und Abbildungen bekommen eine Beschriftung im Stil der Vorlage:
+New tables and figures get a caption in the template's style:
 
 ```typst
-#neue-tabelle(beschriftung: [Titel], kopf: ([A], [B]), zeilen: rows)
-#abbildung(image("km.png", width: 14cm), beschriftung: [Titel])
+#neue-tabelle(beschriftung: [Title], kopf: ([A], [B]), zeilen: rows)
+#abbildung(image("km.png", width: 14cm), beschriftung: [Title])
 ```
 
-Einen Abschnitt wiederholst du mit einer Funktion und `mit`. `mit` ersetzt Platzhalter wie `<Endpunkt xxx>` in allen Blöcken des Abschnitts:
+To repeat a section, use a function and `mit`. `mit` replaces placeholders such as `<Endpunkt xxx>` in all blocks of the section:
 
 ```typst
 #let abschnitt(e) = mit(("<Endpunkt xxx>": e.name), [
@@ -97,36 +95,36 @@ Einen Abschnitt wiederholst du mit einer Funktion und `mit`. `mit` ersetzt Platz
 #for e in endpunkte { abschnitt(e) }
 ```
 
-Ein Kontrollkästchen setzt du mit `#kreuz(0, true)`.
+To tick a checkbox, use `#kreuz(0, true)`.
 
-`#feld(n)[...]` steht für ein Objekt der Vorlage, etwa einen Querverweis. Der Text in den Klammern ist der gespeicherte Wert. Eine Änderung an diesem Text ändert das Feld nicht.
+`#feld(n)[...]` stands for an object in the template, such as a cross reference. The text in the brackets is the stored value. Changing that text does not change the field.
 
-Für R-Ergebnisse gibt es `gba_zeilen()`, `gba_json()`, `gba_zahl()`, `gba_ki()` und `gba_p()`.
+For R results, use `gba_zeilen()`, `gba_json()`, `gba_zahl()`, `gba_ki()`, and `gba_p()`.
 
-## Warum die Word-Vorlage die Quelle bleibt
+## Why the Word template stays the source
 
-Die G-BA-Vorgaben verlangen die Vorlagen, und die Vorlagen enthalten Dinge, die ein Konverter nicht nachbaut: Formularfelder, Rahmen, Abschnitte und Feldstrukturen. Darum erzeugt das Werkzeug keine neue Datei, sondern ändert die Vorlage.
+The G-BA rules require the templates, and the templates contain things a converter does not rebuild: form fields, frames, sections, and field structures. So the build edits the template instead of generating a new file.
 
-`gba.R import` zerlegt die Vorlage in Blöcke und schreibt sie als Typst. `gba.R build` vergleicht jeden Block mit der Vorlage. Unveränderte Blöcke übernimmt der Build mit ihren Originalbytes. Geänderte Blöcke setzt er mit Formatvorlage und Lesezeichen der Vorlage neu. Eine unveränderte `.typ`-Datei ergibt deshalb eine docx, deren Dateien bytegleich zur Vorlage sind.
+`gba.R import` splits the template into blocks and writes them as Typst. `gba.R build` compares each block with the template. It keeps unchanged blocks byte for byte and rebuilds changed blocks with the template's style and bookmarks. An unchanged `.typ` file gives a docx whose parts are byte-identical to the template.
 
-## Grenzen
+## Limits
 
-- Nummerierte Listen aus Typst laufen im Dokument weiter und beginnen nicht neu.
-- Abbildungen müssen PNG oder JPEG sein.
-- Der Build überträgt Formeln als Text mit Hoch- und Tiefstellung.
-- Typst-Elemente ohne Word-Gegenstück, etwa `#rect` oder `context`, brechen den Build mit einer Meldung ab.
-- Eine `.typ`-Datei gehört zu genau einer Vorlagenversion. Bei einer neuen Vorlage stimmen die Blockkennungen nicht mehr.
+- Numbered lists from Typst continue through the document and do not restart.
+- Figures must be PNG or JPEG.
+- The build writes formulas as text with superscript and subscript.
+- Typst elements with no Word equivalent, such as `#rect` or `context`, stop the build with a message.
+- A `.typ` file belongs to one template version. A new template changes the block IDs.
 
-## Testen
+## Test
 
 ```sh
 rv run tests/testthat.R
 ```
 
-Die Tests laufen auch in der CI. Ein wöchentlicher Lauf meldet, wenn die G-BA-Seite eine Vorlage aus `templates.csv` nicht mehr verlinkt.
+CI runs the same tests. A weekly run reports when the G-BA page no longer links a template from `templates.csv`.
 
-`tools/word_check.R` vergleicht die Feldergebnisse des Builds mit denen von Word. Das Skript braucht Word unter Windows mit WSL und läuft deshalb nicht in der CI.
+`tools/word_check.R` compares the build's field results with Word's. It needs Word on Windows with WSL, so it does not run in CI.
 
-## Lizenz
+## License
 
-[AGPL-3.0](LICENSE). Die Vorlagen des G-BA sind nicht Teil dieses Repositorys und fallen nicht unter diese Lizenz.
+[AGPL-3.0](LICENSE). The G-BA templates are not part of this repository and this license does not cover them.
