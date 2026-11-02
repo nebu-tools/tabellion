@@ -67,14 +67,13 @@ content_tokens <- function(x, fmt = no_fmt, where = "") {
     link = rec(x$body),
     styled = rec(x$child),
     footnote = list(list(type = "footnote", body = x$body)),
-    equation = rec(x$body),
-    attach = c(rec(x$base),
-      if (!is.null(x$b)) { ff <- fmt; ff$sub <- TRUE; rec(x$b, ff) },
-      if (!is.null(x$t)) { ff <- fmt; ff$sup <- TRUE; rec(x$t, ff) }),
+    equation = if (isTRUE(x$block)) list(list(type = "block", node = x)) else list(list(type = "raw", xml = omml_inline(x))),
+    box = , block = , align = , pad = rec(x$body),
     item = list(list(type = "block", node = x)),
     heading = , table = , figure = , image = list(list(type = "block", node = x)),
     metadata = {
       v <- x$value
+      if (isTRUE(v[["gba-nummer"]])) return(list(list(type = "nummer")))
       if (!is.null(v[["gba-atom"]])) {
         list(list(type = "atom", key = v[["gba-atom"]], on = isTRUE(v$on)))
       } else if (identical(x$label, "<gba>")) {
@@ -90,12 +89,17 @@ content_tokens <- function(x, fmt = no_fmt, where = "") {
 split_paragraphs <- function(toks) {
   out <- list()
   cur <- list()
+  nummer <- FALSE
   for (t in toks) {
-    if (identical(t$type, "pb")) {
+    if (identical(t$type, "nummer")) {
+      nummer <- TRUE
+    } else if (identical(t$type, "pb")) {
       out[[length(out) + 1L]] <- cur
       cur <- list()
     } else if (identical(t$type, "block")) {
       if (length(cur)) out[[length(out) + 1L]] <- cur
+      t$node$nummeriert <- nummer
+      nummer <- FALSE
       out[[length(out) + 1L]] <- list(t)
       cur <- list()
     } else {

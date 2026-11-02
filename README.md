@@ -2,118 +2,52 @@
 
 # G-BA dossiers in Typst and R
 
-Write German G-BA benefit dossier modules in Typst, fill them from R, and build a `.docx` from the official G-BA Word template. The dossier team opens the file in Word and works with it like a filled-in template.
+Builds G-BA dossier modules as `.docx` from Typst and R, on top of the official Word templates. Runs on Linux without Word.
 
-The build runs on Linux and does not need Word.
+## Usage
 
-## Set up
-
-You need `rv`, `typst`, `curl`, and `zip`.
+Requires `rv`, `typst`, `curl`, and `zip`.
 
 ```sh
 rv sync
-rv run gba.R fetch
+rv run gba.R fetch                     # download templates to templates/
+rv run gba.R import modul4 dossier/m4  # template -> Typst project
+rv run gba.R build dossier/m4/2025-11-18_Anl2_6_Modul4.typ  # -> <name>_gefuellt.docx
+rv run gba.R migrate old/m4.typ modul4 dossier/m4-new        # move to a new template version
 ```
 
-`fetch` downloads the templates from the G-BA to `templates/` and verifies their checksums. This repository does not contain the templates. [templates.csv](templates.csv) lists their URLs.
+Modules: `modul1`, `modul1-checkliste`, `modul2`, `modul3`, `modul4`, `k1`, `k1-checkliste`, `k2`, `k3`, `k4`.
 
-## Create a module
+Example with R tables and Kaplan-Meier plots: [examples/modul4/demo.R](examples/modul4/demo.R).
 
-1. Generate a Typst project:
+Page numbers depend on Word's layout. Before you create the PDF, update all fields in Word (`Ctrl+A`, `F9`). With a non-German Word UI, the update drops the chapter 1 TOC entry.
 
-   ```sh
-   rv run gba.R import modul4 dossier/m4
-   ```
+## Typst API
 
-2. Edit the generated `.typ` file in `dossier/m4/`.
-3. Build the docx:
+| Call | Effect |
+| --- | --- |
+| `#show: dossier.with(felder: (wirkstoff: "...", stand: "..."))` | Fill the cover page, headers, and footers |
+| `#antwort("b0141")[...]` | Replace an answer placeholder |
+| `#tabelle("b0430", daten: rows, spalten: (2, 1))` | Replace the body rows of a template table |
+| `#neue-tabelle(beschriftung: [...], kopf: (...), zeilen: rows)` | Add a captioned table |
+| `#abbildung(image("km.png"), beschriftung: [...])` | Add a captioned figure |
+| `#mit(("<Endpunkt xxx>": name), [...])` | Replace placeholders in a repeated section |
+| `#kreuz(0, true)` | Tick a checkbox |
 
-   ```sh
-   rv run gba.R build dossier/m4/2025-11-18_Anl2_6_Modul4.typ
-   ```
+R helpers: `gba_json()`, `gba_zeilen()`, `gba_zahl()`, `gba_ki()`, `gba_p()`.
 
-The build writes `<name>_gefuellt.docx` next to the source. It reports the number of open placeholders and warns if a question, an explanation, or a heading from the template is missing.
+## How it works
 
-To preview while you write, run `typst watch` on the `.typ` file. The preview shows the content, not the Word layout.
+The template stays the source. `import` writes each template block as Typst with its ID. `build` keeps unchanged blocks byte for byte and rebuilds changed blocks in the template's style. An unchanged `.typ` file reproduces the template.
 
-[examples/modul4/demo.R](examples/modul4/demo.R) fills Modul 4 with public data from `survival::colon`. It shows R tables, Kaplan-Meier plots, and a section repeated for each endpoint.
-
-Available modules: `modul1`, `modul1-checkliste`, `modul2`, `modul3`, `modul4`, `k1`, `k1-checkliste`, `k2`, `k3`, `k4`.
-
-## Update page numbers in Word
-
-The build writes table and figure numbers, cross references, and the text of all tables of contents into the docx. It cannot compute page numbers, because those depend on Word's layout. New entries in a table of contents carry an estimated page.
-
-Before you create the submission PDF, press `Ctrl+A` and then `F9` in Word. For each table of contents, choose **Update entire table**.
-
-If your Word UI is not German, this update drops the chapter 1 entry from the table of contents. The field code names the style "Überschrift 1" literally. A template filled in by hand behaves the same way.
-
-## Edit the .typ file
-
-Each block carries the ID of its counterpart in the template, for example `"b0141"`. Do not delete questions and explanations, because the G-BA rules require them in the document.
-
-Fill the cover page, headers, and footers with `felder`:
-
-```typst
-#show: dossier.with(vorlage: "...", felder: (
-	wirkstoff: "...", handelsname: "...", unternehmer: "...",
-	kodierung: "A", anwendungsgebiet: "...", stand: "01.12.2026",
-))
-```
-
-An answer replaces the placeholder `<< Angaben des pharmazeutischen Unternehmers >>`. It can contain text, lists, footnotes, tables, and figures:
-
-```typst
-#antwort("b0141")[
-	Text with a footnote#footnote[Source].
-
-	- List item
-]
-```
-
-Data from R replaces all rows below the header of a template table. Write the data in R with `gba_json()`:
-
-```typst
-#tabelle("b0430", daten: json("ergebnisse.json").at(0).zeilen)
-```
-
-If the number of columns differs from the template, pass relative widths with `spalten:`.
-
-New tables and figures get a caption in the template's style:
-
-```typst
-#neue-tabelle(beschriftung: [Title], kopf: ([A], [B]), zeilen: rows)
-#abbildung(image("km.png", width: 14cm), beschriftung: [Title])
-```
-
-To repeat a section, use a function and `mit`. `mit` replaces placeholders such as `<Endpunkt xxx>` in all blocks of the section:
-
-```typst
-#let abschnitt(e) = mit(("<Endpunkt xxx>": e.name), [
-	#ueberschrift(5, "b0381")[\<Endpunkt xxx\> – RCT]
-])
-#for e in endpunkte { abschnitt(e) }
-```
-
-To tick a checkbox, use `#kreuz(0, true)`.
-
-`#feld(n)[...]` stands for an object in the template, such as a cross reference. The text in the brackets is the stored value. Changing that text does not change the field.
-
-For R results, use `gba_zeilen()`, `gba_json()`, `gba_zahl()`, `gba_ki()`, and `gba_p()`.
-
-## Why the Word template stays the source
-
-The G-BA rules require the templates, and the templates contain things a converter does not rebuild: form fields, frames, sections, and field structures. So the build edits the template instead of generating a new file.
-
-`gba.R import` splits the template into blocks and writes them as Typst. `gba.R build` compares each block with the template. It keeps unchanged blocks byte for byte and rebuilds changed blocks with the template's style and bookmarks. An unchanged `.typ` file gives a docx whose parts are byte-identical to the template.
+The G-BA rules require questions and explanations in the document, so do not delete those blocks.
 
 ## Limits
 
-- Numbered lists from Typst continue through the document and do not restart.
-- Figures must be PNG or JPEG.
-- The build writes formulas as text with superscript and subscript.
-- Typst elements with no Word equivalent, such as `#rect` or `context`, stop the build with a message.
-- A `.typ` file belongs to one template version. A new template changes the block IDs.
+- Formulas support sub- and superscripts, fractions, roots, and accents. Matrices and `cases` stop the build.
+- Word cannot embed all vector output safely, so the build renders SVG and PDF figures to PNG at 300 ppi.
+- `context` and drawing elements such as `#rect` stop the build.
+- `gba.R migrate` reports blocks whose template text changed. Review those by hand.
 
 ## Test
 
@@ -121,10 +55,8 @@ The G-BA rules require the templates, and the templates contain things a convert
 rv run tests/testthat.R
 ```
 
-CI runs the same tests. A weekly run reports when the G-BA page no longer links a template from `templates.csv`.
-
-`tools/word_check.R` compares the build's field results with Word's. It needs Word on Windows with WSL, so it does not run in CI.
+`tools/word_check.R` compares field results with Word and needs Word on Windows with WSL.
 
 ## License
 
-[AGPL-3.0](LICENSE). The G-BA templates are not part of this repository and this license does not cover them.
+[AGPL-3.0](LICENSE). The repository links the G-BA templates and does not include them. This license does not cover them.

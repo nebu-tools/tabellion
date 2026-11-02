@@ -10,6 +10,7 @@ new_ctx <- function(tpl, proj_dir) {
   ctx$uniq <- 500000L
   ctx$mit <- list()
   ctx$fn_new <- character()
+  ctx$num_new <- character()
   ctx$media <- list()
   fp <- file.path(tpl$dir, "word/footnotes.xml")
   ctx$fn_xml <- if (file.exists(fp)) read_text(fp) else ""
@@ -84,33 +85,63 @@ para_sig <- function(p) token_signature(p$tokens)
 #' Content for a paragraph prototype -> XML of one or more paragraphs/blocks.
 fill_from_tokens <- function(proto, toks, ctx) {
   paras <- split_paragraphs(toks)
-  paste(vapply(paras, function(pt) {
+  out <- character(length(paras))
+  in_list <- FALSE
+  for (i in seq_along(paras)) {
+    pt <- paras[[i]]
     if (length(pt) == 1L && identical(pt[[1]]$type, "block")) {
-      return(render_block_node(pt[[1]]$node, proto, ctx))
+      node <- pt[[1]]$node
+      numbered <- identical(node$func, "item") && (isTRUE(node$nummeriert) || !is.null(node$number))
+      # Each run of numbered items is one list that starts at 1.
+      if (numbered && !in_list) ctx$list_num <- new_list(ctx, proto)
+      in_list <- numbered
+      out[i] <- render_block_node(node, proto, ctx)
+    } else {
+      in_list <- FALSE
+      out[i] <- render_para(proto, pt, ctx)
     }
-    render_para(proto, pt, ctx)
-  }, ""), collapse = "")
+  }
+  paste(out, collapse = "")
+}
+
+num_style_id <- function(ctx, numbering) {
+  st <- read_text(file.path(ctx$tpl$dir, "word/styles.xml"))
+  m <- regexpr(sprintf("w:styleId=\"%s\".*?</w:style>", numbering), st, perl = TRUE)
+  if (m < 0) return(NA_character_)
+  sub(".*<w:numId w:val=\"([0-9]+)\".*", "\\1", regmatches(st, m))
+}
+
+list_ppr_for <- function(id) {
+  sprintf("<w:pPr><w:pStyle w:val=\"Aufzhlungszeichen\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"%s\"/></w:numPr></w:pPr>", id)
+}
+
+#' A fresh numbering instance of the template's numbered list.
+new_list <- function(ctx, proto) {
+  id <- num_style_id(ctx, "nummerierteAufzhlungDossier")
+  if (is.na(id)) return(NA_character_)
+  nx <- read_text(file.path(ctx$tpl$dir, "word/numbering.xml"))
+  ab <- first_match(sprintf("<w:num w:numId=\"%s\"[^>]*><w:abstractNumId w:val=\"([0-9]+)\"", id), nx)
+  used <- as.integer(sub(".*\"([0-9]+)\"", "\\1", regmatches(nx, gregexpr("<w:num w:numId=\"[0-9]+\"", nx))[[1]]))
+  num <- max(used) + 1L + length(ctx$num_new)
+  ctx$num_new <- c(ctx$num_new, sprintf(
+    "<w:num w:numId=\"%d\"><w:abstractNumId w:val=\"%s\"/><w:lvlOverride w:ilvl=\"0\"><w:startOverride w:val=\"1\"/></w:lvlOverride></w:num>",
+    num, ab
+  ))
+  as.character(num)
 }
 
 # The Dossier list styles are numbering styles, not paragraph styles: the
 # paragraph uses List Bullet and pulls the list definition through numPr.
-list_ppr <- function(ctx, numbering, proto) {
-  st <- read_text(file.path(ctx$tpl$dir, "word/styles.xml"))
-  m <- regexpr(sprintf("w:styleId=\"%s\".*?</w:style>", numbering), st, perl = TRUE)
-  if (m < 0) return(proto$ppr)
-  id <- sub(".*<w:numId w:val=\"([0-9]+)\".*", "\\1", regmatches(st, m))
-  sprintf("<w:pPr><w:pStyle w:val=\"Aufzhlungszeichen\"/><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"%s\"/></w:numPr></w:pPr>", id)
-}
-
 style_ppr <- function(style) sprintf("<w:pPr><w:pStyle w:val=\"%s\"/></w:pPr>", style)
 
 render_block_node <- function(node, proto, ctx) {
   f <- node$func %||% ""
   if (f == "item") {
     toks <- content_tokens(node$body, where = "Liste")
-    numbering <- if (!is.null(node$number)) "nummerierteAufzhlungDossier" else "AufzhlungDossier"
-    return(render_para(proto, Filter(function(t) !identical(t$type, "pb"), toks), ctx,
-                       ppr = list_ppr(ctx, numbering, proto)))
+    numbered <- isTRUE(node$nummeriert) || !is.null(node$number)
+    id <- if (numbered) ctx$list_num else num_style_id(ctx, "AufzhlungDossier")
+    ppr <- if (is.na(id)) proto$ppr else list_ppr_for(id)
+    return(render_para(proto, Filter(function(t) !identical(t$type, "pb"), toks), ctx, ppr = ppr))
   }
   if (f == "heading") {
     lvl <- node$depth %||% node$level %||% 1L
@@ -127,6 +158,7 @@ render_block_node <- function(node, proto, ctx) {
       return(render_new_table(list(titel = node$caption$body, kopf = t$kopf, zeilen = t$zeilen), ctx))
     }
   }
+  if (f == "equation") return(omml_block(node, proto$ppr))
   if (f == "image") return(render_figure(list(bild = node, titel = NULL), ctx))
   if (f == "table") {
     t <- native_table(node)
@@ -168,6 +200,10 @@ fill_cell <- function(cell, content, ctx, where) {
     return(cell$xml)
   }
   proto <- cell$paras[[1]]
+  # List items belong together, so a cell with blocks renders as one stream.
+  if (any(vapply(new, function(n) length(n) == 1L && identical(n[[1]]$type, "block"), NA))) {
+    return(paste0(cell$open, cell$tcpr, fill_from_tokens(proto, toks, ctx), cell$close))
+  }
   body <- vapply(seq_along(new), function(i) {
     pr <- if (i <= length(cell$paras)) cell$paras[[i]] else proto
     if (i <= length(old_sig) && identical(new_sig[[i]], old_sig[[i]])) {
@@ -387,7 +423,7 @@ image_size <- function(path) {
       i <- i + 2L + len
     }
   }
-  stop("Abbildungen müssen PNG oder JPEG sein: ", path)
+  stop("Abbildungen müssen PNG, JPEG, SVG oder PDF sein: ", path)
 }
 
 parse_length <- function(x) {
@@ -397,12 +433,28 @@ parse_length <- function(x) {
   switch(u, cm = n * 360000, mm = n * 36000, "in" = n * 914400, pt = n * 12700, NA_real_)
 }
 
+# Word has no safe common format for vector figures from every R device, so
+# Typst renders them to PNG at print resolution.
+rasterize <- function(src, dir, ppi = 300L) {
+  tmp <- tempfile("gba-bild-", tmpdir = dir, fileext = ".typ")
+  on.exit(unlink(tmp))
+  png <- tempfile(fileext = ".png")
+  writeLines(sprintf("#set page(width: auto, height: auto, margin: 0pt)\n#image(\"%s\")", src), tmp)
+  st <- system2(typst_bin(), c("compile", "--root", shQuote(dir), "--format", "png", "--ppi", ppi,
+                               shQuote(tmp), shQuote(png)))
+  if (st != 0L) stop("Abbildung lässt sich nicht rastern: ", src)
+  attr(png, "dpi") <- ppi
+  png
+}
+
 render_figure <- function(node, ctx) {
   img <- node$bild
   src <- sub("^/", "", img$source)
   path <- file.path(ctx$dir, src)
   if (!file.exists(path)) stop("Abbildung nicht gefunden: ", path)
+  if (grepl("\\.(svg|pdf)$", path, ignore.case = TRUE)) path <- rasterize(src, ctx$dir)
   sz <- image_size(path)
+  if (!is.null(attr(path, "dpi"))) sz$dpi <- attr(path, "dpi")
   page_w <- 5760000  # A4 text width of the templates: 16 cm
   cx <- if (!is.null(img$width)) parse_length(img$width) else NA_real_
   if (is.na(cx)) cx <- min(page_w, sz$w / sz$dpi * 914400)

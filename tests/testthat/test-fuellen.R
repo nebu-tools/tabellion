@@ -128,6 +128,11 @@ test_that("Abbildung funktioniert auch ohne Beispielbeschriftung in der Vorlage"
   }, png)
   expect_match(b$xml, "SEQ Abbildung", fixed = TRUE)
   expect_match(gsub("<[^>]+>", "", b$xml), "Abbildung [^:]*: Bild")
+  expect_false(grepl(TOC_LEER, b$xml, fixed = TRUE) && lengths(gregexpr(TOC_LEER, b$xml, fixed = TRUE)) > 1L)
+  verzeichnis <- regmatches(b$xml, gregexpr("<w:p>(?:(?!</w:p>).)*Abbildungsverzeichnis(?:(?!</w:p>).)*</w:p>", b$xml, perl = TRUE))[[1]]
+  expect_true(any(grepl(": Bild", gsub("<[^>]+>", "", verzeichnis), fixed = TRUE)))
+  anz <- function(k) lengths(regmatches(b$xml, gregexpr(sprintf("fldCharType=\"%s\"", k), b$xml)))
+  expect_equal(anz("begin"), anz("end"))
 })
 
 test_that("Verzeichnis ohne Eintraege verliert alte Eintraege und bleibt ein Feld", {
@@ -135,4 +140,79 @@ test_that("Verzeichnis ohne Eintraege verliert alte Eintraege und bleibt ein Fel
   expect_match(b$xml, TOC_LEER, fixed = TRUE)
   anz <- function(k) lengths(regmatches(b$xml, gregexpr(sprintf("fldCharType=\"%s\"", k), b$xml)))
   expect_equal(anz("begin"), anz("end"))
+})
+
+test_that("Nummerierte Listen beginnen neu, Punkte bleiben Punkte", {
+  b <- bauen("modul4", \(s) subst(s, "#antwort(\"b0141\")",
+    "#antwort(\"b0141\")[+ eins\n+ zwei\n\nText\n\n+ neu\n\n- Punkt]"))
+  d <- tempfile(); utils::unzip(b$out, "word/numbering.xml", exdir = d)
+  nx <- read_text(file.path(d, "word/numbering.xml"))
+  expect_equal(lengths(regmatches(nx, gregexpr("<w:startOverride w:val=\"1\"/></w:lvlOverride></w:num>", nx))) >= 2L, TRUE)
+  liste <- function(wort) first_match(sprintf("<w:numId w:val=\"([0-9]+)\"/></w:numPr></w:pPr><w:r>(?:<w:rPr>(?:(?!</w:r>).)*</w:rPr>)?<w:t[^>]*>%s<", wort), b$xml)
+  expect_equal(liste("eins"), liste("zwei"))
+  expect_false(liste("eins") == liste("neu"))
+  expect_false(liste("Punkt") %in% c(liste("eins"), liste("neu")))
+  xml2::read_xml(nx)
+})
+
+test_that("Formeln werden native Word-Formeln, Zellen und Absaetze behalten sie", {
+  b <- bauen("modul4", \(s) {
+    s <- subst(s, "#antwort(\"b0141\")", "#antwort(\"b0141\")[HR $x^2_i + frac(a, b) + sqrt(y)$\n\n$ E = m c^2 $]")
+    subst(s, "([\\<Studie 1\\>], [],),", "([$p < 0.05$], [],),")
+  })
+  expect_match(b$xml, "<m:sSubSup>", fixed = TRUE)
+  expect_match(b$xml, "<m:f>", fixed = TRUE)
+  expect_match(b$xml, "<m:oMathPara>", fixed = TRUE)
+  expect_silent(xml2::read_xml(b$xml))
+  expect_gt(lengths(gregexpr("<m:oMath>", b$xml, fixed = TRUE)), 2L)
+})
+
+test_that("SVG-Abbildungen werden als PNG eingebettet", {
+  svg <- tempfile(fileext = ".svg")
+  writeLines("<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"50\"><rect width=\"100\" height=\"50\"/></svg>", svg)
+  b <- bauen("modul4", \(s) subst(s, "#antwort(\"b0141\")",
+    "#antwort(\"b0141\")[#abbildung(image(\"bild.svg\"), beschriftung: [V])]"), NULL, svg)
+  expect_match(b$xml, "SEQ Abbildung", fixed = TRUE)
+})
+
+test_that("Layout-Huellen geben ihren Inhalt weiter", {
+  b <- bauen("modul4", \(s) subst(s, "#antwort(\"b0141\")", "#antwort(\"b0141\")[#box[Innen] und #align(center)[Mitte]]"))
+  expect_match(b$xml, "Innen", fixed = TRUE)
+  expect_match(b$xml, "Mitte", fixed = TRUE)
+})
+
+test_that("Nummerierung gilt auch in Huellen und Absaetzen", {
+  b <- bauen("modul4", \(s) {
+    s <- subst(s, "#antwort(\"b0141\")", "#antwort(\"b0141\")[#align(center)[+ huelle]]")
+    subst(s, "#absatz(\"b0009\")[Seite]", "#absatz(\"b0009\")[+ absatz]")
+  })
+  d <- tempfile(); utils::unzip(b$out, "word/numbering.xml", exdir = d)
+  nx <- read_text(file.path(d, "word/numbering.xml"))
+  expect_gte(lengths(regmatches(nx, gregexpr("<w:startOverride ", nx))), 2L)
+})
+
+test_that("Operatoren und abgesetzte Formeln funktionieren auch in Zellen", {
+  b <- bauen("modul4", \(s) {
+    s <- subst(s, "#antwort(\"b0141\")", "#antwort(\"b0141\")[$sin(x)$]")
+    subst(s, "([\\<Studie 1\\>], [],),", "([$ a = b $], [],),")
+  })
+  expect_match(b$xml, ">sin</m:t>", fixed = TRUE)
+  expect_match(b$xml, "<m:oMathPara>", fixed = TRUE)
+  expect_silent(xml2::read_xml(b$xml))
+})
+
+test_that("Nummerierte Listen in Tabellenzellen bleiben eine Liste", {
+  b <- bauen("modul4", \(s) subst(s, "([\\<Studie 1\\>], [],),", "([+ erste\n+ zweite], [],),"))
+  liste <- function(wort) first_match(sprintf("<w:numId w:val=\"([0-9]+)\"/></w:numPr></w:pPr><w:r>(?:<w:rPr>(?:(?!</w:r>).)*</w:rPr>)?<w:t[^>]*>%s<", wort), b$xml)
+  expect_false(is.na(liste("erste")))
+  expect_equal(liste("erste"), liste("zweite"))
+  d <- tempfile(); utils::unzip(b$out, "word/numbering.xml", exdir = d)
+  expect_match(read_text(file.path(d, "word/numbering.xml")), sprintf("w:numId=\"%s\"", liste("erste")), fixed = TRUE)
+})
+
+test_that("Nummerierte Liste im Kopf einer neuen Tabelle", {
+  b <- bauen("modul4", \(s) subst(s, "#antwort(\"b0141\")",
+    "#antwort(\"b0141\")[#neue-tabelle(beschriftung: [T], kopf: ([+ kopf],), zeilen: (([x],),))]"))
+  d <- tempfile(); utils::unzip(b$out, "word/numbering.xml", exdir = d)
+  expect_match(read_text(file.path(d, "word/numbering.xml")), "<w:startOverride ", fixed = TRUE)
 })

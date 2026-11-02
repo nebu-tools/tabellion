@@ -11,6 +11,12 @@ write_package <- function(tpl, ctx, xml, felder, out) {
     fx <- sub("</w:footnotes>", paste0(paste(ctx$fn_new, collapse = ""), "</w:footnotes>"), ctx$fn_xml, fixed = TRUE)
     write_text(fx, file.path(work, "word/footnotes.xml"))
   }
+  if (length(ctx$num_new)) {
+    np <- file.path(work, "word/numbering.xml")
+    nx <- read_text(np)
+    at <- max(gregexpr("</w:num>", nx, fixed = TRUE)[[1]]) + nchar("</w:num>") - 1L
+    write_text(paste0(substr(nx, 1L, at), paste(ctx$num_new, collapse = ""), substr(nx, at + 1L, nchar(nx))), np)
+  }
   if (length(felder)) {
     for (f in list.files(file.path(work, "word"), "^(header|footer|footnotes)[0-9]*\\.xml$", full.names = TRUE)) {
       s <- read_text(f)

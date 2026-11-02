@@ -13,12 +13,13 @@ dokument <- function(docx) {
 }
 
 # Imports the template, applies edits to the source, builds without Word.
-bauen <- function(modul, aendern = identity, bild = NULL) {
+bauen <- function(modul, aendern = identity, bild = NULL, svg = NULL) {
   dir <- tempfile("gba-test-")
   typ <- gba_import(modul, dir)
   src <- read_text(typ)
   write_text(aendern(src), typ)
   if (!is.null(bild)) file.copy(bild, file.path(dir, "bild.png"))
+  if (!is.null(svg)) file.copy(svg, file.path(dir, "bild.svg"))
   out <- file.path(dir, "out.docx")
   capture.output(rep <- gba_build(typ, out = out))
   list(out = out, rep = rep, xml = dokument(out))
