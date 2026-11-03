@@ -137,58 +137,69 @@ new_counter <- function(st, nm) {
 
 t_xml <- function(value) {
   # U+2011 and U+00AD are elements in runs, not characters.
-  v <- gsub("\u2011", "</w:t><w:noBreakHyphen/><w:t xml:space=\"preserve\">", xml_escape(value), fixed = TRUE)
-  v <- gsub("\u00AD", "</w:t><w:softHyphen/><w:t xml:space=\"preserve\">", v, fixed = TRUE)
+  v <- gsub("‑", "</w:t><w:noBreakHyphen/><w:t xml:space=\"preserve\">", xml_escape(value), fixed = TRUE)
+  v <- gsub("­", "</w:t><w:softHyphen/><w:t xml:space=\"preserve\">", v, fixed = TRUE)
   paste0("<w:t xml:space=\"preserve\">", v, "</w:t>")
 }
 
-set_cached <- function(xml, s, e, value) {
-  # Puts `value` in the first w:t of xml[s:e] and empties the others.
-  seg <- gsub("<w:(noBreakHyphen|softHyphen)/>", "", as_utf8(substr(xml, s, e)), perl = TRUE)
-  m <- gregexpr("<w:t(?: [^>]*)?>[^<]*</w:t>", seg, perl = TRUE)[[1]]
-  if (m[1] < 0) return(xml)
-  new <- rep("<w:t></w:t>", length(m))
-  new[1] <- t_xml(value)
-  regmatches(seg, list(m)) <- list(new)
-  enc2utf8(paste0(as_utf8(substr(xml, 1L, s - 1L)), seg, as_utf8(substr(xml, e + 1L, nchar(xml, "bytes")))))
+#' Writes `value` as a field result: into the first w:t, the others emptied.
+#' Returns FALSE when the result already reads that way.
+set_result <- function(res, value, ns) {
+  ts <- Filter(function(n) xml2::xml_name(n, ns) == "w:t", res)
+  if (!length(ts)) return(FALSE)
+  hy <- Filter(function(n) xml2::xml_name(n, ns) != "w:t", res)
+  alt <- vapply(ts, xml2::xml_text, "")
+  if (!length(hy) && identical(alt[1], value) && all(alt[-1] == "")) return(FALSE)
+  rm_nodes(hy)
+  for (t in ts[-1]) xml2::xml_text(t) <- ""
+  t <- ts[[1]]
+  parts <- regmatches(value, gregexpr("[‑­]|[^‑­]+", value, perl = TRUE))[[1]]
+  xml2::xml_set_attr(t, "xml:space", "preserve")
+  xml2::xml_text(t) <- if (length(parts) && !parts[1] %in% c("‑", "­")) parts[1] else ""
+  if (length(parts) && xml2::xml_text(t) == parts[1]) parts <- parts[-1]
+  prev <- t
+  for (p in parts) {
+    name <- switch(p, "‑" = "w:noBreakHyphen", "­" = "w:softHyphen", "w:t")
+    xml2::xml_add_sibling(prev, name)
+    prev <- xml2::xml_find_first(prev, "following-sibling::*[1]")
+    if (name == "w:t") { xml2::xml_set_attr(prev, "xml:space", "preserve"); xml2::xml_text(prev) <- p }
+  }
+  TRUE
 }
 
-#' Applies f(code) to every field of a kind in a block. Word may split one
-#' instruction over several runs, so the code is joined first.
-map_fields <- function(xml, kind, f) {
-  x <- as_bytes(xml)
+#' Applies f(code) to every field of a kind in a block and writes the result.
+#' Word may split one instruction over several runs, and fields can nest.
+map_fields <- function(xml, kind, f, root_tag) {
+  ns <- root_ns(root_tag)
+  n <- xml_node1(xml, root_tag)
   head <- paste0("^\\s*", kind, "\\b")
-  edits <- list()
-  begins <- gregexpr("w:fldCharType=\"begin\"", x, fixed = TRUE, useBytes = TRUE)[[1]]
-  for (b in begins[begins > 0]) {
-    rest <- substr(x, b, nchar(x, "bytes"))
-    sep <- regexpr("w:fldCharType=\"separate\"", rest, fixed = TRUE, useBytes = TRUE)
-    if (sep < 0) next
-    instr <- substr(rest, 1L, sep)
-    ts <- regmatches(instr, gregexpr("<w:instrText[^>]*>[^<]*", instr, useBytes = TRUE))[[1]]
-    code <- paste(sub("<[^>]*>", "", ts), collapse = "")
-    if (!grepl(head, code, perl = TRUE, useBytes = TRUE)) next
-    end <- regexpr("w:fldCharType=\"end\"", rest, fixed = TRUE, useBytes = TRUE)
-    if (end < sep) next
-    v <- f(trimws(sub(head, "", as_utf8(code), perl = TRUE)))
-    if (!is.null(v)) edits[[length(edits) + 1L]] <- list(s = b + sep - 1L, e = b + end - 2L, v = v)
+  geaendert <- FALSE
+  apply_f <- function(code, res) {
+    if (!grepl(head, code, perl = TRUE)) return()
+    v <- f(trimws(sub(head, "", code, perl = TRUE)))
+    if (!is.null(v) && set_result(res, v, ns)) geaendert <<- TRUE
   }
-  for (ed in rev(edits)) {
-    x <- as_bytes(set_cached(x, ed$s, ed$e, ed$v))
-  }
-  xml <- as_utf8(x)
-  re2 <- sprintf("<w:fldSimple w:instr=\"\\s*%s\\b[^\"]*\"[^>]*>.*?</w:fldSimple>", kind)
-  m <- gregexpr(re2, xml, perl = TRUE)[[1]]
-  if (m[1] > 0) {
-    hit <- regmatches(xml, list(m))[[1]]
-    for (i in seq_along(hit)) {
-      code <- trimws(sub(paste0("^\\s*", kind), "", first_match("w:instr=\"([^\"]*)\"", hit[i]), perl = TRUE))
-      v <- f(code)
-      if (!is.null(v)) hit[i] <- set_cached(hit[i], 1L, nchar(hit[i]), v)
+  stapel <- list()
+  for (k in xfind(n, ".//w:fldChar | .//w:instrText | .//w:t[not(ancestor::w:fldSimple)] | .//w:noBreakHyphen | .//w:softHyphen", ns)) {
+    nm <- xml2::xml_name(k, ns)
+    top <- length(stapel)
+    if (nm == "w:fldChar") {
+      ty <- wattr(k, "fldCharType", ns)
+      if (ty == "begin") stapel[[top + 1L]] <- list(code = "", sep = FALSE, res = list())
+      else if (top && ty == "separate") stapel[[top]]$sep <- TRUE
+      else if (top && ty == "end") { fld <- stapel[[top]]; stapel[[top]] <- NULL; apply_f(fld$code, fld$res) }
+    } else if (!top) {
+      next
+    } else if (nm == "w:instrText") {
+      if (!stapel[[top]]$sep) stapel[[top]]$code <- paste0(stapel[[top]]$code, xml2::xml_text(k))
+    } else if (stapel[[top]]$sep) {
+      stapel[[top]]$res <- c(stapel[[top]]$res, list(k))
     }
-    regmatches(xml, list(m)) <- list(hit)
   }
-  xml
+  for (fs in xfind(n, ".//w:fldSimple", ns)) {
+    apply_f(wattr(fs, "instr", ns), as.list(xfind(fs, ".//w:t | .//w:noBreakHyphen | .//w:softHyphen", ns)))
+  }
+  if (geaendert) node_str(n, root_tag) else xml
 }
 
 # ---- bookmarks ---------------------------------------------------------------
@@ -281,17 +292,17 @@ entry_para <- function(protos, lvl_style, anchor, number, title, page) {
 ensure_toc_mark <- function(block, ctx) {
   nm <- first_match("<w:bookmarkStart [^>]*w:name=\"(_Toc[^\"]+)\"", block)
   if (!is.na(nm)) return(list(block = block, name = nm))
+  rt <- ctx$tpl$root_tag
+  ns <- root_ns(rt)
+  p <- xml_node1(block, rt)
   id <- ctx$next_id()
   nm <- sprintf("_Toc9%08d", id)
-  s <- sprintf("<w:bookmarkStart w:id=\"%d\" w:name=\"%s\"/>", id, nm)
-  e <- sprintf("<w:bookmarkEnd w:id=\"%d\"/>", id)
-  if (grepl("</w:pPr>", block, fixed = TRUE)) {
-    block <- sub("</w:pPr>", paste0("</w:pPr>", s), block, fixed = TRUE)
-  } else {
-    block <- sub("(<w:p(?: [^>]*)?>)", paste0("\\1", s), block, perl = TRUE)
-  }
-  block <- sub("</w:p>$", paste0(e, "</w:p>"), block, perl = TRUE)
-  list(block = block, name = nm)
+  ppr <- xml2::xml_find_first(p, "w:pPr", ns)
+  s <- if (inherits(ppr, "xml_missing")) add_el(p, "w:bookmarkStart", ns, first = TRUE)
+       else { xml2::xml_add_sibling(ppr, "w:bookmarkStart"); xml2::xml_find_first(p, "w:bookmarkStart", ns) }
+  set_wattrs(s, list(id = id, name = nm), ns)
+  set_wattrs(add_el(p, "w:bookmarkEnd", ns), list(id = id), ns)
+  list(block = node_str(p, rt), name = nm)
 }
 
 #' One entry per style, with and without a number, to copy from.
@@ -414,7 +425,7 @@ resolve_fields <- function(body, ctx) {
       id <- strsplit(code, "\\s+")[[1]][1]
       seqs[[id]] <<- (seqs[[id]] %||% 0L) + 1L
       as.character(seqs[[id]])
-    })
+    }, ctx$tpl$root_tag)
   }
   bm <- bookmark_table(blocks, numbers)
   # Numbers are not part of a bookmark's text; \r and friends ask for them.
@@ -426,7 +437,7 @@ resolve_fields <- function(body, ctx) {
       # Word writes 0 for a number reference to an unnumbered paragraph.
       if (grepl("\\\\[rnw]\\b", code)) return(if (nzchar(t$number)) t$number else "0")
       t$text
-    })
+    }, ctx$tpl$root_tag)
   }
   fn <- regmatches(body, gregexpr("<w:footnoteReference [^>]*w:id=\"[0-9]+\"", body))[[1]]
   fn <- sub(".*w:id=\"([0-9]+)\"", "\\1", fn)
@@ -435,7 +446,7 @@ resolve_fields <- function(body, ctx) {
       t <- bm[[strsplit(code, "\\s+")[[1]][1]]]
       if (is.null(t) || is.na(t$footnote)) return(NULL)
       as.character(match(t$footnote, fn))
-    })
+    }, ctx$tpl$root_tag)
   }
   paste(rebuild_tocs(blocks, styles, numbers, ctx), collapse = "")
 }

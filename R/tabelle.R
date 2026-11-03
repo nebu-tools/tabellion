@@ -74,55 +74,65 @@ spec_grid <- function(rows) {
 
 spec_rows <- function(spec) c(as.list(spec$kopf), as.list(spec$zeilen))
 
-spec_row <- function(row, cells, widths, ctx) {
+spec_row <- function(row, cells, ctx) {
   n <- length(row$cells)
   xml <- vapply(seq_along(cells), function(j) {
     z <- cells[[j]]
     tc <- row$cells[[min(j, n)]]
-    pr <- gsub("<w:gridSpan [^>]*/>", "", strip_vmerge(tc$tcpr))
-    add <- paste0(
-      sprintf("<w:tcW w:w=\"%d\" w:type=\"dxa\"/>", sum(widths[z$spalte:(z$spalte + z$n - 1L)])),
-      if (z$n > 1L) sprintf("<w:gridSpan w:val=\"%d\"/>", z$n),
-      if (z$cont) "<w:vMerge/>" else if (z$m > 1L) "<w:vMerge w:val=\"restart\"/>"
-    )
-    tc$tcpr <- if (grepl("<w:tcW ", pr, fixed = TRUE)) sub("<w:tcW [^>]*/>", add, pr) else sub("<w:tcPr>", paste0("<w:tcPr>", add), pr, fixed = TRUE)
-    tc$open <- gsub(" w14:(paraId|textId)=\"[^\"]*\"", "", tc$open, perl = TRUE)
     tc$xml <- ""
-    tc$paras <- lapply(tc$paras, function(p) { p$ppr <- strip_rev(p$ppr); p })
     inhalt <- list(func = "text", text = z$text)
     if (z$fett) inhalt <- list(func = "strong", body = inhalt)
-    clone_cell_ids(fill_cell(tc, inhalt, ctx, "Tabelle"))
+    fill_cell(tc, inhalt, ctx, "Tabelle")
   }, "")
-  open <- gsub(" w14:(paraId|textId)=\"[^\"]*\"", "", row$open, perl = TRUE)
-  paste0(open, strip_rev(row$pre), paste(xml, collapse = ""), row$post, row$close)
+  paste0(row$open, row$pre, paste(xml, collapse = ""), row$post, row$close)
 }
-
-# The prototype may be a table with pending revisions.
-strip_rev <- function(x) gsub("<w:(ins|del) [^>]*/>", "", x, perl = TRUE)
 
 #' A table's tag lives in its alt text: Word keeps it on the table, and editing
 #' the caption around it cannot remove it.
-set_tag <- function(head, tag) {
-  head <- gsub("<w:tbl(Caption|Description) [^>]*/>", "", head, perl = TRUE)
-  if (is.null(tag)) return(head)
-  add <- sprintf("<w:tblDescription w:val=\"gba:%s\"/>", check_tag(tag))
-  if (grepl("<w:tblPrChange", head, fixed = TRUE)) return(sub("<w:tblPrChange", paste0(add, "<w:tblPrChange"), head, fixed = TRUE))
-  sub("</w:tblPr>", paste0(add, "</w:tblPr>"), head, fixed = TRUE)
+get_tag <- function(tbl, ns) {
+  d <- wattr(xml2::xml_find_first(tbl, "w:tblPr/w:tblDescription", ns), "val", ns)
+  if (!is.na(d) && startsWith(d, "gba:")) substring(d, 5L) else NA_character_
 }
 
-get_tag <- function(head) first_match("<w:tblDescription w:val=\"gba:([^\"]+)\"", head)
-
-#' XML of a table in the look of `tbl`.
+#' XML of a table in the look of `tbl`, the parsed prototype from the document.
 spec_table <- function(spec, tbl, ctx, tag = spec$tag) {
+  if (!is.null(tag)) check_tag(tag)
   g <- spec_grid(spec_rows(spec))
   widths <- table_widths(tbl, g$breite, spec$spalten)
-  head <- sub("<w:tblGrid>.*</w:tblGrid>", paste0("<w:tblGrid>",
-    paste(sprintf("<w:gridCol w:w=\"%d\"/>", widths), collapse = ""), "</w:tblGrid>"), tbl$head)
   nk <- length(spec$kopf)
   kopf <- tbl$rows[[1]]
   body <- tbl$rows[[min(2L, length(tbl$rows))]]
-  rows <- vapply(seq_along(g$rows), function(i) {
-    spec_row(if (i <= nk) kopf else body, g$rows[[i]], widths, ctx)
-  }, "")
-  paste0(tbl$open, set_tag(head, tag), paste(rows, collapse = ""), tbl$close)
+  rows <- vapply(seq_along(g$rows), function(i) spec_row(if (i <= nk) kopf else body, g$rows[[i]], ctx), "")
+  rt <- ctx$tpl$root_tag
+  ns <- root_ns(rt)
+  t <- xml_node1(paste0(tbl$open, tbl$head, paste(rows, collapse = ""), tbl$close), rt)
+  grid <- xml2::xml_find_first(t, "w:tblGrid", ns)
+  rm_nodes(xml2::xml_children(grid))
+  for (w in widths) set_wattrs(add_el(grid, "w:gridCol", ns), list(w = w), ns)
+  pr <- xml2::xml_find_first(t, "w:tblPr", ns)
+  rm_nodes(xfind(pr, "w:tblCaption | w:tblDescription", ns))
+  if (!is.null(tag)) set_wattrs(pr_child(pr, "tblDescription", ns, TBLPR_ORDER), list(val = paste0("gba:", tag)), ns)
+  # The prototype may carry pending revisions, ids and bookmarks of its own.
+  rm_nodes(xfind(t, ".//w:trPr/w:ins | .//w:trPr/w:del | .//w:pPr/w:rPr/w:ins | .//w:pPr/w:rPr/w:del | .//w:bookmarkStart | .//w:bookmarkEnd", ns))
+  if ("w14" %in% names(ns)) {
+    for (k in xfind(t, "descendant-or-self::*[@w14:paraId or @w14:textId]", ns)) {
+      xml2::xml_set_attr(k, "w14:paraId", NULL, ns = ns)
+      xml2::xml_set_attr(k, "w14:textId", NULL, ns = ns)
+    }
+  }
+  trs <- xfind(t, "w:tr", ns)
+  for (i in seq_along(trs)) {
+    tcs <- xfind(trs[[i]], "w:tc", ns)
+    for (j in seq_along(tcs)) {
+      z <- g$rows[[i]][[j]]
+      tcpr <- xml2::xml_find_first(tcs[[j]], "w:tcPr", ns)
+      if (inherits(tcpr, "xml_missing")) tcpr <- add_el(tcs[[j]], "w:tcPr", ns, first = TRUE)
+      rm_nodes(xfind(tcpr, "w:tcW | w:gridSpan | w:vMerge", ns))
+      set_wattrs(pr_child(tcpr, "tcW", ns, TCPR_ORDER), list(w = sum(widths[z$spalte:(z$spalte + z$n - 1L)]), type = "dxa"), ns)
+      if (z$n > 1L) set_wattrs(pr_child(tcpr, "gridSpan", ns, TCPR_ORDER), list(val = z$n), ns)
+      if (z$cont) pr_child(tcpr, "vMerge", ns, TCPR_ORDER)
+      else if (z$m > 1L) set_wattrs(pr_child(tcpr, "vMerge", ns, TCPR_ORDER), list(val = "restart"), ns)
+    }
+  }
+  node_str(t, rt)
 }

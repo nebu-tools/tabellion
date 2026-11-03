@@ -393,3 +393,18 @@ test_that("Fremder Absatz zwischen getaggtem Text stoppt", {
   })
   expect_error(anwenden(doc, list(op = "ersetzen", ziel = ziel("met_km"), text = km("1"))), "zusammenhängend")
 })
+
+test_that("Feldcode über mehrere Runs, geschützte Leerzeichen und Format des ersten Runs", {
+  rt <- read_template(gefuellt())$root_tag
+  feld <- paste0("<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText> SE</w:instrText></w:r>",
+                 "<w:r><w:instrText>Q Tabelle </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r>",
+                 "<w:r><w:t>9</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>")
+  expect_match(map_fields(feld, "SEQ", function(code) "1", rt), "<w:t xml:space=\"preserve\">1</w:t>", fixed = TRUE)
+  expect_equal(clean_text("a  b"), "a b")
+  ctx <- new.env()
+  ctx$ns <- root_ns(rt); ctx$autor <- "A"; ctx$datum <- "2026-01-01T00:00:00Z"; ctx$tpl <- list(root_tag = rt)
+  ctx$next_id <- local({ i <- 0L; function() { i <<- i + 1L; i } })
+  p <- xml_node1("<w:p><w:r><w:t>a</w:t></w:r><w:r><w:rPr><w:b/></w:rPr><w:t>b</w:t></w:r></w:p>", rt)
+  replace_runs(p, xfind(p, "w:r", ctx$ns), "neu", ctx)
+  expect_false(grepl("<w:ins [^>]*><w:r><w:rPr><w:b/>", node_str(p, rt), perl = TRUE))
+})
