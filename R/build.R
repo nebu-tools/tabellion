@@ -527,13 +527,18 @@ baustein_eval <- function(name, werte) {
 #' Word moves the end of a range across paragraphs to a place outside them.
 tag_paras <- function(xml, tag, ctx) {
   if (!grepl("^[A-Za-z0-9_]{1,27}$", tag)) stop("Ungültige Kennung für Text: ", tag)
-  map_matches(open_paras(xml), PARA_RE, function(p) {
-    id <- ctx$next_id()
-    s <- sprintf("<w:bookmarkStart w:id=\"%d\" w:name=\"_gba_%s_%d\"/>", id, tag, id)
-    p <- if (grepl("</w:pPr>", p, fixed = TRUE)) sub("</w:pPr>", paste0("</w:pPr>", s), p, fixed = TRUE)
-         else sub("^(<w:p(?: [^>]*)?>)", paste0("\\1", s), p, perl = TRUE)
-    sub("</w:p>$", sprintf("<w:bookmarkEnd w:id=\"%d\"/></w:p>", id), p, perl = TRUE)
-  })
+  rt <- ctx$tpl$root_tag
+  ns <- root_ns(rt)
+  b <- xml_frag(xml, rt)
+  for (p in xfind(b, "w:p", ns)) {
+    id <- as.character(ctx$next_id())
+    ppr <- xml2::xml_find_first(p, "w:pPr", ns)
+    s <- if (inherits(ppr, "xml_missing")) add_el(p, "w:bookmarkStart", ns, first = TRUE)
+         else { xml2::xml_add_sibling(ppr, "w:bookmarkStart"); xml2::xml_find_first(p, "w:bookmarkStart", ns) }
+    set_wattrs(s, list(id = id, name = sprintf("_gba_%s_%s", tag, id)), ns)
+    set_wattrs(add_el(p, "w:bookmarkEnd", ns), list(id = id), ns)
+  }
+  frag_str(b, rt)
 }
 
 render_text <- function(node, proto, ctx) {
