@@ -108,7 +108,7 @@ dependencies = []
 
 [[packages]]
 name = "otel"
-version = "0.2.0"
+version = "0.3.0"
 source = { repository = "https://packagemanager.posit.co/cran/latest" }
 force_source = false
 dependencies = []
