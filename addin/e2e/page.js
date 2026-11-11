@@ -251,6 +251,25 @@ async function scenario() {
   // The cursor sits before the first citation, so the new one comes first.
   check("tracked renumber", JSON.stringify(nums.slice(0, 3)) === JSON.stringify(["[1]", "[2]", "[1,3]"]) && nums.length === 7, nums);
 
+  // With tracking on, a pick inside a citation becomes its own citation after it.
+  await word(async (c) => {
+    const cc = c.document.body.contentControls;
+    cc.load("items/tag");
+    await c.sync();
+    cc.items.filter((x) => x.tag.startsWith("zitat:"))[1].getRange("Content").select("End");
+    await c.sync();
+  });
+  await pick("csr");
+  const joined = await citeTexts();
+  check("tracked join is separate", joined.length === 8 && joined[1] === "[2]" && joined[2] === "[3]", joined);
+  const changes = await word(async (c) => {
+    const tcs = c.document.body.getTrackedChanges();
+    tcs.load("items/type,items/text");
+    await c.sync();
+    return tcs.items.map((t) => [t.type, t.text]);
+  });
+  check("tracked join only adds", changes.every(([t]) => t === "Added"), changes);
+
   // A tracked deletion of an older citation stays for review, without a number.
   // (Deleting one's own tracked insertion just removes it.)
   await word(async (c) => {
@@ -264,7 +283,7 @@ async function scenario() {
   $("refresh").click();
   await idle();
   const left = await citeTexts();
-  check("tracked delete pending", /1 gelöscht, offen/.test($("status").textContent) && left.length === 7 && left[0] === "[1]" && left[2] === "[1,2]", { status: $("status").textContent, left, pend });
+  check("tracked delete pending", /1 gelöscht, offen/.test($("status").textContent) && left.length === 8 && left[0] === "[1]" && left[2] === "[2]" && left[3] === "[1,3]", { status: $("status").textContent, left, pend });
   await word(async (c) => { c.document.changeTrackingMode = "Off"; await c.sync(); });
 
   // DOI lookup over the network.
@@ -329,9 +348,22 @@ async function templateScenario() {
   $("q").value = "lee"; $("q").dispatchEvent(new Event("input"));
   key($("q"), "Enter", { ctrlKey: true });
   await pick("mueller");
+  // A list inserted with tracking on is derived content and stays untracked.
+  await word(async (c) => { c.document.changeTrackingMode = "TrackAll"; await c.sync(); });
   await selectAnswerAfter("Referenzliste für Abschnitt 3.2");
   $("bib").click();
   await idle();
+  const tracked = await word(async (c) => {
+    c.document.load("changeTrackingMode");
+    const tcs = c.document.body.getTrackedChanges();
+    tcs.load("items/type,items/text");
+    await c.sync();
+    const r = { mode: c.document.changeTrackingMode, changes: tcs.items.map((t) => [t.type, t.text]) };
+    c.document.changeTrackingMode = "Off";
+    await c.sync();
+    return r;
+  });
+  check("template list untracked", tracked.mode === "TrackAll" && tracked.changes.length === 0, tracked);
 
   const cites = await citeTexts();
   const bibs = await bibTexts();

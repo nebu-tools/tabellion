@@ -134,20 +134,25 @@ function tagCitation(cc, id, items) {
 
 /**
  * Cites `items` at the cursor. Inside an existing citation the items join it,
- * so a click on [3] and a pick gives [3, 4].
+ * so a click on [3] and a pick gives [3,4]. With track changes on they become a
+ * citation of their own right after it, which review can reject on its own.
  */
 export async function insertCitation(context, renderer, items) {
   const store = await loadStore(context);
   const sel = context.document.getSelection();
   const host = sel.parentContentControlOrNullObject;
   host.load("tag,title,id");
+  context.document.load("changeTrackingMode");
   await context.sync();
   let cc;
   let all = items;
-  if (!host.isNullObject && isCite(host)) {
+  const inCite = !host.isNullObject && isCite(host);
+  if (inCite && context.document.changeTrackingMode === "Off") {
     const before = store.zitate[host.tag.slice(CITE_PREFIX.length)] ?? [];
     all = [...before, ...items.filter((x) => !before.some((b) => b.id === x.id))];
     cc = host;
+  } else if (inCite) {
+    cc = host.getRange("After").insertText(CITE_NEW, "Replace").insertContentControl();
   } else if (!host.isNullObject && host.tag === BIB_TAG) {
     throw new Error("Der Cursor steht im Literaturverzeichnis.");
   } else {
@@ -168,9 +173,15 @@ export async function insertCitation(context, renderer, items) {
 /**
  * Adds a reference list for the citations since the previous one. An empty or
  * fully selected paragraph, such as the template's answer placeholder, becomes
- * the list; otherwise it goes below the cursor's paragraph.
+ * the list; otherwise it goes below the cursor's paragraph. Like its entries,
+ * the list is written untracked.
  */
 export async function insertBibliography(context, renderer) {
+  await withTracking(context, "Off", () => addList(context));
+  return refresh(context, renderer);
+}
+
+async function addList(context) {
   const sel = context.document.getSelection();
   const host = sel.parentContentControlOrNullObject;
   host.load("tag");
@@ -192,7 +203,6 @@ export async function insertBibliography(context, renderer) {
   cc.title = "Literaturverzeichnis";
   cc.appearance = "BoundingBox";
   await context.sync();
-  return refresh(context, renderer);
 }
 
 /**

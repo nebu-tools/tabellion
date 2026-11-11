@@ -7,6 +7,12 @@ const VARS = new Set([
   "PMCID", "URL", "ISBN", "ISSN", "note", "genre", "language", "event-title", "medium", "status",
 ]);
 
+// doi.org passes some Crossref types through unchanged.
+const CROSSREF_TYPES = {
+  article: "article-journal", "journal-article": "article-journal", "book-chapter": "chapter",
+  "proceedings-article": "paper-conference", "posted-content": "article", monograph: "book", "edited-book": "book",
+};
+
 /** Keeps the standard CSL variables and drops names' extras, e.g. Crossref's affiliations. */
 export function cleanCsl(item) {
   const out = {};
@@ -22,7 +28,7 @@ export function cleanCsl(item) {
       out[k] = v;
     }
   }
-  if (out.type === "article") out.type = "article-journal";
+  out.type = CROSSREF_TYPES[out.type] ?? out.type;
   return out;
 }
 

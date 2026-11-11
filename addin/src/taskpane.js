@@ -102,9 +102,15 @@ function summary(r) {
   return msg;
 }
 
-/** Runs one document operation at a time and reports its errors. */
-async function op(fn) {
-  if (state.busy) return null;
+/** Runs document operations one after another and reports their errors. */
+let queue = Promise.resolve();
+function op(fn) {
+  const p = queue.then(() => run(fn));
+  queue = p.catch(() => {});
+  return p;
+}
+
+async function run(fn) {
   state.busy = true;
   document.body.setAttribute("aria-busy", "true");
   try {

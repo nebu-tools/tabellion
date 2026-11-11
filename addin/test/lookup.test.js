@@ -27,6 +27,7 @@ test("PubMed summaries become CSL", () => {
 });
 
 test("Crossref CSL loses what CSL does not know", () => {
+  assert.equal(cleanCsl({ type: "journal-article" }).type, "article-journal");
   const c = cleanCsl({ type: "article", title: ["T"], author: [{ family: "A", given: "B", affiliation: [], sequence: "first" }], reference: [{}], "container-title": "J", issued: { "date-parts": [[2020, 1]], timestamp: 1 } });
   assert.deepEqual(c, { type: "article-journal", title: "T", author: [{ family: "A", given: "B" }], "container-title": "J", issued: { "date-parts": [[2020, 1]] } });
 });
