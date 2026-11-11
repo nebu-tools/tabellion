@@ -219,10 +219,10 @@ op_werte <- function(id, spec, ctx, name) {
 # What may go away with a target. A citation is only removed on request, and a
 # paragraph that closes a section or sits inside a field must stay whole.
 check_loss <- function(ids, o, ctx, name) {
-  xp <- ".//w:instrText[contains(., 'EN.CITE') or contains(., 'EN.REFLIST')] | .//w:fldSimple[contains(@w:instr, 'EN.')]"
+  xp <- paste(".//w:instrText[contains(., 'EN.CITE') or contains(., 'EN.REFLIST')] | .//w:fldSimple[contains(@w:instr, 'EN.')]", ZITAT_XP, sep = " | ")
   zitat <- any(vapply(ids, function(id) xhas(blk(ctx$tpl, id), xp, ctx$ns), NA))
   if (zitat && !isTRUE(o$zitate_loeschen)) {
-    stop(name, " enthält EndNote-Zitate. Sie gingen verloren. Mit `zitate_loeschen: true` bestätigen oder Text in Word ändern.")
+    stop(name, " enthält Zitate (EndNote oder Zitate-Add-in). Sie gingen verloren. Mit `zitate_loeschen: true` bestätigen oder Text in Word ändern.")
   }
 }
 
@@ -441,7 +441,8 @@ with_nodes <- function(tpl) {
   tpl
 }
 
-#' What a user can pick in a document: headings, text, tables, figures, placeholders.
+#' What a user can pick in a document: headings, text, tables, figures,
+#' placeholders, and the add-in's citations and reference lists.
 gba_outline <- function(docx) {
   tpl <- with_nodes(read_template(docx))
   on.exit(unlink(tpl$dir, recursive = TRUE))
@@ -472,9 +473,10 @@ gba_outline <- function(docx) {
     list(block = id, tag = text_tags(n, ns)[1] %|na|% NULL, text = substr(t, 1L, 80L), offen_von = rev_authors(n, ns))
   }))
   ph <- all_placeholders(tpl)
-  list(sha256 = unname(tools::sha256sum(docx)), ueberschriften = heads, absaetze = absaetze,
-       tabellen = Filter(Negate(is.null), tabs), abbildungen = bilder,
-       platzhalter = lapply(seq_along(ph), function(i) list(block = names(ph)[i], name = ph[[i]])))
+  c(list(sha256 = unname(tools::sha256sum(docx)), ueberschriften = heads, absaetze = absaetze,
+         tabellen = Filter(Negate(is.null), tabs), abbildungen = bilder,
+         platzhalter = lapply(seq_along(ph), function(i) list(block = names(ph)[i], name = ph[[i]]))),
+    zitate_outline(tpl))
 }
 
 #' A table waiting for its tracked deletion to be accepted.

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Built into dist/manifest.xml with {{BASE}} set to the add-in's web address. -->
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xsi:type="TaskPaneApp">
+  <Id>45fc7c0a-aeaf-4d53-978f-f66bb3185365</Id>
+  <Version>{{VERSION}}</Version>
+  <ProviderName>newga</ProviderName>
+  <DefaultLocale>de-DE</DefaultLocale>
+  <DisplayName DefaultValue="Zitate"/>
+  <Description DefaultValue="Quellen suchen und zitieren, Literaturverzeichnisse automatisch pflegen."/>
+  <IconUrl DefaultValue="{{BASE}}/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="{{BASE}}/icon-64.png"/>
+  <SupportUrl DefaultValue="{{BASE}}/taskpane.html"/>
+  <Hosts>
+    <Host Name="Document"/>
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.4">
+      <Set Name="WordApi" MinVersion="1.4"/>
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="{{BASE}}/{{PAGE}}"/>
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Document">
+        <DesktopFormFactor>
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="Zitate.Group">
+                <Label resid="Zitate.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16"/>
+                  <bt:Image size="32" resid="Icon.32"/>
+                  <bt:Image size="80" resid="Icon.80"/>
+                </Icon>
+                <Control xsi:type="Button" id="Zitate.Open">
+                  <Label resid="Zitate.Label"/>
+                  <Supertip>
+                    <Title resid="Zitate.Label"/>
+                    <Description resid="Zitate.Tip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16"/>
+                    <bt:Image size="32" resid="Icon.32"/>
+                    <bt:Image size="80" resid="Icon.80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>Office.AutoShowTaskpaneWithDocument</TaskpaneId>
+                    <SourceLocation resid="Pane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="{{BASE}}/icon-16.png"/>
+        <bt:Image id="Icon.32" DefaultValue="{{BASE}}/icon-32.png"/>
+        <bt:Image id="Icon.80" DefaultValue="{{BASE}}/icon-80.png"/>
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Pane.Url" DefaultValue="{{BASE}}/{{PAGE}}"/>
+      </bt:Urls>
+      <bt:ShortStrings>
+        <bt:String id="Zitate.Label" DefaultValue="Zitate"/>
+      </bt:ShortStrings>
+      <bt:LongStrings>
+        <bt:String id="Zitate.Tip" DefaultValue="Quellen suchen und zitieren. Nummern und Literaturverzeichnisse aktualisieren sich selbst."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
