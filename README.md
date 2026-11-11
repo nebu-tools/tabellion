@@ -84,9 +84,13 @@ Fields update after every run that changes the document, and those updates are n
 
 Text blocks live in `typst/methoden.typ`, so they support bold, lists, formulas, and footnotes. A missing value stops the run. Relative figure paths start at the ops file.
 
-Any failed check stops the run and writes nothing: an unknown target, a duplicate tag, a different table shape, or pending changes by someone else in a target to replace. `ersetzen` also stops on EndNote citations unless the change sets `"zitate_loeschen": true`, and on text that holds a formula or section break or sits inside a field. Only text and answer paragraphs can be replaced, not questions, explanations, or headings. `werte` skips cells it cannot change safely and lists them under `offen`: cells with another author's pending change, and cells with a field, citation, footnote, or several paragraphs. EndNote fields stay as they are, so add citations in Word.
+Any failed check stops the run and writes nothing: an unknown target, a duplicate tag, a different table shape, or pending changes by someone else in a target to replace. `ersetzen` also stops on citations, from EndNote or from the Zitate add-in, unless the change sets `"zitate_loeschen": true`, and on text that holds a formula or section break or sits inside a field. Only text and answer paragraphs can be replaced, not questions, explanations, or headings. `werte` skips cells it cannot change safely and lists them under `offen`: cells with another author's pending change, and cells with a field, citation, footnote, or several paragraphs. Citations stay as they are, so add them in Word. `outline` lists the add-in's citations with their keys under `zitate`, and its reference lists under `literaturverzeichnisse`.
 
 Tables and figures store a tag in their alt text as `gba:<tag>`, and each text paragraph holds a hidden bookmark `_gba_<tag>_<n>`. Tags still find their target after Word saves the file. Text tags use letters, digits, and `_`, up to 27 characters.
+
+## Citations in Word
+
+[`addin/`](addin/README.md) is a Word add-in that replaces EndNote's Cite While You Write. It offers a search box over a library stored in the document, `[@key]` markers like in LaTeX, and numbers and reference lists that update by themselves. Each "Referenzliste" section gets its own list. Citations are content controls, so this pipeline can read and keep them.
 
 ## How it works
 

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zitate</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <link rel="stylesheet" href="taskpane.css">
+</head>
+<body>
+  <main>
+    <div class="search">
+      <input id="q" type="search" placeholder="Autor, Jahr, Titel, Schlüssel, DOI …" autocomplete="off" spellcheck="false" aria-label="Quellen durchsuchen" aria-controls="results">
+      <input id="loc" type="text" placeholder="Seite" aria-label="Seite (optional)" title="Seite, nur bei einer einzelnen Quelle">
+    </div>
+    <div id="marked" class="marked" hidden></div>
+    <ul id="results" class="results" role="listbox" aria-label="Treffer"></ul>
+    <p id="hint" class="hint">Enter zitiert den markierten Treffer. Strg+Enter merkt ihn für ein Mehrfachzitat vor. Im Text funktioniert auch <code>[@schluessel]</code> mit „Aktualisieren“.</p>
+    <div class="actions">
+      <button id="bib" type="button">Literaturverzeichnis einfügen</button>
+      <button id="refresh" type="button">Aktualisieren</button>
+    </div>
+    <details class="sources">
+      <summary>Quellen hinzufügen</summary>
+      <label class="file">Datei importieren (.bib, .ris, .json)
+        <input id="file" type="file" accept=".bib,.ris,.json,.txt" multiple>
+      </label>
+      <form id="lookup" class="lookup">
+        <input id="ident" type="text" placeholder="DOI oder PMID" aria-label="DOI oder PMID">
+        <button type="submit">Holen</button>
+      </form>
+    </details>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </main>
+  <script src="taskpane.js"></script>
+</body>
+</html>
