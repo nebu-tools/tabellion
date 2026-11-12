@@ -1,4 +1,4 @@
-# Citations of the Word add-in (addin/): content controls plus a custom XML part.
+# Citations of the siglum Word add-in: content controls plus a custom XML part.
 
 text_ops <- list(baustein = "ereigniszeit", werte = list(n = "12", studie = "A"))
 

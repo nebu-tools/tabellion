@@ -39,19 +39,3 @@ jobs:
         run: |
           rv run gba.R import modul4 /tmp/preview
           typst compile /tmp/preview/2025-11-18_Anl2_6_Modul4.typ /tmp/preview/preview.pdf
-
-  addin:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: addin
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: addin/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build -- --base https://zitate.example.org

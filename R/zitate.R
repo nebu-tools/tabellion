@@ -1,7 +1,8 @@
-# Citations of the Word add-in in addin/. A citation is an inline content
-# control tagged `zitat:<id>`, a reference list a block content control tagged
-# `literaturverzeichnis`. The cited works and each citation's items live in a
-# custom XML part, see addin/src/model.js.
+# Citations of the siglum Word add-in (github.com/nebu-tools/siglum). A
+# citation is an inline content control tagged `zitat:<id>`, a reference list a
+# block content control tagged `literaturverzeichnis`. The cited works and each
+# citation's items live in a custom XML part, see siglum's src/model.js. The
+# namespace keeps the project's former name, newga: documents in use carry it.
 
 ZITAT_NS <- "urn:newga:zitate:1"
 ZITAT_XP <- "descendant-or-self::w:sdt[w:sdtPr/w:tag[starts-with(@w:val, 'zitat:')]]"

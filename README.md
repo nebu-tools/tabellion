@@ -90,7 +90,7 @@ Tables and figures store a tag in their alt text as `gba:<tag>`, and each text p
 
 ## Citations in Word
 
-[`addin/`](addin/README.md) is a Word add-in that replaces EndNote's Cite While You Write. It offers a search box over a library stored in the document, `[@key]` markers like in LaTeX, and numbers and reference lists that update by themselves. Each "Referenzliste" section gets its own list. Citations are content controls, so this pipeline can read and keep them.
+[siglum](https://github.com/nebu-tools/siglum) is a Word add-in that replaces EndNote's Cite While You Write. It offers a search box over a library stored in the document, `[@key]` markers like in LaTeX, and numbers and reference lists that update by themselves. Each "Referenzliste" section gets its own list. Citations are content controls, so this pipeline can read and keep them.
 
 ## How it works
 
