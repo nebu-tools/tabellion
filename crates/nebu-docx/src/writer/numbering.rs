@@ -296,8 +296,18 @@ impl Session<'_> {
         ctx: &Ctx,
         path: &str,
     ) -> Result<String, Error> {
-        let plan = self.plan(doc, list.ordered, depth_of(list))?;
-        let shared_num = match &plan {
+        struct Frame<'l> {
+            list: &'l List,
+            depth: usize,
+            next: usize,
+            path: String,
+            plan: usize,
+            num: Option<String>,
+        }
+        // A list nested in a list of the other kind (bullets in a numbered
+        // list) is numbered by a plan of its own.
+        let mut plans: Vec<Plan> = vec![self.plan(doc, list.ordered, depth_of(list))?];
+        let first = match &plans[0] {
             Plan::Shared { def, .. } => {
                 let def = def.clone();
                 Some(self.instance(doc, &def, 0, list.ordered)?)
@@ -306,29 +316,35 @@ impl Session<'_> {
         };
         let mut out = String::new();
         // Lists nest at most nine deep (checked), so a stack of frames.
-        let mut stack: Vec<(&List, usize, usize, String, Option<String>)> =
-            vec![(list, 0, 0, format!("{path}.items"), None)];
-        while let Some((l, depth, next, p, num)) = stack.pop() {
-            let Some(item) = l.items.get(next) else {
+        let mut stack = vec![Frame {
+            list,
+            depth: 0,
+            next: 0,
+            path: format!("{path}.items"),
+            plan: 0,
+            num: first,
+        }];
+        while let Some(f) = stack.pop() {
+            let Some(item) = f.list.items.get(f.next) else {
                 continue;
             };
-            let (style, num) = match (&plan, &shared_num) {
-                (Plan::Shared { style, .. }, Some(n)) => (style.clone(), n.clone()),
-                (Plan::PerLevel(per), _) => {
-                    let num = match num {
-                        Some(n) => n,
-                        None => {
-                            let def = per[depth].1.clone();
-                            self.instance(doc, &def, 0, l.ordered)?
-                        }
-                    };
-                    (Some(per[depth].0.clone()), num)
+            let (style, num, level) = match &plans[f.plan] {
+                Plan::Shared { style, .. } => {
+                    (style.clone(), f.num.clone().unwrap_or_default(), f.depth)
                 }
-                _ => (None, String::new()),
-            };
-            let level = match plan {
-                Plan::Shared { .. } => depth,
-                Plan::PerLevel(_) => 0,
+                Plan::PerLevel(per) => {
+                    let Some((style, def)) = per.get(f.depth).cloned() else {
+                        return Err(Error::Invalid(format!(
+                            "{}: no list style for this depth",
+                            f.path
+                        )));
+                    };
+                    let num = match &f.num {
+                        Some(n) => n.clone(),
+                        None => self.instance(doc, &def, 0, f.list.ordered)?,
+                    };
+                    (Some(style), num, 0)
+                }
             };
             let mut props = vec![];
             if let Some(s) = &style {
@@ -350,13 +366,43 @@ impl Session<'_> {
                 };
                 props.push(("jc", format!("<w:jc w:val=\"{v}\"/>")));
             }
-            let ip = format!("{p}[{next}]");
+            let ip = format!("{}[{}]", f.path, f.next);
             let inner = self.inlines(doc, &item.content, ctx, &format!("{ip}.content"), None)?;
             out.push_str(&self.paragraph_xml(ctx, props, &inner));
             // The rest of this list after the nested one.
-            stack.push((l, depth, next + 1, p.clone(), Some(num)));
+            stack.push(Frame {
+                next: f.next + 1,
+                num: Some(num.clone()),
+                path: f.path.clone(),
+                ..f
+            });
             if let Some(sub) = &item.list {
-                stack.push((sub, depth + 1, 0, format!("{ip}.list.items"), None));
+                let depth = f.depth + 1;
+                let (plan, num) = if sub.ordered == f.list.ordered {
+                    match &plans[f.plan] {
+                        Plan::Shared { .. } => (f.plan, Some(num)),
+                        Plan::PerLevel(_) => (f.plan, None),
+                    }
+                } else {
+                    let p = self.plan(doc, sub.ordered, depth + depth_of(sub))?;
+                    let num = match &p {
+                        Plan::Shared { def, .. } => {
+                            let def = def.clone();
+                            Some(self.instance(doc, &def, depth, sub.ordered)?)
+                        }
+                        Plan::PerLevel(_) => None,
+                    };
+                    plans.push(p);
+                    (plans.len() - 1, num)
+                };
+                stack.push(Frame {
+                    list: sub,
+                    depth,
+                    next: 0,
+                    path: format!("{ip}.list.items"),
+                    plan,
+                    num,
+                });
             }
         }
         Ok(out)

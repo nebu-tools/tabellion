@@ -474,7 +474,8 @@ impl Session<'_> {
         Ok(out)
     }
 
-    /// A relationship from a part, made once per session for each target.
+    /// A relationship from a part: one the part has to the same target,
+    /// or a new one. The part's relationships are read once per session.
     pub(crate) fn rel(
         &mut self,
         doc: &mut Document,
@@ -482,18 +483,50 @@ impl Session<'_> {
         kind: &str,
         target: Target<'_>,
     ) -> Result<String, Error> {
-        let key = (
-            source.to_lowercase(),
-            match target {
-                Target::Part(p) => format!("part:{}", p.to_lowercase()),
-                Target::External(u) => format!("url:{u}"),
-            },
-        );
-        if let Some(id) = self.rels.get(&key) {
+        let src = source.to_lowercase();
+        let key = |kind: &str, external: bool, t: &str| {
+            format!(
+                "{kind}|{}",
+                if external {
+                    t.to_string()
+                } else {
+                    t.to_lowercase()
+                }
+            )
+        };
+        if !self.rels.contains_key(&src) {
+            let list = doc.relationships(source)?;
+            let next = list
+                .iter()
+                .filter_map(|r| r.id.strip_prefix("rId")?.parse::<u64>().ok())
+                .max()
+                .unwrap_or(0)
+                + 1;
+            let mut known = std::collections::HashMap::new();
+            for r in list {
+                let t = match (&r.part, r.external) {
+                    (_, true) => key(&r.kind, true, &r.target),
+                    (Some(p), false) => key(&r.kind, false, p),
+                    (None, false) => continue,
+                };
+                known.entry(t).or_insert(r.id);
+            }
+            self.rels.insert(src.clone(), (next, known));
+        }
+        let k = match target {
+            Target::Part(p) => key(kind, false, doc.part_name(p).unwrap_or(p)),
+            Target::External(u) => key(kind, true, u),
+        };
+        let Some((next, known)) = self.rels.get_mut(&src) else {
+            return Err(Error::Invalid("no relationships read".into()));
+        };
+        if let Some(id) = known.get(&k) {
             return Ok(id.clone());
         }
-        let id = doc.add_relationship(source, kind, target)?;
-        self.rels.insert(key, id.clone());
+        let id = format!("rId{next}");
+        *next += 1;
+        known.insert(k, id.clone());
+        doc.add_relationship_as(source, &id, kind, target)?;
         Ok(id)
     }
 

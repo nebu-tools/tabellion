@@ -69,8 +69,9 @@ pub(crate) struct Session<'o> {
     pub bookmarks: HashSet<String>,
     pub lists: Lists,
     pub media: Media,
-    /// Relationships made in this session: source part and target to id.
-    pub rels: HashMap<(String, String), String>,
+    /// The relationships of each source part, read once: the next free
+    /// number, and kind and target to id.
+    pub rels: HashMap<String, (u64, HashMap<String, String>)>,
     pub notes_part: Option<String>,
     pub next_note: i64,
     /// Parts whose root declares `w14` as ignorable.
@@ -249,9 +250,15 @@ pub(crate) fn run(
     for (_, blocks) in items {
         content_labels(blocks, &mut defined);
     }
+    let mut given = HashSet::new();
     for (l, kind) in defined {
         check_label(&l).map_err(Error::Invalid)?;
         let key = l.to_lowercase();
+        if !given.insert(key.clone()) {
+            return Err(Error::Invalid(format!(
+                "the label {l:?} is given twice in the content"
+            )));
+        }
         if s.labels.contains_key(&key) {
             return Err(Error::Invalid(format!(
                 "the label {l:?} is already in the document (bookmark _Ref_{l})"
@@ -272,6 +279,7 @@ pub(crate) fn run(
         targets.push(place::resolve(doc, &stories, *p)?);
     }
     let mut out = Inserted::default();
+    let mut pending: Vec<(&Target, Vec<NodeId>, bool)> = vec![];
     for (t, (_, blocks)) in targets.iter().zip(items) {
         let para_ids = match s.para_parts.get(&t.part) {
             Some(b) => *b,
@@ -309,9 +317,13 @@ pub(crate) fn run(
         for (i, b) in blocks.iter().enumerate() {
             xml.push_str(&s.block(doc, b, &ctx, &format!("blocks[{i}]"))?);
         }
-        let nodes = put(doc, t, &xml, para_ids, &mut s.ids)?;
-        out.nodes.push(nodes);
+        let nodes = doc
+            .xml(&t.part)?
+            .parse_fragment(&xml, crate::content::RAW_PREFIXES)?;
+        pending.push((t, nodes, para_ids));
     }
+    put(doc, &pending, &mut s.ids)?;
+    out.nodes = pending.into_iter().map(|(_, n, _)| n).collect();
     out.renumbered = super::fields::update(doc, &s, &out.nodes)?;
     out.roles = s.book.sources();
     out.styles_added = s.book.added_names.clone();
@@ -328,63 +340,69 @@ pub(crate) fn run(
     Ok(out)
 }
 
-/// Parses the blocks into the target's tree and puts them at the place.
-/// A container that must end with a paragraph (a cell, a note, a header, a
+/// Puts the parsed blocks at their places: in one pass over the children
+/// of each container, so that many places cost no more than one. A
+/// container that must end with a paragraph (a cell, a note, a header, a
 /// text box) gets an empty one if the new blocks leave it without.
 fn put(
     doc: &mut Document,
-    t: &Target,
-    xml: &str,
-    para_ids: bool,
+    pending: &[(&Target, Vec<NodeId>, bool)],
     ids: &mut Ids,
-) -> Result<Vec<NodeId>, Error> {
-    let tree = doc.xml(&t.part)?;
-    let nodes = tree.parse_fragment(xml, crate::content::RAW_PREFIXES)?;
-    match t.anchor {
-        Anchor::Before(a) => {
-            for &n in &nodes {
-                tree.insert_before(a, n)?;
+) -> Result<(), Error> {
+    type Edits = HashMap<NodeId, (Vec<NodeId>, Vec<NodeId>, bool)>;
+    let mut groups: Vec<((String, NodeId), Edits, Vec<NodeId>, bool)> = vec![];
+    let mut index: HashMap<(String, NodeId), usize> = HashMap::new();
+    for (t, nodes, para_ids) in pending {
+        let key = (t.part.clone(), t.container);
+        let g = *index.entry(key.clone()).or_insert_with(|| {
+            groups.push((key, HashMap::new(), vec![], *para_ids));
+            groups.len() - 1
+        });
+        let (_, edits, appends, _) = &mut groups[g];
+        match t.anchor {
+            Anchor::Before(a) => edits.entry(a).or_default().0.extend(nodes),
+            Anchor::After(a) => edits.entry(a).or_default().1.extend(nodes),
+            Anchor::Replace(a) => {
+                let e = edits.entry(a).or_default();
+                if e.2 {
+                    return Err(Error::Invalid("two places replace the same block".into()));
+                }
+                e.0.extend(nodes);
+                e.2 = true;
             }
-        }
-        Anchor::After(a) => {
-            let mut at = a;
-            for &n in &nodes {
-                tree.insert_after(at, n)?;
-                at = n;
-            }
-        }
-        Anchor::Replace(a) => {
-            for &n in &nodes {
-                tree.insert_before(a, n)?;
-            }
-            tree.detach(a)?;
-        }
-        Anchor::Append => {
-            for &n in &nodes {
-                tree.append(t.container, n)?;
-            }
+            Anchor::Append => appends.extend(nodes),
         }
     }
-    let needs_paragraph = !tree.is(t.container, Some(W), "body")?
-        && !tree.is(t.container, Some(W), "sdtContent")?
-        && !tree.is(t.container, Some(W), "customXml")?;
-    if needs_paragraph {
-        let last = tree.elements(t.container)?.last();
-        let ends_in_p = match last {
-            Some(l) => tree.is(l, Some(W), "p")?,
-            None => false,
-        };
-        if !ends_in_p {
-            let id = if para_ids {
-                format!(" w14:paraId=\"{:08X}\"", ids.para())
-            } else {
-                String::new()
+    for ((part, container), edits, appends, para_ids) in groups {
+        let tree = doc.xml(&part)?;
+        if !edits.is_empty() {
+            tree.splice(container, &edits)?;
+        }
+        for n in appends {
+            tree.append(container, n)?;
+        }
+        let needs_paragraph = !tree.is(container, Some(W), "body")?
+            && !tree.is(container, Some(W), "sdtContent")?
+            && !tree.is(container, Some(W), "customXml")?;
+        if needs_paragraph {
+            let last = tree.elements(container)?.last();
+            let ends_in_p = match last {
+                Some(l) => tree.is(l, Some(W), "p")?,
+                None => false,
             };
-            let p = tree.parse_fragment(&format!("<w:p{id}/>"), crate::content::RAW_PREFIXES)?;
-            for n in p {
-                tree.append(t.container, n)?;
+            if !ends_in_p {
+                let id = if para_ids {
+                    format!(" w14:paraId=\"{:08X}\"", ids.para())
+                } else {
+                    String::new()
+                };
+                let p =
+                    tree.parse_fragment(&format!("<w:p{id}/>"), crate::content::RAW_PREFIXES)?;
+                for n in p {
+                    tree.append(container, n)?;
+                }
             }
         }
     }
-    Ok(nodes)
+    Ok(())
 }

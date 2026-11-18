@@ -40,5 +40,19 @@ test = false
 doc = false
 bench = false
 
+[[bin]]
+name = "content"
+path = "fuzz_targets/content.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "write"
+path = "fuzz_targets/write.rs"
+test = false
+doc = false
+bench = false
+
 [workspace]
 members = ["."]

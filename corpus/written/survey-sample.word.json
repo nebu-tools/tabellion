@@ -1,0 +1,350 @@
+{
+    "file":  "survey-sample.docx",
+    "opened":  true,
+    "error":  null,
+    "word_version":  "16.0 build 16.0.20326",
+    "compatibility_mode":  15,
+    "converted":  false,
+    "paragraphs":  [
+                       {
+                           "style":  "Title",
+                           "text":  "Breeding bird survey\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "By {{author}}, {{date}}.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Summary\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The summary goes here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Results\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 2",
+                           "text":  "Counts by site\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The north site held the most breeding pairs (Table 1); Figure 1 shows a wren there.\u0002\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Table 1: Breeding pairs by site\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Site\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Visits\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Pairs\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "North\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "12\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "41.5\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "East\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "9\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "33.0\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "South and west\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "80.5\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "List Number",
+                           "text":  "Walk the transect at dawn\r",
+                           "list":  "1.",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "List Bullet",
+                           "text":  "slowly\r",
+                           "list":  "–",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "List Bullet",
+                           "text":  "stopping every 100 m\r",
+                           "list":  "–",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "List Number",
+                           "text":  "Count singing males as pairs\r",
+                           "list":  "2.",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 1: A wren at the north site\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The method follows the survey guide; the counts are above.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Methods\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "Describe the survey sites, the counting method and the data here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       }
+                   ],
+    "table_count":  1,
+    "tables":  [
+                   {
+                       "style":  "Field Green",
+                       "rows":  4,
+                       "columns":  3,
+                       "header_rows":  1,
+                       "heading_rows":  true,
+                       "row_bands":  true,
+                       "first_column":  false,
+                       "nested":  0
+                   }
+               ],
+    "table_styles":  [
+                         {
+                             "name":  "Field Green",
+                             "builtin":  false
+                         },
+                         {
+                             "name":  "Report Table",
+                             "builtin":  false
+                         },
+                         {
+                             "name":  "Table Grid",
+                             "builtin":  true
+                         },
+                         {
+                             "name":  "Table Normal",
+                             "builtin":  true
+                         }
+                     ],
+    "captions":  {
+                     "Table":  [
+                                   "Table 1: Breeding pairs by site"
+                               ],
+                     "Figure":  [
+                                    "Figure 1: A wren at the north site"
+                                ],
+                     "Equation":  [
+
+                                  ]
+                 },
+    "bookmarks":  [
+                      "_Ref_fig-wren",
+                      "_Ref_sec-counts",
+                      "_Ref_tab-sites",
+                      "summary"
+                  ],
+    "fields_before":  [
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_tab-sites \\h",
+                              "result":  "Table 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_fig-wren \\h",
+                              "result":  "Figure 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Table \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "HYPERLINK \"https://example.org/bird-survey\"",
+                              "result":  "survey guide"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "HYPERLINK \\l \"_Ref_sec-counts\"",
+                              "result":  "the counts"
+                          },
+                          {
+                              "story":  9,
+                              "code":  "PAGE",
+                              "result":  "1"
+                          }
+                      ],
+    "fields_after":  [
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_tab-sites \\h",
+                             "result":  "Table 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_fig-wren \\h",
+                             "result":  "Figure 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Table \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "HYPERLINK \"https://example.org/bird-survey\"",
+                             "result":  "survey guide"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "HYPERLINK \\l \"_Ref_sec-counts\"",
+                             "result":  "the counts"
+                         },
+                         {
+                             "story":  9,
+                             "code":  "PAGE",
+                             "result":  "1"
+                         }
+                     ],
+    "references":  [
+                       {
+                           "code":  "REF _Ref_tab-sites \\h",
+                           "result":  "Table 1",
+                           "target":  "Table 1"
+                       },
+                       {
+                           "code":  "REF _Ref_fig-wren \\h",
+                           "result":  "Figure 1",
+                           "target":  "Figure 1"
+                       }
+                   ],
+    "footnotes":  [
+                      {
+                          "index":  1,
+                          "text":  "Counted from song between 05:00 and 08:00."
+                      }
+                  ],
+    "inline_shapes":  [
+                          {
+                              "type":  3,
+                              "width":  90,
+                              "height":  60,
+                              "alt":  "A wren on a reed stem"
+                          }
+                      ]
+}

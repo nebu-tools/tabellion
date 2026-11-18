@@ -1,0 +1,61 @@
+{
+  "blocks": [
+    {"type": "heading", "level": 2, "content": ["Counts by site"], "label": "sec-counts"},
+    {"type": "paragraph", "content": [
+      "The north site held the most breeding pairs (",
+      {"type": "reference", "label": "tab-sites"},
+      "); ",
+      {"type": "reference", "label": "fig-wren"},
+      " shows a wren there.",
+      {"type": "footnote", "content": [
+        {"type": "paragraph", "content": ["Counted from song between 05:00 and 08:00."]}
+      ]}
+    ]},
+    {"type": "table", "header_rows": 1, "style": "Field Green",
+     "caption": ["Breeding pairs by site"], "label": "tab-sites",
+     "rows": [
+      {"cells": [
+        {"content": [{"type": "paragraph", "content": ["Site"]}]},
+        {"content": [{"type": "paragraph", "content": ["Visits"]}]},
+        {"content": [{"type": "paragraph", "content": ["Pairs"]}]}
+      ]},
+      {"cells": [
+        {"content": [{"type": "paragraph", "content": ["North"]}]},
+        {"content": [{"type": "paragraph", "content": ["12"]}], "align": "right"},
+        {"content": [{"type": "paragraph", "content": ["41.5"]}], "align": "right"}
+      ]},
+      {"cells": [
+        {"content": [{"type": "paragraph", "content": ["East"]}]},
+        {"content": [{"type": "paragraph", "content": ["9"]}], "align": "right"},
+        {"content": [{"type": "paragraph", "content": ["33.0"]}], "align": "right"}
+      ]},
+      {"cells": [
+        {"content": [{"type": "paragraph", "content": ["South and west"]}], "column_span": 2},
+        {"content": [{"type": "paragraph", "content": ["80.5"]}], "align": "right", "shading": "E2EFDA"}
+      ]}
+    ]},
+    {"type": "list", "ordered": true, "items": [
+      {"content": ["Walk the transect at dawn"], "list": {"ordered": false, "items": [
+        {"content": ["slowly"]},
+        {"content": ["stopping every 100 m"]}
+      ]}},
+      {"content": ["Count singing males as pairs"]}
+    ]},
+    {"type": "figure", "image": {"file": "wren.png", "alt": "A wren on a reed stem"},
+     "caption": ["A wren at the north site"], "label": "fig-wren"},
+    {"type": "paragraph", "content": [
+      "The method follows the ",
+      {"type": "link", "target": {"url": "https://example.org/bird-survey"}, "content": ["survey guide"]},
+      "; ",
+      {"type": "link", "target": {"label": "sec-counts"}, "content": ["the counts"]},
+      " are above."
+    ]}
+  ],
+  "table_styles": [
+    {"name": "Field Green", "font": "Calibri", "size": 10,
+     "header": {"fill": "385723", "color": "FFFFFF", "bold": true},
+     "band_fill": "E2EFDA",
+     "borders": {"top": {"width": 1, "color": "385723"}, "bottom": {"width": 1, "color": "385723"},
+                 "inside_h": {"width": 0.25, "color": "A9D08E"}}}
+  ]
+}

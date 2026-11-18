@@ -882,6 +882,69 @@ impl Tree {
         self.insert_next_to(anchor, child, 1)
     }
 
+    /// Puts unattached nodes next to children of one parent, and takes out
+    /// children, in one pass over the parent's children: for each child
+    /// named, the nodes that go before it and after it, and whether it
+    /// goes. A node to put may not be attached anywhere. The checks are
+    /// those of [`insert`](Self::insert); if one fails, nothing changes.
+    pub(crate) fn splice(
+        &mut self,
+        parent: NodeId,
+        edits: &HashMap<NodeId, (Vec<NodeId>, Vec<NodeId>, bool)>,
+    ) -> Result<(), Error> {
+        let p = self.ix(parent)?;
+        if !matches!(self.n(p).data, Data::Element(_)) {
+            return Err(Error::Edit("only an element can take children".into()));
+        }
+        let mut by_ix: HashMap<Ix, (Vec<Ix>, Vec<Ix>, bool)> = HashMap::new();
+        for (anchor, (before, after, remove)) in edits {
+            let a = self.ix(*anchor)?;
+            if self.n(a).parent != Some(p) {
+                return Err(Error::Edit("an anchor is not a child of the parent".into()));
+            }
+            if *remove {
+                self.check_editable(a)?;
+            }
+            let mut put = |list: &Vec<NodeId>| -> Result<Vec<Ix>, Error> {
+                let mut out = vec![];
+                for n in list {
+                    let (_, c) = self.check_insert(parent, *n)?;
+                    if self.n(c).parent.is_some() {
+                        return Err(Error::Edit("a node to put is attached already".into()));
+                    }
+                    out.push(c);
+                }
+                Ok(out)
+            };
+            let b = put(before)?;
+            let f = put(after)?;
+            by_ix.insert(a, (b, f, *remove));
+        }
+        let old = std::mem::take(&mut self.n_mut(p).children);
+        let mut kids = Vec::with_capacity(old.len());
+        for c in old {
+            crate::cost::tick(1);
+            match by_ix.remove(&c) {
+                Some((before, after, remove)) => {
+                    kids.extend_from_slice(&before);
+                    if remove {
+                        self.n_mut(c).parent = None;
+                    } else {
+                        kids.push(c);
+                    }
+                    kids.extend_from_slice(&after);
+                }
+                None => kids.push(c),
+            }
+        }
+        for &k in &kids {
+            self.n_mut(k).parent = Some(p);
+        }
+        self.n_mut(p).children = kids;
+        self.touch(p, DESCEND);
+        Ok(())
+    }
+
     /// Takes a node out of the tree. It stays in the tree's memory and can be
     /// attached again. The root element and the nodes around it cannot be
     /// detached.
@@ -1301,13 +1364,16 @@ impl Tree {
         }
         let (p, c) = self.check_insert(self.handle(parent), child)?;
         self.unlink(c);
-        let i = self.n(p).children.iter().position(|&k| k == a).unwrap_or(0);
+        let kids = &self.n(p).children;
+        crate::cost::tick(kids.len() as u64);
+        let i = kids.iter().position(|&k| k == a).unwrap_or(0);
         self.link(p, Some(i + after), c);
         Ok(())
     }
 
     fn unlink(&mut self, i: Ix) {
         if let Some(p) = self.n_mut(i).parent.take() {
+            crate::cost::tick(self.n(p).children.len() as u64);
             self.n_mut(p).children.retain(|&c| c != i);
             self.touch(p, DESCEND);
         }

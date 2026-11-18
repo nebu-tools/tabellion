@@ -23,6 +23,8 @@ const SVG_NS: &str = "http://schemas.microsoft.com/office/drawing/2016/SVG/main"
 pub(crate) struct Media {
     /// Parts written in this session, by hash.
     parts: HashMap<String, String>,
+    /// Extensions whose default content type is the picture's.
+    types: HashMap<&'static str, bool>,
 }
 
 /// A picture format the writer takes.
@@ -284,22 +286,36 @@ fn store(
                         "the document has a part {name} with other bytes"
                     )));
                 }
-                None => doc.add_part(&name, format.content_type(), bytes)?,
+                None => {
+                    // A default content type for the extension, added once,
+                    // as Word writes them; an override only where the
+                    // document maps the extension to another type.
+                    let ext = format.ext();
+                    let fits = match s.media.types.get(ext) {
+                        Some(f) => *f,
+                        None => {
+                            let f = match doc.content_type(&name) {
+                                None => {
+                                    doc.add_default_type(ext, format.content_type())?;
+                                    true
+                                }
+                                Some(t) => t == format.content_type(),
+                            };
+                            s.media.types.insert(ext, f);
+                            f
+                        }
+                    };
+                    if fits {
+                        doc.add_typed_part(&name, bytes)?;
+                    } else {
+                        doc.add_part(&name, format.content_type(), bytes)?;
+                    }
+                }
             }
             s.media.parts.insert(hash, name.clone());
             name
         }
     };
-    // An existing relationship to the part from this source serves.
-    let rels = doc.relationships(part)?;
-    if let Some(r) = rels.iter().find(|r| {
-        r.kind == IMAGE
-            && r.part
-                .as_deref()
-                .is_some_and(|p| p.eq_ignore_ascii_case(&name))
-    }) {
-        return Ok(r.id.clone());
-    }
     s.rel(doc, part, IMAGE, Target::Part(&name))
 }
 

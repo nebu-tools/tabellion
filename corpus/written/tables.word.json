@@ -1,0 +1,428 @@
+{
+    "file":  "tables.docx",
+    "opened":  true,
+    "error":  null,
+    "word_version":  "16.0 build 16.0.20326",
+    "compatibility_mode":  15,
+    "converted":  false,
+    "paragraphs":  [
+                       {
+                           "style":  "Title",
+                           "text":  "Breeding bird survey\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "By {{author}}, {{date}}.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Summary\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The summary goes here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Results\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "{{results}}\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Table 1: Counts on two visits\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Site\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "First visit\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Second visit\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Visits\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Pairs\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Visits\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Pairs\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "North\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "6\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "21\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "6\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "20.5\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "East\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "5\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "17\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "4\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "16\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Species at the south site\r",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Wren\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "4\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Reed warbler\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "7\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Table 2: The template\u0027s own table style\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Site\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Pairs\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "West\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "28\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "See Table 1 and Table 2.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Methods\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "Describe the survey sites, the counting method and the data here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       }
+                   ],
+    "table_count":  2,
+    "tables":  [
+                   {
+                       "style":  "Marsh Grid",
+                       "rows":  5,
+                       "columns":  5,
+                       "header_rows":  2,
+                       "heading_rows":  true,
+                       "row_bands":  true,
+                       "first_column":  true,
+                       "nested":  1
+                   },
+                   {
+                       "style":  "Report Table",
+                       "rows":  2,
+                       "columns":  2,
+                       "header_rows":  1,
+                       "heading_rows":  true,
+                       "row_bands":  true,
+                       "first_column":  false,
+                       "nested":  0
+                   }
+               ],
+    "table_styles":  [
+                         {
+                             "name":  "Marsh Grid",
+                             "builtin":  false
+                         },
+                         {
+                             "name":  "Report Table",
+                             "builtin":  false
+                         },
+                         {
+                             "name":  "Table Grid",
+                             "builtin":  true
+                         },
+                         {
+                             "name":  "Table Normal",
+                             "builtin":  true
+                         }
+                     ],
+    "captions":  {
+                     "Table":  [
+                                   "Table 1: Counts on two visits",
+                                   "Table 2: The template\u0027s own table style"
+                               ],
+                     "Figure":  [
+
+                                ],
+                     "Equation":  [
+
+                                  ]
+                 },
+    "bookmarks":  [
+                      "_Ref_tab-template",
+                      "_Ref_tab-visits",
+                      "summary"
+                  ],
+    "fields_before":  [
+                          {
+                              "story":  1,
+                              "code":  "SEQ Table \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Table \\* ARABIC",
+                              "result":  "2"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_tab-visits \\h",
+                              "result":  "Table 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_tab-template \\h",
+                              "result":  "Table 2"
+                          },
+                          {
+                              "story":  9,
+                              "code":  "PAGE",
+                              "result":  "1"
+                          }
+                      ],
+    "fields_after":  [
+                         {
+                             "story":  1,
+                             "code":  "SEQ Table \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Table \\* ARABIC",
+                             "result":  "2"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_tab-visits \\h",
+                             "result":  "Table 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_tab-template \\h",
+                             "result":  "Table 2"
+                         },
+                         {
+                             "story":  9,
+                             "code":  "PAGE",
+                             "result":  "1"
+                         }
+                     ],
+    "references":  [
+                       {
+                           "code":  "REF _Ref_tab-visits \\h",
+                           "result":  "Table 1",
+                           "target":  "Table 1"
+                       },
+                       {
+                           "code":  "REF _Ref_tab-template \\h",
+                           "result":  "Table 2",
+                           "target":  "Table 2"
+                       }
+                   ],
+    "footnotes":  [
+
+                  ],
+    "inline_shapes":  [
+
+                      ]
+}

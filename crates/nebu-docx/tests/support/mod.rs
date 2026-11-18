@@ -4,6 +4,7 @@
 #![allow(dead_code)]
 
 pub mod edits;
+pub mod jsonschema;
 pub mod large;
 pub mod xsd;
 pub mod zipraw;

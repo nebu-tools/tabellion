@@ -1,0 +1,278 @@
+{
+    "file":  "pictures.docx",
+    "opened":  true,
+    "error":  null,
+    "word_version":  "16.0 build 16.0.20326",
+    "compatibility_mode":  15,
+    "converted":  false,
+    "paragraphs":  [
+                       {
+                           "style":  "Title",
+                           "text":  "Breeding bird survey\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "By {{author}}, {{date}}.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Summary\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The summary goes here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Results\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "{{results}}\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 1: PNG\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 2: JPEG at 150 pixels per inch\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 3: GIF\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 4: SVG with a PNG fallback\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "The same wren again, smaller: /\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "Figure 1 to Figure 4 show four formats.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Methods\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Body Text",
+                           "text":  "Describe the survey sites, the counting method and the data here.\r",
+                           "list":  "",
+                           "in_table":  false
+                       }
+                   ],
+    "table_count":  0,
+    "tables":  [
+
+               ],
+    "table_styles":  [
+                         {
+                             "name":  "Report Table",
+                             "builtin":  false
+                         },
+                         {
+                             "name":  "Table Grid",
+                             "builtin":  true
+                         },
+                         {
+                             "name":  "Table Normal",
+                             "builtin":  true
+                         }
+                     ],
+    "captions":  {
+                     "Table":  [
+
+                               ],
+                     "Figure":  [
+                                    "Figure 1: PNG",
+                                    "Figure 2: JPEG at 150 pixels per inch",
+                                    "Figure 3: GIF",
+                                    "Figure 4: SVG with a PNG fallback"
+                                ],
+                     "Equation":  [
+
+                                  ]
+                 },
+    "bookmarks":  [
+                      "_Ref_fig-gif",
+                      "_Ref_fig-jpeg",
+                      "_Ref_fig-png",
+                      "_Ref_fig-svg",
+                      "summary"
+                  ],
+    "fields_before":  [
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "2"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "3"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "4"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_fig-png \\h",
+                              "result":  "Figure 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_fig-svg \\h",
+                              "result":  "Figure 4"
+                          },
+                          {
+                              "story":  9,
+                              "code":  "PAGE",
+                              "result":  "1"
+                          }
+                      ],
+    "fields_after":  [
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "2"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "3"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "4"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_fig-png \\h",
+                             "result":  "Figure 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_fig-svg \\h",
+                             "result":  "Figure 4"
+                         },
+                         {
+                             "story":  9,
+                             "code":  "PAGE",
+                             "result":  "1"
+                         }
+                     ],
+    "references":  [
+                       {
+                           "code":  "REF _Ref_fig-png \\h",
+                           "result":  "Figure 1",
+                           "target":  "Figure 1"
+                       },
+                       {
+                           "code":  "REF _Ref_fig-svg \\h",
+                           "result":  "Figure 4",
+                           "target":  "Figure 4"
+                       }
+                   ],
+    "footnotes":  [
+
+                  ],
+    "inline_shapes":  [
+                          {
+                              "type":  3,
+                              "width":  90,
+                              "height":  60,
+                              "alt":  "A wren"
+                          },
+                          {
+                              "type":  3,
+                              "width":  76.8,
+                              "height":  48,
+                              "alt":  "A heron"
+                          },
+                          {
+                              "type":  3,
+                              "width":  67.5,
+                              "height":  45,
+                              "alt":  "A teal"
+                          },
+                          {
+                              "type":  17,
+                              "width":  120,
+                              "height":  60,
+                              "alt":  "A drawn wren"
+                          },
+                          {
+                              "type":  3,
+                              "width":  36,
+                              "height":  24,
+                              "alt":  ""
+                          }
+                      ]
+}

@@ -1,0 +1,875 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nebu-tools/tabellion/crates/nebu-docx/schema/content.json",
+  "title": "Tabellion content model",
+  "description": "Content to insert into a Word document, as `tabellion insert --content FILE` reads it and nebu_docx::Content::from_json parses it. Either an object with blocks and table styles, or an array of blocks.",
+  "oneOf": [
+    {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    },
+    {
+      "type": "object",
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        },
+        "table_styles": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/table_style"
+          }
+        }
+      },
+      "required": [
+        "blocks"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$defs": {
+    "block": {
+      "description": "A block of content.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/paragraph"
+        },
+        {
+          "$ref": "#/$defs/heading"
+        },
+        {
+          "$ref": "#/$defs/list_block"
+        },
+        {
+          "$ref": "#/$defs/table"
+        },
+        {
+          "$ref": "#/$defs/figure"
+        },
+        {
+          "$ref": "#/$defs/image_block"
+        },
+        {
+          "$ref": "#/$defs/equation"
+        },
+        {
+          "$ref": "#/$defs/page_break"
+        },
+        {
+          "$ref": "#/$defs/raw_block"
+        }
+      ]
+    },
+    "paragraph": {
+      "description": "A paragraph in the body style or a named paragraph style.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "paragraph"
+        },
+        "style": {
+          "description": "A paragraph style by id or name.",
+          "type": "string"
+        },
+        "align": {
+          "$ref": "#/$defs/align"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "heading": {
+      "description": "A heading.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "heading"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "level"
+      ],
+      "additionalProperties": false
+    },
+    "list": {
+      "description": "A list: items, each with its text and an optional list inside it.",
+      "type": "object",
+      "properties": {
+        "ordered": {
+          "description": "Numbered (true) or bulleted (false).",
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/list_item"
+          }
+        }
+      },
+      "required": [
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "list_block": {
+      "description": "A bulleted or numbered list.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "list"
+        },
+        "ordered": {
+          "type": "boolean"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/list_item"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "items"
+      ],
+      "additionalProperties": false
+    },
+    "list_item": {
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        },
+        "list": {
+          "$ref": "#/$defs/list"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "table": {
+      "description": "A table: rows of the cells that begin in them, left to right. A cell takes the first grid position no cell above covers; every row covers the same number of grid columns.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "table"
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/row"
+          }
+        },
+        "header_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_column": {
+          "type": "boolean"
+        },
+        "style": {
+          "description": "A table style by name: one in table_styles, else one the document has.",
+          "type": "string"
+        },
+        "widths": {
+          "description": "Relative column widths, one per grid column.",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          }
+        },
+        "caption": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
+    "row": {
+      "type": "object",
+      "properties": {
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cell"
+          }
+        }
+      },
+      "required": [
+        "cells"
+      ],
+      "additionalProperties": false
+    },
+    "cell": {
+      "description": "A cell; its shading, alignment and borders are direct formatting over the table style.",
+      "type": "object",
+      "properties": {
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        },
+        "row_span": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "column_span": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "align": {
+          "$ref": "#/$defs/align"
+        },
+        "vertical_align": {
+          "enum": [
+            "top",
+            "center",
+            "bottom"
+          ]
+        },
+        "shading": {
+          "$ref": "#/$defs/color"
+        },
+        "borders": {
+          "$ref": "#/$defs/cell_borders"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "cell_borders": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "$ref": "#/$defs/border"
+        },
+        "bottom": {
+          "$ref": "#/$defs/border"
+        },
+        "left": {
+          "$ref": "#/$defs/border"
+        },
+        "right": {
+          "$ref": "#/$defs/border"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "border": {
+      "description": "A border line.",
+      "type": "object",
+      "properties": {
+        "width": {
+          "description": "Points, 0.25 to 6.",
+          "type": "number",
+          "minimum": 0.25,
+          "maximum": 6
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "style": {
+          "enum": [
+            "single",
+            "double",
+            "dashed",
+            "dotted",
+            "none"
+          ]
+        }
+      },
+      "required": [
+        "width",
+        "color"
+      ],
+      "additionalProperties": false
+    },
+    "color": {
+      "description": "Six hexadecimal digits, with or without a leading #.",
+      "type": "string"
+    },
+    "align": {
+      "enum": [
+        "left",
+        "center",
+        "right",
+        "justify"
+      ]
+    },
+    "figure": {
+      "description": "A picture with a caption below it.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "figure"
+        },
+        "image": {
+          "$ref": "#/$defs/picture"
+        },
+        "caption": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "image",
+        "caption"
+      ],
+      "additionalProperties": false
+    },
+    "image_block": {
+      "description": "A picture in a paragraph of its own.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "image": {
+          "$ref": "#/$defs/picture"
+        }
+      },
+      "required": [
+        "type",
+        "image"
+      ],
+      "additionalProperties": false
+    },
+    "equation": {
+      "description": "A display equation; with a label it is numbered (n) at the right margin.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "equation"
+        },
+        "math": {
+          "$ref": "#/$defs/math"
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "math"
+      ],
+      "additionalProperties": false
+    },
+    "page_break": {
+      "description": "The next block starts a new page.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "page_break"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "raw_block": {
+      "description": "WordprocessingML written as given: block-level elements such as w:p, w:tbl or w:sdt.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "raw"
+        },
+        "xml": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "xml"
+      ],
+      "additionalProperties": false
+    },
+    "picture": {
+      "description": "A PNG, JPEG, GIF or SVG picture, as data or as a file. An SVG needs a PNG fallback.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "description": "The bytes in base64.",
+          "type": "string"
+        },
+        "file": {
+          "description": "A file, relative to the JSON file on the command line.",
+          "type": "string"
+        },
+        "fallback": {
+          "$ref": "#/$defs/source"
+        },
+        "width": {
+          "description": "Points.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "height": {
+          "description": "Points.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "alt": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "source": {
+      "description": "The bytes of a picture: data in base64 or a file.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "math": {
+      "description": "An equation as Office Math: one m:oMath element.",
+      "type": "object",
+      "properties": {
+        "omml": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "omml"
+      ],
+      "additionalProperties": false
+    },
+    "inline": {
+      "description": "Inline content. A string is plain text.",
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/text"
+        },
+        {
+          "$ref": "#/$defs/footnote"
+        },
+        {
+          "$ref": "#/$defs/reference"
+        },
+        {
+          "$ref": "#/$defs/link"
+        },
+        {
+          "$ref": "#/$defs/inline_math"
+        },
+        {
+          "$ref": "#/$defs/line_break"
+        },
+        {
+          "$ref": "#/$defs/field"
+        },
+        {
+          "$ref": "#/$defs/inline_image"
+        },
+        {
+          "$ref": "#/$defs/raw_inline"
+        }
+      ]
+    },
+    "text": {
+      "description": "Text with marks. A tab is \\t, a line break \\n.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "text": {
+          "type": "string"
+        },
+        "marks": {
+          "$ref": "#/$defs/marks"
+        }
+      },
+      "required": [
+        "type",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "marks": {
+      "type": "object",
+      "properties": {
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "strike": {
+          "type": "boolean"
+        },
+        "superscript": {
+          "type": "boolean"
+        },
+        "subscript": {
+          "type": "boolean"
+        },
+        "small_caps": {
+          "type": "boolean"
+        },
+        "code": {
+          "type": "boolean"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "highlight": {
+          "$ref": "#/$defs/color"
+        },
+        "size": {
+          "description": "Points.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1638
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "footnote": {
+      "description": "A footnote with its own blocks.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "footnote"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "reference": {
+      "description": "A cross-reference to a labelled caption, heading or equation.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "reference"
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "link": {
+      "description": "A hyperlink.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "link"
+        },
+        "target": {
+          "$ref": "#/$defs/link_target"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "link_target": {
+      "description": "Exactly one of url, bookmark and label.",
+      "type": "object",
+      "properties": {
+        "url": {
+          "type": "string"
+        },
+        "bookmark": {
+          "type": "string"
+        },
+        "label": {
+          "description": "Letters, digits, '_' and '-', starting with a letter; at most 35 characters. The bookmark is _Ref_<label>.",
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1
+    },
+    "inline_math": {
+      "description": "An equation in the line of text.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "math"
+        },
+        "math": {
+          "$ref": "#/$defs/math"
+        }
+      },
+      "required": [
+        "type",
+        "math"
+      ],
+      "additionalProperties": false
+    },
+    "line_break": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "line_break"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false
+    },
+    "field": {
+      "description": "A field written as given, with a result shown until Word updates it.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "field"
+        },
+        "code": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "code"
+      ],
+      "additionalProperties": false
+    },
+    "inline_image": {
+      "description": "A picture in the line of text.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "image": {
+          "$ref": "#/$defs/picture"
+        }
+      },
+      "required": [
+        "type",
+        "image"
+      ],
+      "additionalProperties": false
+    },
+    "raw_inline": {
+      "description": "WordprocessingML written as given: run-level elements such as w:r, w:hyperlink, w:fldSimple or m:oMath.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "const": "raw"
+        },
+        "xml": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "type",
+        "xml"
+      ],
+      "additionalProperties": false
+    },
+    "table_style": {
+      "description": "A table style defined with the content, written as a real table style unless the document has one of that name.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "font": {
+          "type": "string"
+        },
+        "size": {
+          "description": "Points.",
+          "type": "number",
+          "minimum": 1,
+          "maximum": 1638
+        },
+        "borders": {
+          "$ref": "#/$defs/table_borders"
+        },
+        "padding": {
+          "$ref": "#/$defs/padding"
+        },
+        "header": {
+          "$ref": "#/$defs/row_look"
+        },
+        "band_fill": {
+          "$ref": "#/$defs/color"
+        },
+        "first_column": {
+          "$ref": "#/$defs/row_look"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "table_borders": {
+      "type": "object",
+      "properties": {
+        "top": {
+          "$ref": "#/$defs/border"
+        },
+        "bottom": {
+          "$ref": "#/$defs/border"
+        },
+        "left": {
+          "$ref": "#/$defs/border"
+        },
+        "right": {
+          "$ref": "#/$defs/border"
+        },
+        "inside_h": {
+          "$ref": "#/$defs/border"
+        },
+        "inside_v": {
+          "$ref": "#/$defs/border"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "padding": {
+      "description": "Cell padding in points.",
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "right": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "bottom": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "left": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "row_look": {
+      "description": "The look of the header rows or the first column.",
+      "type": "object",
+      "properties": {
+        "fill": {
+          "$ref": "#/$defs/color"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "border": {
+          "$ref": "#/$defs/border"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    }
+  }
+}

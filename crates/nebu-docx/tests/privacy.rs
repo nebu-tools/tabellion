@@ -1,7 +1,9 @@
 //! No committed fixture or reading names a real person, machine or path.
 //!
-//! The test reads every file under `corpus/`, `samples/` and `tools/`, the
-//! tables under `crates/nebu-docx/src/view/names/`, the schema, the fuzz
+//! The test reads every file under `corpus/` (the documents the writer
+//! made and Word saved in `corpus/written/` too), `samples/` and `tools/`,
+//! the tables under `crates/nebu-docx/src/view/names/`, the built-in styles
+//! the writer adds, the pictures of the writer's tests, the schemas, the fuzz
 //! README and the two documents at the top, as git lists them (committed or
 //! added, not ignored). A .docx is read part by part. It fails on:
 //!
@@ -39,11 +41,13 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-const SCANNED: [&str; 8] = [
+const SCANNED: [&str; 10] = [
     "corpus/",
     "samples/",
     "tools/",
     "crates/nebu-docx/src/view/names/",
+    "crates/nebu-docx/src/writer/builtin.xml",
+    "crates/nebu-docx/tests/data/",
     "crates/nebu-docx/schema/",
     "fuzz/README.md",
     "README.md",

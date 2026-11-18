@@ -265,7 +265,8 @@ pub(crate) fn grid(t: &Table) -> Result<Grid, String> {
     let mut starts = vec![];
     let mut columns: Option<usize> = None;
     for (r, row) in t.rows.iter().enumerate() {
-        if row.cells.is_empty() {
+        // A row may list no cells when cells from above cover all of it.
+        if row.cells.is_empty() && cover[r].is_empty() {
             return Err(format!("row {r} has no cells"));
         }
         let mut col = 0;

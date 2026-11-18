@@ -15,8 +15,10 @@
 //!   own hidden cross-reference bookmarks (`_Ref` and digits), whose text
 //!   is read with the new numbers of the `SEQ` fields inside them.
 //!
-//! A field nested in another field's code is part of that code: it counts,
-//! and its result is never written.
+//! A field nested in another field's code (`{ IF { SEQ Table \c } > 0 …}`)
+//! counts and gets its number like any other, written into the code as
+//! Word writes it there; the field around it keeps its result, which only
+//! the fields update computes.
 //!
 //! Text boxes, the `mc:Fallback` branch of alternate content and deleted
 //! content are not walked: Word numbers a text box as a story of its own,
@@ -31,6 +33,7 @@ use super::session::Session;
 
 const W: &str = ns::W;
 const MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
+const M: &str = "http://schemas.openxmlformats.org/officeDocument/2006/math";
 
 struct Field {
     code: String,
@@ -163,15 +166,27 @@ fn collect(
         if name.namespace == Some(MC) && local == "Fallback" {
             continue;
         }
+        if name.namespace == Some(M) && local == "t" {
+            if !open.last().is_some_and(|o| !o.in_result) {
+                let field = open.last().map(|o| o.index);
+                events.push(Event::Text(t.text_content(n)?, field));
+            }
+            continue;
+        }
         if name.namespace == Some(W) {
             match local {
                 "txbxContent" | "del" | "moveFrom" | "delInstrText" => continue,
                 "instrText" => {
-                    if let Some(o) = open.last()
-                        && !o.in_result
-                    {
-                        let code = t.text_content(n)?;
-                        fields[o.index].code.push_str(&code);
+                    if let Some(o) = open.last() {
+                        let text = t.text_content(n)?;
+                        if !o.in_result {
+                            fields[o.index].code.push_str(&text);
+                        } else if fields[o.index].in_code {
+                            // The result of a field nested in a code is code
+                            // text of the field around it.
+                            fields[o.index].texts.push(n);
+                            fields[o.index].old.push_str(&text);
+                        }
                     }
                     continue;
                 }
@@ -181,15 +196,17 @@ fn collect(
                         .map(|v| v.into_owned())
                         .unwrap_or_default();
                     let index = fields.len();
+                    let in_code = open.last().is_some_and(|o| !o.in_result);
                     let mut texts = vec![];
                     let mut old = String::new();
+                    // In a code, the result of a field is code text.
+                    let local = if in_code { "instrText" } else { "t" };
                     for d in t.descendants(n)? {
-                        if t.is(d, Some(W), "t")? {
+                        if t.is(d, Some(W), local)? {
                             old.push_str(&t.text_content(d)?);
                             texts.push(d);
                         }
                     }
-                    let in_code = open.last().is_some_and(|o| !o.in_result);
                     fields.push(Field {
                         code,
                         texts,
@@ -261,11 +278,19 @@ fn collect(
                     events.push(Event::Close(id));
                     continue;
                 }
-                "t" | "tab" => {
-                    let s = if local == "t" {
-                        t.text_content(n)?
-                    } else {
-                        "\t".to_string()
+                "t" | "tab" | "br" | "cr" | "noBreakHyphen" => {
+                    let s = match local {
+                        "t" => t.text_content(n)?,
+                        "tab" => "\t".to_string(),
+                        "noBreakHyphen" => "\u{2011}".to_string(),
+                        // A page or column break is no text of a label.
+                        "br" if t
+                            .attribute(n, Some(W), "type")?
+                            .is_some_and(|v| v != "textWrapping") =>
+                        {
+                            continue;
+                        }
+                        _ => "\n".to_string(),
                     };
                     let in_code = open.last().is_some_and(|o| !o.in_result);
                     if in_code {
@@ -398,9 +423,6 @@ pub(crate) fn update(
     let mut writes: Vec<(usize, String)> = vec![];
     for (i, f) in fields.iter().enumerate() {
         crate::cost::tick(1);
-        if f.in_code {
-            continue;
-        }
         if let Some(v) = &new[i] {
             if f.after && *v != f.old {
                 writes.push((i, v.clone()));
@@ -408,7 +430,7 @@ pub(crate) fn update(
             continue;
         }
         let w = words(&f.code);
-        if !w.first().is_some_and(|k| k.eq_ignore_ascii_case("REF")) {
+        if f.in_code || !w.first().is_some_and(|k| k.eq_ignore_ascii_case("REF")) {
             continue;
         }
         if w.iter().skip(2).any(|x| {
@@ -431,15 +453,29 @@ pub(crate) fn update(
     }
     for (i, v) in writes {
         let f = &fields[i];
+        if f.in_code && f.texts.is_empty() {
+            continue;
+        }
         if !f.inside {
             changed += 1;
         }
         match f.texts.split_first() {
             Some((first, rest)) => {
-                t.set_text(*first, &v)?;
                 for r in rest {
                     t.detach(*r)?;
                 }
+                // Text up to the first tab or line break goes into the
+                // first w:t; the rest follows it in the same run, with tabs
+                // and breaks as Word writes them.
+                let cut = v.find(['\t', '\n']).unwrap_or(v.len());
+                let (head, tail) = v.split_at(cut);
+                t.set_text(*first, head)?;
+                let mut at = *first;
+                for n in t.parse_fragment(&super::xml::run_text(tail), &[("w", W)])? {
+                    t.insert_after(at, n)?;
+                    at = n;
+                }
+                let v = head;
                 if (v.starts_with(' ') || v.ends_with(' '))
                     && t.attribute(*first, Some(crate::xml::XML_NS), "space")?
                         .is_none()
@@ -448,8 +484,10 @@ pub(crate) fn update(
                 }
             }
             None => {
-                let run =
-                    t.parse_fragment(&format!("<w:r>{}</w:r>", super::xml::t(&v)), &[("w", W)])?[0];
+                let run = t.parse_fragment(
+                    &format!("<w:r>{}</w:r>", super::xml::run_text(&v)),
+                    &[("w", W)],
+                )?[0];
                 match (f.simple, f.end) {
                     (Some(sf), _) => t.append(sf, run)?,
                     (None, Some(end)) => t.insert_before(end, run)?,

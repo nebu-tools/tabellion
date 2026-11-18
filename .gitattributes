@@ -2,3 +2,5 @@
 *.docx binary
 *.png binary
 crates/nebu-docx/tests/xsd/*.xsd -text
+*.jpg binary
+*.gif binary

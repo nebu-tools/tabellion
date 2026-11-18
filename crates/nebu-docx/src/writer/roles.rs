@@ -635,7 +635,10 @@ pub(crate) fn table_style_xml(def: &TableStyleDef, id: &str, base: &str) -> Stri
     if let Some(h) = &def.header {
         x.push_str("<w:tblStylePr w:type=\"firstRow\">");
         x.push_str(&look_rpr(h));
-        x.push_str("<w:tblPr/><w:trPr><w:tblHeader/></w:trPr><w:tcPr>");
+        // Header rows repeat by the rows' own w:tblHeader. In the style,
+        // it makes Word drop the rows' mark when it saves and then report
+        // no header rows.
+        x.push_str("<w:tblPr/><w:tcPr>");
         if let Some(bd) = &h.border {
             x.push_str(&format!(
                 "<w:tcBorders>{}</w:tcBorders>",
