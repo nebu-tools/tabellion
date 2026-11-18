@@ -62,56 +62,64 @@ pub(crate) fn first_invalid_char(s: &str) -> Option<usize> {
     None
 }
 
-/// Entity and character references are at most this long, `&` and `;` excluded
-/// (`#x10FFFF` is the longest valid one). Bounding the search keeps a text of
-/// many `&` linear.
-const MAX_REF: usize = 10;
-
 /// Decodes the reference that starts at `s[0] == '&'`. Returns the character
 /// and the length of the reference including `&` and `;`.
+///
+/// A character reference may have any number of leading zeros. The scan
+/// stops at the first character that cannot continue the reference, so a
+/// text of many `&` stays linear.
 pub(crate) fn reference(s: &str) -> Result<(char, usize), String> {
-    let body = &s[1..];
-    let end = body
-        .as_bytes()
-        .iter()
-        .take(MAX_REF + 1)
-        .position(|&b| b == b';');
-    let Some(end) = end else {
-        return Err(
-            "'&' must start a reference such as &amp; (write a literal '&' as &amp;)".into(),
-        );
-    };
-    let name = &body[..end];
+    let b = s.as_bytes();
+    let unclosed =
+        || "'&' must start a reference such as &amp; (write a literal '&' as &amp;)".to_string();
+    if b.get(1) == Some(&b'#') {
+        let (radix, start) = if b.get(2) == Some(&b'x') {
+            (16, 3)
+        } else {
+            (10, 2)
+        };
+        let mut value: u32 = 0;
+        let mut i = start;
+        while let Some(d) = b.get(i).and_then(|&c| (c as char).to_digit(radix)) {
+            // Past U+10FFFF nothing is a character; stop counting there.
+            value = value.saturating_mul(radix).saturating_add(d).min(0x11_0000);
+            i += 1;
+        }
+        let digits = &s[start..i];
+        if b.get(i) != Some(&b';') {
+            return Err(unclosed());
+        }
+        if digits.is_empty() {
+            return Err(format!("&{}; has no digits", &s[1..i]));
+        }
+        return match char::from_u32(value).filter(|&c| is_xml_char(c)) {
+            Some(c) => Ok((c, i + 1)),
+            None => Err(format!(
+                "&{}; does not name a character XML allows",
+                &s[1..i]
+            )),
+        };
+    }
+    let end = 1 + s[1..]
+        .find(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.'))
+        .unwrap_or(s.len() - 1);
+    if b.get(end) != Some(&b';') || end == 1 {
+        return Err(unclosed());
+    }
+    let name = &s[1..end];
     let c = match name {
-        "lt" => Some('<'),
-        "gt" => Some('>'),
-        "amp" => Some('&'),
-        "apos" => Some('\''),
-        "quot" => Some('"'),
+        "lt" => '<',
+        "gt" => '>',
+        "amp" => '&',
+        "apos" => '\'',
+        "quot" => '"',
         _ => {
-            let n = if let Some(h) = name.strip_prefix("#x") {
-                u32::from_str_radix(h, 16)
-                    .ok()
-                    .filter(|_| h.bytes().all(|b| b.is_ascii_hexdigit()))
-            } else if let Some(d) = name.strip_prefix('#') {
-                d.parse::<u32>()
-                    .ok()
-                    .filter(|_| d.bytes().all(|b| b.is_ascii_digit()))
-            } else {
-                return Err(format!(
-                    "unknown entity &{name}; (only &lt; &gt; &amp; &apos; &quot; and character references are defined)"
-                ));
-            };
-            match n.and_then(char::from_u32).filter(|&c| is_xml_char(c)) {
-                Some(c) => Some(c),
-                None => return Err(format!("&{name}; does not name a character XML allows")),
-            }
+            return Err(format!(
+                "unknown entity &{name}; (only &lt; &gt; &amp; &apos; &quot; and character references are defined)"
+            ));
         }
     };
-    match c {
-        Some(c) => Ok((c, end + 2)),
-        None => Err(format!("unknown entity &{name};")),
-    }
+    Ok((c, end + 1))
 }
 
 /// Checks every reference in text or in an attribute value. On error, returns
@@ -218,6 +226,13 @@ mod tests {
         assert!(check_references("&#x;").is_err());
         assert!(check_references("&#+1;").is_err());
         assert!(check_references("&#x10FFFF;").is_ok());
+        assert_eq!(decode("&#000000000000065;&#x0000000000041;", false), "AA");
+        assert!(check_references("&#0000000000000000000000000;").is_err());
+        assert!(check_references("&#x110000;").is_err());
+        assert!(check_references("&#99999999999999999999999;").is_err());
+        assert!(check_references("&#xFFFE;").is_err());
+        assert!(check_references("&#X41;").is_err());
+        assert!(check_references("&;").is_err());
     }
 
     #[test]

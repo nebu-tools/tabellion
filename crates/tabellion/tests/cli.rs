@@ -12,7 +12,7 @@ const SAMPLE: &str = concat!(
 );
 
 #[test]
-fn roundtrip_reports_identical_entries() {
+fn roundtrip_reports_an_identical_file() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("copy.docx");
     let o = tabellion()
@@ -28,7 +28,9 @@ fn roundtrip_reports_identical_entries() {
         String::from_utf8_lossy(&o.stderr)
     );
     let stdout = String::from_utf8(o.stdout).unwrap();
-    assert!(stdout.ends_with("all 11 entries identical\n"), "{stdout}");
+    let size = std::fs::metadata(SAMPLE).unwrap().len();
+    assert!(stdout.ends_with(&format!("all {size} bytes\n")), "{stdout}");
+    assert_eq!(std::fs::read(&out).unwrap(), std::fs::read(SAMPLE).unwrap());
 }
 
 #[test]

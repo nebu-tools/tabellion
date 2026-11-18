@@ -5,13 +5,21 @@
 //! parsed under still hold where it now is. Otherwise its markup is written
 //! from the tree, with prefixes chosen from the bindings in effect, and a
 //! declaration added where a namespace has no prefix yet.
+//!
+//! Character data from different nodes can meet in the output where they
+//! did not meet in the source: an edit puts new text next to old text, or
+//! removes what stood between two texts. Each piece is well-formed alone, but
+//! two pieces can join into `]]>`, which text may not contain, or into a
+//! carriage return and a line feed, which a reader takes for one line end.
+//! [`Run`] watches every boundary and escapes the one character that would
+//! join them, in new text where it can and in source text where it must.
 
 use std::borrow::Cow;
 
 use super::chars::{decode, escape_attribute, escape_text};
 use super::parse::{name_end, source_attrs};
 use super::{
-    AttrValue, CHANGED, DOCUMENT, Data, Element, Node, NodeId, ScopeId, Tree, XML_NS, XMLNS_URI,
+    AttrValue, CHANGED, DOCUMENT, Data, Element, Ix, Node, ScopeId, Tree, XML_NS, XMLNS_URI,
 };
 
 /// The namespace bindings in effect at a point of the output.
@@ -71,22 +79,80 @@ impl<'t> Env<'t> {
         self.bindings.push((prefix, uri));
     }
 
-    /// A prefix that nothing binds here.
-    fn free_prefix(&self) -> String {
+    /// A prefix that nothing binds here and the element does not declare.
+    fn free_prefix(&self, own: &[&str]) -> String {
         (0..)
             .map(|n| format!("ns{n}"))
-            .find(|p| self.lookup(p).is_none())
+            .find(|p| self.lookup(p).is_none() && !own.contains(&p.as_str()))
             .unwrap_or_default()
     }
 }
 
 enum Frame<'t> {
-    Enter(NodeId),
+    Enter(Ix),
     Close {
         tag: Cow<'t, str>,
         env_len: usize,
         fast: Option<ScopeId>,
     },
+}
+
+/// Character data at the end of the output.
+#[derive(Default)]
+struct Run {
+    /// Where the last piece of new text starts in the output, while it is
+    /// the last thing written.
+    new_from: Option<usize>,
+}
+
+impl Run {
+    /// Writes text from the source, still escaped as it was.
+    fn source(&mut self, raw: &str, out: &mut String) {
+        let mut raw = raw;
+        let joins_cdata_end = (raw.starts_with('>') && out.ends_with("]]"))
+            || (raw.starts_with("]>") && out.ends_with(']'));
+        if joins_cdata_end {
+            match self.new_from {
+                // The last `]` is new text: escape it there.
+                Some(k) if out.len() > k => {
+                    out.pop();
+                    out.push_str("&#93;");
+                }
+                // Both sides are source text: escape the `>`.
+                _ => {
+                    let (head, tail) = raw.split_at(raw.find('>').unwrap_or(0) + 1);
+                    out.push_str(&head[..head.len() - 1]);
+                    out.push_str("&gt;");
+                    raw = tail;
+                }
+            }
+        }
+        if out.ends_with('\r') && raw.starts_with('\n') {
+            out.push_str("&#10;");
+            raw = &raw[1..];
+        }
+        out.push_str(raw);
+        self.new_from = None;
+    }
+
+    /// Writes new text. It escapes `>` and carriage returns itself, so the
+    /// only join left is a line feed after a source carriage return.
+    fn fresh(&mut self, text: &str, out: &mut String) {
+        let mut text = text;
+        let start = out.len();
+        if out.ends_with('\r') && text.starts_with('\n') {
+            out.push_str("&#10;");
+            text = &text[1..];
+        }
+        escape_text(text, out);
+        self.new_from = Some(start);
+    }
+
+    /// Writes markup, which ends any run of character data.
+    fn markup(&mut self, s: &str, out: &mut String) {
+        out.push_str(s);
+        self.new_from = None;
+    }
 }
 
 pub(super) fn write(t: &Tree) -> String {
@@ -95,8 +161,10 @@ pub(super) fn write(t: &Tree) -> String {
         bindings: vec![],
         fast: Some(0),
     };
+    let mut run = Run::default();
     let mut stack: Vec<Frame<'_>> = t
-        .children(DOCUMENT)
+        .n(DOCUMENT)
+        .children
         .iter()
         .rev()
         .map(|&c| Frame::Enter(c))
@@ -104,14 +172,14 @@ pub(super) fn write(t: &Tree) -> String {
     while let Some(frame) = stack.pop() {
         let id = match frame {
             Frame::Close { tag, env_len, fast } => {
-                out.push_str(&tag);
+                run.markup(&tag, &mut out);
                 env.bindings.truncate(env_len);
                 env.fast = fast;
                 continue;
             }
             Frame::Enter(id) => id,
         };
-        let n = t.node(id);
+        let n = t.n(id);
         match &n.data {
             Data::Element(e) => {
                 let in_scope = e.ctx.is_some_and(|c| env.compatible(t, c));
@@ -119,9 +187,10 @@ pub(super) fn write(t: &Tree) -> String {
                     && in_scope
                     && let Some(span) = n.span
                 {
-                    out.push_str(t.src(span));
+                    run.markup(t.src(span), &mut out);
                     continue;
                 }
+                run.markup("", &mut out);
                 let (env_len, fast) = (env.bindings.len(), env.fast);
                 match start_tag(t, n, e, in_scope, &mut env, &mut out) {
                     Some(tag) => {
@@ -134,10 +203,15 @@ pub(super) fn write(t: &Tree) -> String {
                     }
                 }
             }
-            Data::Text(Some(s)) => escape_text(s, &mut out),
+            Data::Text(Some(s)) => run.fresh(s, &mut out),
+            Data::Text(None) => {
+                if let Some(span) = n.span {
+                    run.source(t.src(span), &mut out);
+                }
+            }
             _ => {
                 if let Some(span) = n.span {
-                    out.push_str(t.src(span));
+                    run.markup(t.src(span), &mut out);
                 }
             }
         }
@@ -287,6 +361,11 @@ fn start_tag<'t>(
             env.push(Cow::Borrowed(p), u.clone());
         }
     }
+    // Prefixes the element declares itself: never free to declare again.
+    let own: Vec<&str> = items
+        .iter()
+        .filter_map(|it| it.decl.as_ref().map(|(p, _)| *p))
+        .collect();
     let mut extra: Vec<(String, Option<String>)> = vec![];
     let name = &t.names[e.name as usize];
     let qname: Cow<'t, str> = match source {
@@ -295,6 +374,7 @@ fn start_tag<'t>(
             name.ns.map(|u| &*t.uris[u as usize]),
             &name.prefix,
             &name.local,
+            &own,
             env,
             &mut extra,
         )),
@@ -312,7 +392,7 @@ fn start_tag<'t>(
                 body.push('"');
             }
             (None, _) => {
-                let q = attribute_name(it.ns, it.prefix, it.local, env, &mut extra);
+                let q = attribute_name(it.ns, it.prefix, it.local, &own, env, &mut extra);
                 let quote = it.quote as char;
                 body.push(' ');
                 body.push_str(&q);
@@ -367,6 +447,7 @@ fn element_name(
     ns: Option<&str>,
     hint: &str,
     local: &str,
+    own: &[&str],
     env: &mut Env<'_>,
     extra: &mut Vec<(String, Option<String>)>,
 ) -> String {
@@ -383,10 +464,10 @@ fn element_name(
     if let Some(p) = env.prefix_for(uri, true) {
         return qualified(&p, local);
     }
-    let p = if env.lookup(hint).is_none() {
+    let p = if env.lookup(hint).is_none() && !own.contains(&hint) {
         hint.to_string()
     } else {
-        env.free_prefix()
+        env.free_prefix(own)
     };
     declare(&p, uri, env, extra);
     qualified(&p, local)
@@ -397,6 +478,7 @@ fn attribute_name(
     ns: Option<&str>,
     hint: &str,
     local: &str,
+    own: &[&str],
     env: &mut Env<'_>,
     extra: &mut Vec<(String, Option<String>)>,
 ) -> String {
@@ -409,10 +491,10 @@ fn attribute_name(
     if let Some(p) = env.prefix_for(uri, false) {
         return qualified(&p, local);
     }
-    let p = if !hint.is_empty() && env.lookup(hint).is_none() {
+    let p = if !hint.is_empty() && env.lookup(hint).is_none() && !own.contains(&hint) {
         hint.to_string()
     } else {
-        env.free_prefix()
+        env.free_prefix(own)
     };
     declare(&p, uri, env, extra);
     qualified(&p, local)

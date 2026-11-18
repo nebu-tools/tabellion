@@ -198,9 +198,11 @@ pub fn generate(template: &[u8], chapters: usize) -> Result<Vec<u8>, Error> {
     let t = doc.xml(&main)?;
     let body = t
         .child(t.root_element(), Some(ns::W), "body")
+        .unwrap()
         .expect("the template has a body");
     let sect = t
         .child(body, Some(ns::W), "sectPr")
+        .unwrap()
         .expect("the template has section properties");
     for node in t.parse_fragment(&body_xml, &w)? {
         t.insert_before(sect, node)?;

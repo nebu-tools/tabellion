@@ -1,18 +1,16 @@
 //! The zip archive and its parts.
 //!
 //! The archive is read once. Its entries become parts; a part is read and
-//! decompressed only when someone asks for it, within the [`Limits`]. On
-//! saving, a part that nobody changed is copied as the same compressed zip
-//! entry, and only changed or new parts are compressed again.
+//! decompressed only when someone asks for it, within the [`Limits`]. A
+//! document saved with no change is the file it was read from, byte for
+//! byte. After a change, every entry that did not change keeps its complete
+//! record, and only changed and new parts are compressed again (see
+//! [`archive`](crate::archive)).
 
 use std::cell::Cell;
 use std::collections::HashMap;
-use std::io::{Cursor, Read, Write};
-use std::sync::Arc;
 
-use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
-
+use crate::archive::Archive;
 use crate::xml::Tree;
 use crate::{Error, Limits};
 
@@ -31,22 +29,13 @@ struct Entry {
 }
 
 pub(crate) struct Package {
-    archive: ZipArchive<Cursor<Arc<[u8]>>>,
-    size: usize,
+    archive: Archive,
     entries: Vec<Entry>,
     /// Lower-case name to entry: part names compare without ASCII case.
     index: HashMap<String, usize>,
     limits: Limits,
     /// Decompressed bytes read so far.
     read: Cell<u64>,
-}
-
-fn zip_error(e: zip::result::ZipError) -> Error {
-    match e {
-        zip::result::ZipError::UnsupportedArchive(m) => Error::Unsupported(m.to_string()),
-        zip::result::ZipError::Io(e) => Error::Zip(e.to_string()),
-        other => Error::Zip(other.to_string()),
-    }
 }
 
 /// Checks a name for use as a part: relative, `/`-separated, no empty, `.`
@@ -94,27 +83,11 @@ impl Package {
                     .into(),
             ));
         }
-        let size = bytes.len();
-        let data: Arc<[u8]> = bytes.into();
-        let archive = ZipArchive::new(Cursor::new(data)).map_err(zip_error)?;
-        if archive.len() > limits.max_entries {
-            return Err(Error::Limit {
-                what: format!("{} zip entries", archive.len()),
-                field: "max_entries",
-                limit: limits.max_entries as u64,
-            });
-        }
-        if archive.has_duplicate_names() {
-            return Err(Error::Zip("two zip entries have the same name".into()));
-        }
-        let mut entries = Vec::with_capacity(archive.len());
-        let mut index = HashMap::with_capacity(archive.len());
-        for i in 0..archive.len() {
-            let name = match archive.name_for_index(i) {
-                Some(Ok(n)) => n.into_owned(),
-                Some(Err(e)) => return Err(zip_error(e)),
-                None => return Err(Error::Zip(format!("entry {i} has no name"))),
-            };
+        let archive = Archive::read(bytes, limits.max_entries)?;
+        let mut entries = Vec::with_capacity(archive.entries.len());
+        let mut index = HashMap::with_capacity(archive.entries.len());
+        for (i, e) in archive.entries.iter().enumerate() {
+            let name = e.name.clone();
             check_part_name(&name)?;
             if index
                 .insert(name.to_ascii_lowercase(), entries.len())
@@ -133,7 +106,6 @@ impl Package {
         }
         Ok(Package {
             archive,
-            size,
             entries,
             index,
             limits,
@@ -183,23 +155,14 @@ impl Package {
             field: "max_part_size",
             limit,
         };
-        let mut archive = self.archive.clone();
-        let file = archive.by_index(index).map_err(|e| match zip_error(e) {
-            Error::Unsupported(m) => Error::Unsupported(format!("{name}: {m}")),
-            Error::Zip(m) => Error::Zip(format!("{name}: {m}")),
-            other => other,
-        })?;
-        if file.size() > limit {
+        let e = &self.archive.entries[index];
+        if e.size > limit {
             return Err(too_big());
         }
-        let mut bytes = Vec::with_capacity(file.size().min(limit) as usize);
-        file.take(limit + 1)
-            .read_to_end(&mut bytes)
-            .map_err(|e| Error::Zip(format!("{name}: {e}")))?;
-        if bytes.len() as u64 > limit {
+        let Some(bytes) = self.archive.decompress(e, limit)? else {
             return Err(too_big());
-        }
-        let total = self.read.get() + bytes.len() as u64;
+        };
+        let total = self.read.get().saturating_add(bytes.len() as u64);
         if total > self.limits.max_total_size {
             return Err(Error::Limit {
                 what: format!("more than {} bytes of parts", self.limits.max_total_size),
@@ -246,44 +209,28 @@ impl Package {
         });
     }
 
+    /// The archive as it would be saved now. With no change, the bytes it
+    /// was read from.
     pub(crate) fn to_bytes(&self) -> Result<Vec<u8>, Error> {
-        let mut archive = self.archive.clone();
-        let mut w = ZipWriter::new(Cursor::new(Vec::with_capacity(self.size + 4096)));
+        let mut parts: Vec<Option<Vec<u8>>> = vec![None; self.archive.entries.len()];
+        let mut added: Vec<(&str, Vec<u8>)> = vec![];
         for e in &self.entries {
-            let bytes = match (&e.body, e.source) {
-                (Body::Source, Some(k)) => {
-                    w.raw_copy_file(archive.by_index_raw(k).map_err(zip_error)?)
-                        .map_err(zip_error)?;
-                    continue;
-                }
-                (Body::Xml(t), Some(k)) if !t.is_changed() => {
-                    w.raw_copy_file(archive.by_index_raw(k).map_err(zip_error)?)
-                        .map_err(zip_error)?;
-                    continue;
-                }
-                (Body::Source, None) => continue,
-                (Body::Xml(t), _) => t.to_bytes(),
-                (Body::Bytes(b), _) => b.clone(),
+            let bytes = match &e.body {
+                Body::Source => continue,
+                Body::Xml(t) if !t.is_changed() && e.source.is_some() => continue,
+                Body::Xml(t) => t.to_bytes(),
+                Body::Bytes(b) => b.clone(),
             };
-            // A changed part keeps its entry's date and compression.
-            let (time, method) = match e.source {
-                Some(k) => {
-                    let f = archive.by_index_raw(k).map_err(zip_error)?;
-                    let method = match f.compression() {
-                        CompressionMethod::Stored => CompressionMethod::Stored,
-                        _ => CompressionMethod::Deflated,
-                    };
-                    (f.last_modified().unwrap_or_default(), method)
-                }
-                None => (DateTime::default(), CompressionMethod::Deflated),
-            };
-            let opts = SimpleFileOptions::default()
-                .compression_method(method)
-                .last_modified_time(time)
-                .large_file(bytes.len() as u64 >= u32::MAX as u64);
-            w.start_file(e.name.as_str(), opts).map_err(zip_error)?;
-            w.write_all(&bytes).map_err(|e| Error::Zip(e.to_string()))?;
+            match e.source {
+                Some(k) => parts[k] = Some(bytes),
+                None => added.push((&e.name, bytes)),
+            }
         }
-        Ok(w.finish().map_err(zip_error)?.into_inner())
+        if parts.iter().all(Option::is_none) && added.is_empty() {
+            return Ok(self.archive.bytes.clone());
+        }
+        let parts: Vec<Option<&[u8]>> = parts.iter().map(|p| p.as_deref()).collect();
+        let added: Vec<(&str, &[u8])> = added.iter().map(|(n, b)| (*n, b.as_slice())).collect();
+        self.archive.write(&parts, &added)
     }
 }

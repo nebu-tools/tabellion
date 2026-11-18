@@ -73,11 +73,13 @@ fn a_zip_bomb_stops_at_the_part_limit() {
         "{e}"
     );
     assert!(e.to_string().contains("raise Limits::max_part_size"), "{e}");
-    // Saving copies the entry without decompressing it.
-    assert_eq!(
-        support::raw_entries(&doc.to_bytes().unwrap()),
-        support::raw_entries(&bytes)
-    );
+    // Saving copies the entry without decompressing it, with a change too.
+    assert!(doc.to_bytes().unwrap() == bytes);
+    let mut doc = doc;
+    let t = doc.xml("word/document.xml").unwrap();
+    let root = t.root_element();
+    t.set_attribute(root, None, "x", "1").unwrap();
+    support::zipraw::assert_records_kept(&bytes, &doc.to_bytes().unwrap(), &["word/document.xml"]);
 }
 
 #[test]
@@ -167,11 +169,11 @@ fn deep_nesting_stops_at_the_depth_limit() {
     };
     let mut doc = Document::from_bytes_with_limits(with_document(&doc_xml), limits).unwrap();
     let t = doc.xml("word/document.xml").unwrap();
-    let deepest = t.descendants(t.root_element()).last().unwrap();
+    let deepest = t.descendants(t.root_element()).unwrap().last().unwrap();
     let new = t.create_element(Some(nebu_docx::ns::W), "w:p").unwrap();
     t.append(deepest, new).unwrap();
     let copy = t.deep_clone(t.root_element()).unwrap();
-    assert!(t.descendants(copy).count() > n);
+    assert!(t.descendants(copy).unwrap().count() > n);
     let out = doc.to_bytes().unwrap();
     assert!(
         String::from_utf8(support::entry(&out, "word/document.xml"))
@@ -180,21 +182,115 @@ fn deep_nesting_stops_at_the_depth_limit() {
     );
 }
 
+fn is_limit(r: Result<impl Sized, Error>, name: &str) -> bool {
+    matches!(r, Err(Error::Limit { field, .. }) if field == name)
+}
+
 #[test]
-fn too_many_nodes_stop_at_the_node_limit() {
-    let xml = format!("<a>{}</a>", "<b/>".repeat(5000));
-    let limits = Limits {
-        max_xml_nodes: 1000,
-        ..Limits::default()
+fn the_node_limit_counts_every_kind_of_node() {
+    // 10,000 comments, then the same for CDATA sections and processing
+    // instructions, under a limit of 100.
+    for node in ["<!--c-->", "<![CDATA[c]]>", "<?pi c?>", "<b/>", "t<b/>"] {
+        let xml = format!("<a>{}</a>", node.repeat(10_000));
+        let limits = Limits {
+            max_xml_nodes: 100,
+            ..Limits::default()
+        };
+        let mut doc =
+            Document::from_bytes_with_limits(with_part("customXml/n.xml", &xml), limits).unwrap();
+        assert!(
+            is_limit(doc.xml("customXml/n.xml"), "max_xml_nodes"),
+            "{node}"
+        );
+    }
+}
+
+/// The sample with one more part.
+fn with_part(name: &str, data: &str) -> Vec<u8> {
+    sample_with(&[(name, Some(data.as_bytes().to_vec()))])
+}
+
+/// Each limit lets through an input of exactly its value and refuses one
+/// more.
+#[test]
+fn every_limit_holds_at_its_value() {
+    let with = |f: &dyn Fn(&mut Limits)| {
+        let mut l = Limits::default();
+        f(&mut l);
+        l
     };
-    let mut doc = Document::from_bytes_with_limits(with_document(&xml), limits).unwrap();
-    assert!(matches!(
-        doc.xml("word/document.xml"),
-        Err(Error::Limit {
-            field: "max_xml_nodes",
-            ..
-        })
+
+    // Entries: the sample has 11.
+    let n = entries(&sample()).len();
+    assert!(Document::from_bytes_with_limits(sample(), with(&|l| l.max_entries = n)).is_ok());
+    assert!(is_limit(
+        Document::from_bytes_with_limits(sample(), with(&|l| l.max_entries = n - 1)),
+        "max_entries"
     ));
+
+    // The size of one part.
+    let part = "x".repeat(100_000);
+    let bytes = with_part("word/media/x.bin", &part);
+    let open = |l: Limits| Document::from_bytes_with_limits(bytes.clone(), l).unwrap();
+    let size = part.len() as u64;
+    assert!(
+        open(with(&|l| l.max_part_size = size))
+            .read_part("word/media/x.bin")
+            .is_ok()
+    );
+    assert!(is_limit(
+        open(with(&|l| l.max_part_size = size - 1)).read_part("word/media/x.bin"),
+        "max_part_size"
+    ));
+
+    // The size of all parts read: opening reads the content types and the
+    // package relationships.
+    let opened: u64 = entries(&bytes)
+        .iter()
+        .filter(|(n, _)| n == "[Content_Types].xml" || n == "_rels/.rels")
+        .map(|(_, d)| d.len() as u64)
+        .sum();
+    let total = opened + size;
+    assert!(
+        open(with(&|l| l.max_total_size = total))
+            .read_part("word/media/x.bin")
+            .is_ok()
+    );
+    assert!(is_limit(
+        open(with(&|l| l.max_total_size = total - 1)).read_part("word/media/x.bin"),
+        "max_total_size"
+    ));
+    assert!(is_limit(
+        Document::from_bytes_with_limits(bytes.clone(), with(&|l| l.max_total_size = opened - 1)),
+        "max_total_size"
+    ));
+
+    // Nesting depth: 40 elements, one in the other.
+    let deep = format!("{}{}", "<a>".repeat(40), "</a>".repeat(40));
+    let bytes = with_part("customXml/deep.xml", &deep);
+    let depth = |d: usize| {
+        let mut doc =
+            Document::from_bytes_with_limits(bytes.clone(), with(&|l| l.max_depth = d)).unwrap();
+        doc.xml("customXml/deep.xml").map(|_| ())
+    };
+    assert!(depth(40).is_ok());
+    assert!(is_limit(depth(39), "max_depth"));
+
+    // Nodes: the declaration, the root, and 4 nodes of each kind 25 times.
+    let xml = format!(
+        "<?xml version=\"1.0\"?><a>{}</a>",
+        "<!--c--><?p d?><![CDATA[x]]>t".repeat(25)
+    );
+    let nodes = 2 + 4 * 25;
+    let bytes = with_part("customXml/nodes.xml", &xml);
+    let count = |n: usize| {
+        let mut doc =
+            Document::from_bytes_with_limits(bytes.clone(), with(&|l| l.max_xml_nodes = n))
+                .unwrap();
+        doc.xml("customXml/nodes.xml").map(|_| ())
+    };
+    assert!(count(nodes).is_ok());
+    assert!(is_limit(count(nodes - 1), "max_xml_nodes"));
 }
 
 #[test]
@@ -385,4 +481,22 @@ fn an_unreadable_file_names_its_path() {
             .starts_with("cannot write no/such/dir/out.docx"),
         "{e}"
     );
+}
+
+#[test]
+fn character_references_take_any_number_of_leading_zeros() {
+    let t = Tree::parse("<r>&#000000000000065;&#x0000000000000042;</r>").unwrap();
+    assert_eq!(t.text_content(t.root_element()).unwrap(), "AB");
+    for bad in [
+        "&#0000000000000000;",
+        "&#x00000110000;",
+        "&#99999999999999999999;",
+        "&#x0000FFFE;",
+    ] {
+        assert!(Tree::parse(format!("<r>{bad}</r>")).is_err(), "{bad}");
+    }
+    // A long run of digits costs time in proportion to its length.
+    let long = format!("<r>&#{}65;</r>", "0".repeat(1 << 20));
+    let t = Tree::parse(long).unwrap();
+    assert_eq!(t.text_content(t.root_element()).unwrap(), "A");
 }

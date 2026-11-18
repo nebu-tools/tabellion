@@ -10,21 +10,23 @@
 //! let mut doc = Document::open("report.docx")?;
 //! let main = doc.main_part().to_string();
 //! let tree = doc.xml(&main)?;
-//! let body = tree.child(tree.root_element(), Some(ns::W), "body").expect("a body");
+//! let body = tree.child(tree.root_element(), Some(ns::W), "body")?.expect("a body");
 //! let p = tree.parse_fragment(r#"<w:p><w:r><w:t>Hello</w:t></w:r></w:p>"#, &[("w", ns::W)])?;
 //! tree.insert(body, 0, p[0])?;
 //! doc.save("out.docx")?;
 //! # Ok::<(), nebu_docx::Error>(())
 //! ```
 //!
-//! Saving keeps what did not change. A part nobody changed is copied into
-//! the new file as the same compressed zip entry. In a part that changed,
-//! every node outside the change is copied as the bytes it was read from
-//! (see [`xml`]).
+//! Saving keeps what did not change. A document saved with no change is the
+//! file it was read from, byte for byte. After a change, every zip entry
+//! that did not change keeps its complete record as it was, and in a part
+//! that changed, every node outside the change is copied as the bytes it was
+//! read from (see [`xml`]).
 //!
 //! Files from strangers are safe to open: [`Limits`] bounds the work and the
 //! memory a file can ask for, and no input makes the engine panic.
 
+mod archive;
 mod document;
 mod package;
 pub mod xml;
@@ -136,6 +138,9 @@ pub enum Error {
     /// An edit would make the tree or the package invalid.
     #[error("invalid edit: {0}")]
     Edit(String),
+    /// A [`NodeId`](xml::NodeId) was passed to a tree that did not make it.
+    #[error("the node belongs to another tree")]
+    ForeignNode,
 }
 
 fn location(part: &Option<String>, line: usize, column: usize) -> String {

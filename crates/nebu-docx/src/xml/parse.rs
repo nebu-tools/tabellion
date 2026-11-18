@@ -9,7 +9,7 @@ use std::ops::Range;
 
 use super::chars::{self, is_space};
 use super::{
-    Data, Element, Encoding, NodeId, Scope, ScopeId, Span, Tree, UriId, XML_NS, XMLNS_NS, XMLNS_URI,
+    Data, Element, Encoding, Ix, Scope, ScopeId, Span, Tree, UriId, XML_NS, XMLNS_NS, XMLNS_URI,
 };
 use crate::{Error, Limits};
 
@@ -202,7 +202,7 @@ pub(super) fn source_attrs(tag: &str) -> impl Iterator<Item = RawAttr> + '_ {
 }
 
 struct Open {
-    id: NodeId,
+    id: Ix,
     name: Range<usize>,
     scope: ScopeId,
 }
@@ -213,18 +213,14 @@ struct Open {
 pub(super) fn parse(
     tree: &mut Tree,
     text: String,
-    root: Option<NodeId>,
+    root: Option<Ix>,
     base: ScopeId,
     fragment: bool,
     limits: &Limits,
-) -> Result<Vec<NodeId>, Error> {
+) -> Result<Vec<Ix>, Error> {
     let buf = tree.bufs.len() as u32;
     if text.len() >= u32::MAX as usize {
-        return Err(Error::Limit {
-            what: "an XML part of 4 GiB or more".into(),
-            field: "max_part_size",
-            limit: u32::MAX as u64,
-        });
+        return Err(Error::Unsupported("XML parts of 4 GiB or more".into()));
     }
     let s = text.as_str();
     let b = s.as_bytes();
@@ -245,31 +241,38 @@ pub(super) fn parse(
         })
     };
     let mut stack: Vec<Open> = vec![];
-    let mut top: Vec<NodeId> = vec![];
+    let mut top: Vec<Ix> = vec![];
     let mut root_seen = false;
     let mut attrs: Vec<RawAttr> = vec![];
     let mut keys: Vec<(Option<UriId>, &str, usize)> = vec![];
     let mut i = 0;
 
-    let attach = |tree: &mut Tree, stack: &[Open], top: &mut Vec<NodeId>, id: NodeId| {
-        let parent = stack.last().map(|o| o.id).or(root);
-        match parent {
-            Some(p) => {
-                tree.nodes[id.index()].parent = Some(p);
-                tree.nodes[p.index()].children.push(id);
-            }
-            None => top.push(id),
-        }
-    };
-    let check_count = |tree: &Tree| -> Result<(), Error> {
-        if tree.nodes.len() > limits.max_xml_nodes {
+    // Every node the parse makes goes through here: the node limit is
+    // checked before the node is allocated, whatever its kind.
+    let mut count = 0usize;
+    let mut add = |tree: &mut Tree,
+                   stack: &[Open],
+                   top: &mut Vec<Ix>,
+                   data: Data,
+                   span: Option<Span>|
+     -> Result<Ix, Error> {
+        if count >= limits.max_xml_nodes {
             return Err(Error::Limit {
                 what: format!("an XML part with more than {} nodes", limits.max_xml_nodes),
                 field: "max_xml_nodes",
                 limit: limits.max_xml_nodes as u64,
             });
         }
-        Ok(())
+        count += 1;
+        let id = tree.push(data, span)?;
+        match stack.last().map(|o| o.id).or(root) {
+            Some(p) => {
+                tree.nodes[id as usize].parent = Some(p);
+                tree.nodes[p as usize].children.push(id);
+            }
+            None => top.push(id),
+        }
+        Ok(id)
     };
 
     if !fragment && s.starts_with("<?xml") && b.get(5).is_some_and(|&c| is_space(c) || c == b'?') {
@@ -278,8 +281,7 @@ pub(super) fn parse(
             .ok_or_else(|| err(0, "the XML declaration is not closed".into()))?
             + 2;
         check_declaration(s, end, tree.encoding)?;
-        let id = tree.push(Data::Decl, sp(0, end));
-        attach(tree, &stack, &mut top, id);
+        add(tree, &stack, &mut top, Data::Decl, sp(0, end))?;
         i = end;
     }
 
@@ -303,9 +305,7 @@ pub(super) fn parse(
                     "']]>' is not allowed in text (write ]]&gt;)".into(),
                 ));
             }
-            let id = tree.push(Data::Text(None), sp(i, e));
-            attach(tree, &stack, &mut top, id);
-            check_count(tree)?;
+            add(tree, &stack, &mut top, Data::Text(None), sp(i, e))?;
             i = e;
             continue;
         }
@@ -319,8 +319,7 @@ pub(super) fn parse(
                 return Err(err(body + k, "'--' is not allowed inside a comment".into()));
             }
             let e = body + k + 3;
-            let id = tree.push(Data::Comment, sp(i, e));
-            attach(tree, &stack, &mut top, id);
+            add(tree, &stack, &mut top, Data::Comment, sp(i, e))?;
             i = e;
         } else if rest.starts_with("<![CDATA[") {
             if outside {
@@ -333,8 +332,7 @@ pub(super) fn parse(
                 .find("]]>")
                 .ok_or_else(|| err(i, "the CDATA section is not closed".into()))?;
             let e = i + 9 + k + 3;
-            let id = tree.push(Data::Cdata, sp(i, e));
-            attach(tree, &stack, &mut top, id);
+            add(tree, &stack, &mut top, Data::Cdata, sp(i, e))?;
             i = e;
         } else if rest.starts_with("<!DOCTYPE") {
             return Err(err(
@@ -368,8 +366,7 @@ pub(super) fn parse(
                     "expected white space after the processing instruction's target".into(),
                 ));
             }
-            let id = tree.push(Data::Pi, sp(i, e + 2));
-            attach(tree, &stack, &mut top, id);
+            add(tree, &stack, &mut top, Data::Pi, sp(i, e + 2))?;
             i = e + 2;
         } else if rest.starts_with("</") {
             let ne = name_end(s, i + 2);
@@ -392,7 +389,7 @@ pub(super) fn parse(
                     format!("</{}> does not close <{}>", &s[i + 2..ne], &s[open.name]),
                 ));
             }
-            let node = &mut tree.nodes[open.id.index()];
+            let node = &mut tree.nodes[open.id as usize];
             if let Data::Element(el) = &mut node.data {
                 el.close = sp(i, e + 1);
             }
@@ -553,9 +550,13 @@ pub(super) fn parse(
                 close: None,
                 attrs: None,
             };
-            let id = tree.push(Data::Element(Box::new(el)), sp(i, end));
-            attach(tree, &stack, &mut top, id);
-            check_count(tree)?;
+            let id = add(
+                tree,
+                &stack,
+                &mut top,
+                Data::Element(Box::new(el)),
+                sp(i, end),
+            )?;
             if !self_closing {
                 stack.push(Open {
                     id,

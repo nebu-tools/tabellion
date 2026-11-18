@@ -34,13 +34,35 @@ does not compile the Typst compiler.
 
 Two layers make the round trip exact.
 
-The package layer reads the zip once. A part that nobody asks for is copied
-into the output as the same compressed zip entry, CRC and all. A part that
-is parsed but not changed is also copied raw. Only parts with real changes
-are compressed again, and they keep their entry's date and compression
-method. Content types and relationships are parts like any other; adding an
-image adds one `Relationship` element and, if needed, one `Override`
-element, and leaves the rest of those files as they were.
+The package layer reads the zip once and keeps the file's bytes. It reads
+and writes the zip format itself, as the XML layer owns its XML, because no
+zip library keeps an archive's records as they were. It promises two
+things:
+
+1. A document saved with no change is the input file, byte for byte, the
+   whole file. A part that was parsed but not changed is no change.
+2. After a change, every entry that did not change keeps its complete
+   record as it was: the local header with its extra fields, the
+   compressed data and the data descriptor, and its central directory
+   record apart from the offset of the local header. The entries keep their
+   order, in the central directory and in the file, and the bytes before the
+   first entry and the archive comment stay. Changed and new entries are
+   written fresh. A changed entry keeps its name, date, compression method
+   (stored stays stored, anything else is deflated), file attributes and
+   comment, and loses its extra fields and data descriptor. New entries go
+   after all others.
+
+Whatever a file holds that the engine cannot carry through faithfully, it
+refuses when the file is opened, with an error that names it, and never
+changes silently: encrypted entries, archives split over several disks,
+bytes between entries or between the last entry and the central directory,
+an end record that is not at the end of the file, a local header that names
+another entry or does not match its directory record, a data descriptor
+that does not match, and entries that overlap.
+
+Content types and relationships are parts like any other; adding an image
+adds one `Relationship` element and, if needed, one `Override` element, and
+leaves the rest of those files as they were.
 
 The XML layer is a lossless tree. The parser records, for every node, the
 byte range it came from. The writer copies that range for every node that
@@ -53,6 +75,23 @@ are kept. New content enters the tree as a parsed fragment and is written as
 it was generated. A tracked replacement in a 5 MB `document.xml` therefore
 changes a few hundred bytes, and everything before and after them is
 identical.
+
+Whatever the edits, the written part is well-formed and parses back to the
+same tree. Each piece the writer puts out is well-formed alone, so the only
+danger is where two pieces of character data meet that did not meet in the
+source: new text next to old text, or two old texts after what stood
+between them was removed. Two such pieces can join into `]]>`, which text
+may not contain, or into a carriage return and a line feed, which a reader
+takes for one line end. The writer escapes the one character that would
+join them: a `]` of new text as `&#93;`, or else the `>` of old text as
+`&gt;`, and a line feed after a carriage return as `&#10;`. Comments,
+processing instructions and CDATA sections are never written anew, so they
+cannot gain a `--`, a `?>` or a `]]>`: they enter the tree only through the
+parser, and an edit can only move, copy or remove them. Edits that cannot
+be written are refused when they are made: a name that is not an XML name,
+a character XML forbids in text, a value or a namespace, a prefix bound
+twice in a fragment's bindings, and the XML declaration moved or copied into
+an element.
 
 A part keeps its encoding. The parser reads UTF-8, with or without a byte
 order mark, and UTF-16, which are the encodings Office Open XML allows, and
@@ -85,21 +124,35 @@ write and that a caller can raise:
 | Decompressed size of one part | 256 MiB |
 | Decompressed size of all parts read | 1 GiB |
 | Nesting depth of an XML part | 256 |
-| Nodes in one XML part | 10 million |
+| Nodes in one XML part: elements, text, comments, CDATA sections, processing instructions and the XML declaration | 10 million |
 
-Decompression stops at the limit, whatever size the zip headers claim, so a
-zip bomb costs no more than the limit. Parts are decompressed only when they
-are read, and an unchanged part is copied without being decompressed at all.
-The parser and the writer use no recursion, so depth costs no stack. The
-parser refuses document type declarations, which Office Open XML forbids,
-and so there are no entities to expand. Zip entry names with `..` segments,
-a leading `/`, a backslash or control characters, and names that differ only
-in case, are refused.
+Each limit is checked in one place: the entry count when the archive is
+read, the part sizes where a part is decompressed, the depth where the parser
+opens an element, and the node count where the parser makes a node of any
+kind, before it makes it. Decompression stops at the limit, whatever size
+the zip headers claim, so a zip bomb costs no more than the limit, and the
+checksum and size of every part read are checked. Parts are decompressed
+only when they are read, and an unchanged part is copied without being
+decompressed at all. The parser and the writer use no recursion, so depth
+costs no stack. Zip entry names with `..` segments, a leading `/`, a
+backslash or control characters, and names that differ only in case, are
+refused.
+
+The parser refuses every document type declaration (`<!DOCTYPE`), with or
+without an internal subset, as an error at its place; Office Open XML
+forbids them. It never reads a DTD, internal or external, so no entity is
+ever defined or expanded, and a part cannot grow into more than its own
+bytes. The only references it knows are the five predefined entities and
+character references, which may have any number of leading zeros and must
+name a character XML allows. On the cases of the W3C XML Conformance Test
+Suite that apply to such a parser (XML 1.0 fifth edition and Namespaces
+1.0, without a DOCTYPE) it agrees with the suite on every one.
 
 No input may make the engine panic. Every malformed file gives an error
 that says what is wrong and where. Tests feed the engine truncated and
-damaged archives, zip bombs, deep nesting and malformed XML, and two fuzz
-targets in `fuzz/` run the same entry points on random bytes.
+damaged archives, zip bombs, deep nesting and malformed XML, and three fuzz
+targets in `fuzz/` run opening, parsing and random edit sequences on random
+bytes.
 
 ### The document model
 
@@ -208,7 +261,7 @@ let id = doc.add_relationship(&main, IMAGE, Target::Part("word/media/image1.png"
 
 // The tree of a part: find by namespace and local name, edit, save.
 let tree = doc.xml(&main)?;
-let body = tree.child(tree.root_element(), Some(ns::W), "body").unwrap();
+let body = tree.child(tree.root_element(), Some(ns::W), "body")?.expect("a body");
 let p = tree.parse_fragment("<w:p><w:r><w:t>Hello</w:t></w:r></w:p>", &[("w", ns::W)])?;
 tree.insert(body, 0, p[0])?;
 ```
@@ -234,12 +287,20 @@ fields::update(&mut doc)?;
 The tree is public so that other tools can do what the high-level calls do
 not, but most users never need it.
 
+A node handle, `NodeId`, carries the identity of the tree that made it, and
+every method that takes one checks it: a handle from another part's tree,
+or from a clone, which is a tree of its own, gives `Error::ForeignNode`.
+Nodes are never freed while their tree lives, so a handle cannot go stale; a
+detached node can be attached again. The reading methods return `Result`
+for this reason. No public method panics on any argument.
+
 Errors are one enum, and each message says what was wrong with the file or
 the call, so that it can be shown to the person who supplied them: a file
 that cannot be read, a damaged archive, a file that is not a Word document,
 a missing part, a bad part name, an exceeded limit (with the `Limits` field
 to raise), malformed XML (with part, line and column), something not
-supported, and an edit that would make the tree invalid. The document views
+supported, an edit that would make the tree invalid, and a node handle from
+another tree. The document views
 add `ForeignRevision` (another author's pending change in the target, with
 the authors' names) and `Invalid` (a place that matches nothing or several
 blocks, an unknown label, a ragged table).
@@ -647,17 +708,31 @@ results that should show the time of opening, and `INCLUDETEXT` or
 
 ### Without Word, in CI
 
-- **Byte identity.** For every test document, `roundtrip` must keep every zip
-  entry identical, and an edit must leave every byte outside its target
-  unchanged. The tests compare the output with the source outside the edited
-  node's byte range.
+- **Byte identity.** For every test document, `roundtrip` must give back the
+  input file byte for byte, and after an edit every other entry must keep
+  its complete local and central directory records, compared whole, and
+  every byte outside the edited node must stay. Test archives built byte by
+  byte carry data descriptors, zip64 records, stored and deflated entries,
+  extra fields, entry and archive comments, an unusual entry order and bytes
+  before the first entry.
 - **Property tests.** Random well-formed XML with namespaces, references,
   comments, CDATA and processing instructions must write back its bytes;
   random edit sequences must give XML that an independent parser reads as
   the edits say; random content-model documents go through write, read and
-  write again.
+  write again. A second oracle runs any sequence of creations, text and
+  attribute changes, renames, insertions, moves between parents that bind
+  prefixes differently, removals, copies, fragments with clashing bindings
+  and handles of another tree: the output must parse, roxmltree must read
+  the names, namespaces, attributes and text the tree reports, and every
+  node no edit touched must keep its bytes. The `edit` fuzz target runs the
+  same oracle.
+- **Conformance.** `tools/xmlconf.sh` runs the parser over the W3C XML
+  Conformance Test Suite's cases that apply to a parser without DTDs, and
+  CI runs it too. A disagreement fails the run unless
+  `tests/xmlconf-expected.txt` lists it with a reason.
 - **Hostile input.** Truncated and damaged archives, zip bombs, deep nesting,
   malformed XML, duplicate and unsafe entry names give errors, never a panic.
+  Each limit is tested with an input of exactly its value and one more.
 - **Schema validation.** Every output is validated against the ECMA-376
   transitional schemas plus Microsoft's extensions with the Open XML SDK's
   validator (a small .NET tool run in CI). Word's tolerance is not the

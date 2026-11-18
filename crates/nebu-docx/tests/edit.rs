@@ -6,7 +6,8 @@ use std::ops::Range;
 
 use nebu_docx::xml::{NodeKind, Tree};
 use nebu_docx::{Document, Error, Target, ns};
-use support::{corpus, entry, large, raw_entries, sample};
+use support::zipraw::assert_records_kept;
+use support::{corpus, entry, large, sample};
 
 const MAIN: &str = "word/document.xml";
 
@@ -25,20 +26,15 @@ fn assert_replaced(before: &[u8], after: &[u8], range: Range<usize>, with: &str)
     }
 }
 
-/// Every entry but `changed` is the same zip entry as before.
+/// Every entry but `changed` keeps its complete records.
 fn assert_others_kept(before: &[u8], after: &[u8], changed: &[&str]) {
-    let a = raw_entries(before);
-    let b = raw_entries(after);
-    for e in &a {
-        if changed.contains(&e.name.as_str()) {
-            continue;
-        }
-        assert!(b.contains(e), "{} changed", e.name);
-    }
+    assert_records_kept(before, after, changed);
 }
 
 fn body(t: &Tree) -> nebu_docx::xml::NodeId {
-    t.child(t.root_element(), Some(ns::W), "body").unwrap()
+    t.child(t.root_element(), Some(ns::W), "body")
+        .unwrap()
+        .unwrap()
 }
 
 fn well_formed(xml: &[u8]) -> String {
@@ -54,8 +50,8 @@ fn an_insertion_adds_its_bytes_and_nothing_else() {
     let mut doc = Document::from_bytes(bytes.clone()).unwrap();
     let t = doc.xml(MAIN).unwrap();
     let b = body(t);
-    let anchor = t.elements(b).nth(2000).unwrap();
-    let at = t.source_range(anchor).unwrap().start;
+    let anchor = t.elements(b).unwrap().nth(2000).unwrap();
+    let at = t.source_range(anchor).unwrap().unwrap().start;
     let xml = r#"<w:p><w:r><w:t>New &amp; inserted</w:t></w:r></w:p>"#;
     let p = t.parse_fragment(xml, &[("w", ns::W)]).unwrap();
     t.insert_before(anchor, p[0]).unwrap();
@@ -72,10 +68,11 @@ fn an_attribute_change_rewrites_that_attribute_only() {
     let t = doc.xml(MAIN).unwrap();
     let style = t
         .descendants(body(t))
-        .filter(|&n| t.is(n, Some(ns::W), "pStyle"))
+        .unwrap()
+        .filter(|&n| t.is(n, Some(ns::W), "pStyle").unwrap())
         .nth(500)
         .unwrap();
-    let r = t.source_range(style).unwrap();
+    let r = t.source_range(style).unwrap().unwrap();
     let old = String::from_utf8(before[r.clone()].to_vec()).unwrap();
     t.set_attribute(style, Some(ns::W), "w:val", "Heading2")
         .unwrap();
@@ -93,15 +90,15 @@ fn an_attribute_change_rewrites_that_attribute_only() {
 fn a_new_value_keeps_the_quote_style_and_the_other_attributes() {
     let src = "<a xmlns:w='urn:w'><b  w:x = 'one'\n w:y=\"two\"  /></a>";
     let mut t = Tree::parse(src).unwrap();
-    let b = t.elements(t.root_element()).next().unwrap();
+    let b = t.elements(t.root_element()).unwrap().next().unwrap();
     t.set_attribute(b, Some("urn:w"), "w:y", "2 & 3").unwrap();
     t.set_attribute(b, None, "z", "new").unwrap();
     assert_eq!(
         String::from_utf8(t.to_bytes()).unwrap(),
         "<a xmlns:w='urn:w'><b  w:x = 'one' w:y=\"2 &amp; 3\" z=\"new\"  /></a>"
     );
-    assert!(t.remove_attribute(b, Some("urn:w"), "x"));
-    assert!(!t.remove_attribute(b, Some("urn:w"), "x"));
+    assert!(t.remove_attribute(b, Some("urn:w"), "x").unwrap());
+    assert!(!t.remove_attribute(b, Some("urn:w"), "x").unwrap());
     assert_eq!(
         String::from_utf8(t.to_bytes()).unwrap(),
         "<a xmlns:w='urn:w'><b w:y=\"2 &amp; 3\" z=\"new\"  /></a>"
@@ -116,9 +113,13 @@ fn text_changes_stay_inside_the_text_node() {
     let t = doc.xml(MAIN).unwrap();
     let text = t
         .descendants(body(t))
-        .find(|&n| t.kind(n) == NodeKind::Text && t.text(n).as_deref() == Some("{{author}}"))
+        .unwrap()
+        .find(|&n| {
+            t.kind(n).unwrap() == NodeKind::Text
+                && t.text(n).unwrap().as_deref() == Some("{{author}}")
+        })
         .unwrap();
-    let r = t.source_range(text).unwrap();
+    let r = t.source_range(text).unwrap().unwrap();
     t.set_text(text, "Ada <Lovelace> & co").unwrap();
     let out = doc.to_bytes().unwrap();
     assert_replaced(
@@ -138,10 +139,11 @@ fn a_removal_takes_out_exactly_the_node() {
     let t = doc.xml(MAIN).unwrap();
     let table = t
         .elements(body(t))
-        .filter(|&n| t.is(n, Some(ns::W), "tbl"))
+        .unwrap()
+        .filter(|&n| t.is(n, Some(ns::W), "tbl").unwrap())
         .nth(150)
         .unwrap();
-    let r = t.source_range(table).unwrap();
+    let r = t.source_range(table).unwrap().unwrap();
     t.detach(table).unwrap();
     assert_replaced(&before, &entry(&doc.to_bytes().unwrap(), MAIN), r, "");
 }
@@ -153,14 +155,15 @@ fn a_move_writes_the_node_as_it_was() {
     let mut doc = Document::from_bytes(bytes).unwrap();
     let t = doc.xml(MAIN).unwrap();
     let b = body(t);
-    let first = t.elements(b).next().unwrap();
+    let first = t.elements(b).unwrap().next().unwrap();
     let last_para = t
         .elements(b)
-        .filter(|&n| t.is(n, Some(ns::W), "p"))
+        .unwrap()
+        .filter(|&n| t.is(n, Some(ns::W), "p").unwrap())
         .last()
         .unwrap();
-    let r = t.source_range(first).unwrap();
-    let at = t.source_range(last_para).unwrap().end;
+    let r = t.source_range(first).unwrap().unwrap();
+    let at = t.source_range(last_para).unwrap().unwrap().end;
     t.insert_after(last_para, first).unwrap();
     let out = entry(&doc.to_bytes().unwrap(), MAIN);
     let moved = &before[r.clone()];
@@ -175,7 +178,7 @@ fn a_move_writes_the_node_as_it_was() {
 fn a_rename_keeps_the_attributes_as_written() {
     let mut t =
         Tree::parse("<w:r xmlns:w='urn:w'><w:t xml:space='preserve'> a </w:t></w:r>").unwrap();
-    let text = t.elements(t.root_element()).next().unwrap();
+    let text = t.elements(t.root_element()).unwrap().next().unwrap();
     t.set_name(text, Some("urn:w"), "w:delText").unwrap();
     assert_eq!(
         String::from_utf8(t.to_bytes()).unwrap(),
@@ -193,8 +196,8 @@ fn new_content_takes_the_documents_prefixes() {
         let mut doc = Document::from_bytes(bytes).unwrap();
         let t = doc.xml(MAIN).unwrap();
         let b = body(t);
-        let first = t.elements(b).next().unwrap();
-        let at = t.source_range(first).unwrap().start;
+        let first = t.elements(b).unwrap().next().unwrap();
+        let at = t.source_range(first).unwrap().unwrap().start;
         let p = t
             .parse_fragment(r#"<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr><w:r><w:t>New</w:t></w:r></w:p>"#, &[("w", ns::W)])
             .unwrap();
@@ -247,9 +250,9 @@ fn a_node_moved_under_other_bindings_is_written_with_them() {
     let src = r#"<r xmlns:p="urn:one"><s xmlns:p="urn:two"><p:x p:a="1"/></s><t/></r>"#;
     let mut t = Tree::parse(src).unwrap();
     let root = t.root_element();
-    let s = t.elements(root).next().unwrap();
-    let target = t.elements(root).nth(1).unwrap();
-    let x = t.elements(s).next().unwrap();
+    let s = t.elements(root).unwrap().next().unwrap();
+    let target = t.elements(root).unwrap().nth(1).unwrap();
+    let x = t.elements(s).unwrap().next().unwrap();
     t.append(target, x).unwrap();
     let out = String::from_utf8(t.to_bytes()).unwrap();
     assert_eq!(
@@ -272,14 +275,17 @@ fn names_resolve_through_any_prefix() {
     )
     .unwrap();
     let root = t.root_element();
-    assert!(t.is(root, Some("urn:w"), "a"));
-    let b = t.elements(root).next().unwrap();
-    assert!(t.is(b, Some("urn:d"), "b"));
-    assert_eq!(t.attribute(b, Some("urn:w"), "v").as_deref(), Some("1"));
-    assert_eq!(t.attribute(b, None, "v").as_deref(), Some("2"));
-    assert_eq!(t.attribute(b, Some("urn:d"), "v"), None);
-    assert!(t.child(root, Some("urn:w"), "c").is_some());
-    let attrs = t.attributes(b);
+    assert!(t.is(root, Some("urn:w"), "a").unwrap());
+    let b = t.elements(root).unwrap().next().unwrap();
+    assert!(t.is(b, Some("urn:d"), "b").unwrap());
+    assert_eq!(
+        t.attribute(b, Some("urn:w"), "v").unwrap().as_deref(),
+        Some("1")
+    );
+    assert_eq!(t.attribute(b, None, "v").unwrap().as_deref(), Some("2"));
+    assert_eq!(t.attribute(b, Some("urn:d"), "v").unwrap(), None);
+    assert!(t.child(root, Some("urn:w"), "c").unwrap().is_some());
+    let attrs = t.attributes(b).unwrap();
     assert_eq!(attrs.len(), 2);
     assert_eq!(
         (attrs[0].name.prefix, attrs[0].name.namespace),
@@ -291,9 +297,9 @@ fn names_resolve_through_any_prefix() {
 fn edits_that_would_break_the_tree_are_refused() {
     let mut t = Tree::parse("<?xml version=\"1.0\"?><!--c--><a><b>text</b></a>").unwrap();
     let root = t.root_element();
-    let b = t.elements(root).next().unwrap();
-    let text = t.children(b)[0];
-    let comment = t.children(t.document())[1];
+    let b = t.elements(root).unwrap().next().unwrap();
+    let text = t.children(b).unwrap().next().unwrap();
+    let comment = t.children(t.document()).unwrap().nth(1).unwrap();
     let edit = |r: Result<(), Error>| matches!(r, Err(Error::Edit(_)));
     assert!(edit(t.append(text, b)));
     assert!(edit(t.append(b, root)));
@@ -317,7 +323,7 @@ fn edits_that_would_break_the_tree_are_refused() {
 fn copies_are_independent() {
     let mut t = Tree::parse("<a><b k='v'>x</b></a>").unwrap();
     let root = t.root_element();
-    let b = t.elements(root).next().unwrap();
+    let b = t.elements(root).unwrap().next().unwrap();
     let c = t.deep_clone(b).unwrap();
     t.set_attribute(c, None, "k", "w").unwrap();
     t.append(root, c).unwrap();
@@ -459,9 +465,9 @@ fn a_changed_utf16_part_stays_utf16() {
     let before = entry(&bytes, "docProps/app.xml");
     let mut doc = Document::from_bytes(bytes).unwrap();
     let t = doc.xml("docProps/app.xml").unwrap();
-    let app = t.elements(t.root_element()).next().unwrap();
-    let text = t.children(app)[0];
-    let r = t.source_range(text).unwrap();
+    let app = t.elements(t.root_element()).unwrap().next().unwrap();
+    let text = t.children(app).unwrap().next().unwrap();
+    let r = t.source_range(text).unwrap().unwrap();
     t.set_text(text, "Survey tool").unwrap();
     let out = entry(&doc.to_bytes().unwrap(), "docProps/app.xml");
     let mut want = before[..r.start].to_vec();
@@ -470,4 +476,63 @@ fn a_changed_utf16_part_stays_utf16() {
     }
     want.extend_from_slice(&before[r.end..]);
     assert_eq!(out, want);
+}
+
+/// Writes the tree, checks that the output parses back to the same text,
+/// and returns it.
+fn written(t: &Tree) -> String {
+    let out = String::from_utf8(t.to_bytes()).unwrap();
+    let again = Tree::parse(out.clone()).unwrap_or_else(|e| panic!("{e}: {out:?}"));
+    assert_eq!(
+        again.text_content(again.root_element()).unwrap(),
+        t.text_content(t.root_element()).unwrap(),
+        "{out:?}"
+    );
+    out
+}
+
+#[test]
+fn text_next_to_text_never_forms_markup() {
+    // New text before source text: the new `]` is escaped.
+    let mut t = Tree::parse("<r>></r>").unwrap();
+    let gt = t.children(t.root_element()).unwrap().next().unwrap();
+    let x = t.create_text("]]").unwrap();
+    t.insert_before(gt, x).unwrap();
+    assert_eq!(written(&t), "<r>]&#93;></r>");
+
+    // Two source texts that meet when what stood between them goes: the
+    // `>` is escaped.
+    for src in ["<r>]]<x/>></r>", "<r>]<x/>]></r>"] {
+        let mut t = Tree::parse(src).unwrap();
+        let x = t.elements(t.root_element()).unwrap().next().unwrap();
+        t.detach(x).unwrap();
+        assert_eq!(written(&t), "<r>]]&gt;</r>", "{src}");
+    }
+
+    // A carriage return and a line feed from different nodes stay two line
+    // ends.
+    let mut t = Tree::parse("<r>a\r<x/>\nb</r>").unwrap();
+    let x = t.elements(t.root_element()).unwrap().next().unwrap();
+    t.detach(x).unwrap();
+    assert_eq!(written(&t), "<r>a\r&#10;b</r>");
+    let mut t = Tree::parse("<r>a\r</r>").unwrap();
+    let root = t.root_element();
+    let lf = t.create_text("\nb").unwrap();
+    t.append(root, lf).unwrap();
+    assert_eq!(written(&t), "<r>a\r&#10;b</r>");
+    assert_eq!(t.text_content(root).unwrap(), "a\n\nb");
+}
+
+#[test]
+fn a_renamed_element_never_declares_a_prefix_twice() {
+    // The element undeclares the default namespace itself, and is renamed
+    // into a namespace that is the default where it is.
+    let mut t = Tree::parse("<r xmlns='urn:a'><s xmlns='' k='1'/></r>").unwrap();
+    let s = t.elements(t.root_element()).unwrap().next().unwrap();
+    t.set_name(s, Some("urn:a"), "s").unwrap();
+    let out = written(&t);
+    assert_eq!(
+        out,
+        "<r xmlns='urn:a'><ns0:s xmlns:ns0=\"urn:a\" xmlns='' k='1'/></r>"
+    );
 }

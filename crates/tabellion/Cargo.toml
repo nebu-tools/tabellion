@@ -14,7 +14,6 @@ path = "src/main.rs"
 [dependencies]
 nebu-docx.workspace = true
 clap.workspace = true
-zip.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

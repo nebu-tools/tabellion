@@ -46,6 +46,19 @@ pub enum Target<'a> {
     External(&'a str),
 }
 
+impl Target<'_> {
+    fn as_str(&self) -> &str {
+        match self {
+            Target::Part(s) | Target::External(s) => s,
+        }
+    }
+}
+
+/// A character XML allows.
+fn xml_char(c: char) -> bool {
+    matches!(c, '\t' | '\n' | '\r' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..)
+}
+
 /// A Word document held in memory. See the [crate documentation](crate).
 ///
 /// Part names are written as in the zip archive, without a leading slash
@@ -102,7 +115,7 @@ impl Document {
             )));
         }
         let types = package.xml(CONTENT_TYPES)?;
-        if !types.is(types.root_element(), Some(ns::CONTENT_TYPES), "Types") {
+        if !types.is(types.root_element(), Some(ns::CONTENT_TYPES), "Types")? {
             return Err(Error::NotWord(format!(
                 "{CONTENT_TYPES} does not list content types"
             )));
@@ -206,31 +219,8 @@ impl Document {
     /// default for its extension.
     pub fn content_type(&self, name: &str) -> Option<String> {
         let t = self.package.parsed(CONTENT_TYPES)?;
-        let root = t.root_element();
-        let part = format!("/{name}");
-        let ext = name
-            .rsplit('/')
-            .next()
-            .and_then(|f| f.rsplit_once('.'))
-            .map(|(_, e)| e);
-        let mut default = None;
-        for c in t.elements(root) {
-            let ctype = || t.attribute(c, None, "ContentType").map(|v| v.into_owned());
-            if t.is(c, Some(ns::CONTENT_TYPES), "Override")
-                && t.attribute(c, None, "PartName")
-                    .is_some_and(|p| percent_decode(&p).eq_ignore_ascii_case(&part))
-            {
-                return ctype();
-            }
-            if default.is_none()
-                && t.is(c, Some(ns::CONTENT_TYPES), "Default")
-                && let (Some(e), Some(want)) = (t.attribute(c, None, "Extension"), ext)
-                && e.eq_ignore_ascii_case(want)
-            {
-                default = ctype();
-            }
-        }
-        default
+        // The handles come from the tree itself, so the lookups cannot fail.
+        content_type_in(t, name).ok().flatten()
     }
 
     /// The relationships of a part, in the order of its relationships part.
@@ -243,23 +233,23 @@ impl Document {
         };
         let t = self.package.xml(&rels)?;
         let root = t.root_element();
-        let list: Vec<(String, String, String, bool)> = t
-            .elements(root)
-            .filter(|&r| t.is(r, Some(ns::RELATIONSHIPS), "Relationship"))
-            .map(|r| {
-                let a = |n| {
-                    t.attribute(r, None, n)
-                        .map(|v| v.into_owned())
-                        .unwrap_or_default()
-                };
-                (
-                    a("Id"),
-                    a("Type"),
-                    a("Target"),
-                    a("TargetMode") == "External",
-                )
-            })
-            .collect();
+        let mut list: Vec<(String, String, String, bool)> = vec![];
+        for r in t.elements(root)? {
+            if !t.is(r, Some(ns::RELATIONSHIPS), "Relationship")? {
+                continue;
+            }
+            let a = |n| -> Result<String, Error> {
+                Ok(t.attribute(r, None, n)?
+                    .map(|v| v.into_owned())
+                    .unwrap_or_default())
+            };
+            list.push((
+                a("Id")?,
+                a("Type")?,
+                a("Target")?,
+                a("TargetMode")? == "External",
+            ));
+        }
         Ok(list
             .into_iter()
             .map(|(id, kind, target, external)| {
@@ -289,6 +279,14 @@ impl Document {
         target: Target<'_>,
     ) -> Result<String, Error> {
         let source = self.source_name(source)?;
+        for v in [kind, target.as_str()] {
+            if let Some(c) = v.chars().find(|&c| !xml_char(c)) {
+                return Err(Error::Edit(format!(
+                    "U+{:04X} cannot appear in a relationship",
+                    c as u32
+                )));
+            }
+        }
         let (target, external) = match target {
             Target::Part(p) => {
                 let Some(p) = self.package.find(p) else {
@@ -358,7 +356,7 @@ impl Document {
         if content_type.is_empty()
             || content_type
                 .chars()
-                .any(|c| c.is_control() || c.is_whitespace())
+                .any(|c| c.is_control() || c.is_whitespace() || !xml_char(c))
         {
             return Err(Error::Edit(format!(
                 "{content_type:?} is not a content type"
@@ -387,6 +385,37 @@ impl Document {
             .map(str::to_string)
             .ok_or_else(|| Error::MissingPart(source.to_string()))
     }
+}
+
+/// The content type of a part in the content types tree, from an override
+/// for the part or the default for its extension.
+fn content_type_in(t: &Tree, name: &str) -> Result<Option<String>, Error> {
+    let part = format!("/{name}");
+    let ext = name
+        .rsplit('/')
+        .next()
+        .and_then(|f| f.rsplit_once('.'))
+        .map(|(_, e)| e);
+    let mut default = None;
+    for c in t.elements(t.root_element())? {
+        let ctype = || -> Result<Option<String>, Error> {
+            Ok(t.attribute(c, None, "ContentType")?.map(|v| v.into_owned()))
+        };
+        if t.is(c, Some(ns::CONTENT_TYPES), "Override")?
+            && t.attribute(c, None, "PartName")?
+                .is_some_and(|p| percent_decode(&p).eq_ignore_ascii_case(&part))
+        {
+            return ctype();
+        }
+        if default.is_none()
+            && t.is(c, Some(ns::CONTENT_TYPES), "Default")?
+            && let (Some(e), Some(want)) = (t.attribute(c, None, "Extension")?, ext)
+            && e.eq_ignore_ascii_case(want)
+        {
+            default = ctype()?;
+        }
+    }
+    Ok(default)
 }
 
 /// The relationships part of a part: `word/_rels/document.xml.rels` for

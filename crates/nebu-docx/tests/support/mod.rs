@@ -3,7 +3,9 @@
 
 #![allow(dead_code)]
 
+pub mod edits;
 pub mod large;
+pub mod zipraw;
 
 use std::io::{Cursor, Read, Write};
 use std::sync::OnceLock;
@@ -20,36 +22,6 @@ pub fn sample() -> Vec<u8> {
 pub fn large() -> &'static [u8] {
     static LARGE: OnceLock<Vec<u8>> = OnceLock::new();
     LARGE.get_or_init(|| large::generate(&sample(), 300).expect("the generator works"))
-}
-
-/// A zip entry as stored: the compressed bytes and the metadata around them.
-#[derive(Debug, PartialEq, Eq)]
-pub struct RawEntry {
-    pub name: String,
-    pub method: CompressionMethod,
-    pub crc: u32,
-    pub size: u64,
-    pub modified: Option<zip::DateTime>,
-    pub compressed: Vec<u8>,
-}
-
-pub fn raw_entries(bytes: &[u8]) -> Vec<RawEntry> {
-    let mut a = ZipArchive::new(Cursor::new(bytes)).expect("a zip archive");
-    (0..a.len())
-        .map(|i| {
-            let mut f = a.by_index_raw(i).expect("an entry");
-            let mut compressed = vec![];
-            f.read_to_end(&mut compressed).expect("raw bytes");
-            RawEntry {
-                name: f.name().expect("a name").to_string(),
-                method: f.compression(),
-                crc: f.crc32(),
-                size: f.size(),
-                modified: f.last_modified(),
-                compressed,
-            }
-        })
-        .collect()
 }
 
 /// The decompressed entries in archive order.

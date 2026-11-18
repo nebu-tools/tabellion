@@ -8,6 +8,13 @@
 //! one attribute rewrites that attribute; inserting a child rewrites nothing
 //! of its parent but the place where the child goes.
 //!
+//! Whatever the edits, the written bytes are well-formed and parse back to
+//! the same tree. Edits that cannot be written so are refused with an
+//! error when they are made. Where an edit puts character data next to
+//! other character data, the writer escapes the one character that would
+//! otherwise join them into something else: a `]` or `>` that would form
+//! `]]>`, a line feed after a carriage return.
+//!
 //! Names are resolved against the namespace declarations in scope, so a
 //! caller asks for `(ns::W, "p")` and finds the paragraph whatever prefix the
 //! file binds to WordprocessingML. New elements and attributes are written
@@ -17,7 +24,10 @@
 //! The parser accepts well-formed XML 1.0 with namespaces in UTF-8 or UTF-16,
 //! which is what Office Open XML allows. It refuses document type
 //! declarations, which Office Open XML forbids, and with them every entity
-//! but the five predefined ones.
+//! but the five predefined ones, so no input can make it expand entities.
+//!
+//! A [`NodeId`] is a handle that knows its tree. A handle from another tree
+//! gives [`Error::ForeignNode`]; no method panics on any argument.
 //!
 //! ```
 //! use nebu_docx::xml::Tree;
@@ -25,7 +35,7 @@
 //!
 //! let src = r#"<x:document xmlns:x="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><x:body/></x:document>"#;
 //! let mut tree = Tree::parse(src)?;
-//! let body = tree.child(tree.root_element(), Some(ns::W), "body").unwrap();
+//! let body = tree.child(tree.root_element(), Some(ns::W), "body")?.unwrap();
 //! let p = tree.create_element(Some(ns::W), "w:p")?;
 //! tree.append(body, p)?;
 //! // The new paragraph takes the prefix the file uses.
@@ -40,6 +50,7 @@ mod write;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Range;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::{Error, Limits};
 
@@ -48,10 +59,18 @@ pub const XML_NS: &str = "http://www.w3.org/XML/1998/namespace";
 /// The namespace of namespace declarations (`xmlns`, `xmlns:p`).
 pub const XMLNS_NS: &str = "http://www.w3.org/2000/xmlns/";
 
-/// A node of a [`Tree`]. Ids are only meaningful for the tree that made them;
-/// passing an id to another tree's methods may panic.
+/// A handle to a node of a [`Tree`].
+///
+/// A handle carries the identity of the tree that made it. Every method of
+/// [`Tree`] checks it and answers a handle from another tree, a clone of
+/// the tree included, with [`Error::ForeignNode`]. Nodes are never freed
+/// while their tree lives, so a handle cannot go stale: a detached node can
+/// be attached again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct NodeId(u32);
+pub struct NodeId {
+    tree: u64,
+    index: u32,
+}
 
 /// What a node is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -106,6 +125,8 @@ impl Span {
     }
 }
 
+/// The index of a node in its tree.
+type Ix = u32;
 type ScopeId = u32;
 type UriId = u32;
 type NameId = u32;
@@ -203,8 +224,8 @@ const DESCEND: u8 = 2;
 
 #[derive(Debug, Clone)]
 struct Node {
-    parent: Option<NodeId>,
-    children: Vec<NodeId>,
+    parent: Option<Ix>,
+    children: Vec<Ix>,
     data: Data,
     span: Option<Span>,
     flags: u8,
@@ -216,9 +237,20 @@ enum Encoding {
     Utf16 { big_endian: bool, bom: bool },
 }
 
+/// Gives every tree its own identity, so that handles know their tree.
+static NEXT_TREE: AtomicU64 = AtomicU64::new(1);
+
+fn new_tree_id() -> u64 {
+    NEXT_TREE.fetch_add(1, Ordering::Relaxed)
+}
+
 /// A parsed XML part. The [`xml`](self) page explains how it keeps bytes.
-#[derive(Debug, Clone)]
+///
+/// A clone is a tree of its own: handles of the original do not address its
+/// nodes.
+#[derive(Debug)]
 pub struct Tree {
+    id: u64,
     bufs: Vec<Box<str>>,
     nodes: Vec<Node>,
     scopes: Vec<Scope>,
@@ -229,7 +261,23 @@ pub struct Tree {
     encoding: Encoding,
 }
 
-const DOCUMENT: NodeId = NodeId(0);
+impl Clone for Tree {
+    fn clone(&self) -> Tree {
+        Tree {
+            id: new_tree_id(),
+            bufs: self.bufs.clone(),
+            nodes: self.nodes.clone(),
+            scopes: self.scopes.clone(),
+            names: self.names.clone(),
+            name_index: self.name_index.clone(),
+            uris: self.uris.clone(),
+            uri_index: self.uri_index.clone(),
+            encoding: self.encoding,
+        }
+    }
+}
+
+const DOCUMENT: Ix = 0;
 const XML_URI: UriId = 0;
 const XMLNS_URI: UriId = 1;
 
@@ -246,6 +294,7 @@ impl Tree {
     pub(crate) fn parse_limited(bytes: Vec<u8>, limits: &Limits) -> Result<Tree, Error> {
         let (text, encoding) = parse::decode_bytes(bytes)?;
         let mut t = Tree {
+            id: new_tree_id(),
             bufs: vec![],
             nodes: vec![],
             scopes: vec![Scope::new(None, vec![])],
@@ -272,26 +321,31 @@ impl Tree {
     /// unattached, ready for [`append`](Self::append) or
     /// [`insert`](Self::insert). `namespaces` binds the prefixes the
     /// fragment uses, as `(prefix, namespace)` pairs, with an empty prefix
-    /// for the default namespace.
+    /// for the default namespace; each prefix may appear once.
     ///
     /// The fragment's nodes are written as parsed wherever the tree binds
     /// the same prefixes to the same namespaces, and with the tree's own
-    /// prefixes where it does not.
+    /// prefixes where it does not. The fragment is parsed with the default
+    /// [`Limits`].
     pub fn parse_fragment(
         &mut self,
         xml: &str,
         namespaces: &[(&str, &str)],
     ) -> Result<Vec<NodeId>, Error> {
         let mut bindings: Vec<(Box<str>, Option<UriId>)> = vec![];
-        for &(p, uri) in namespaces {
+        for (i, &(p, uri)) in namespaces.iter().enumerate() {
+            let bad = || Err(Error::Edit(format!("cannot bind prefix {p:?} to {uri:?}")));
             if !(p.is_empty() || chars::is_ncname(p))
                 || p == "xmlns"
                 || (p == "xml") != (uri == XML_NS)
+                || uri.is_empty()
+                || uri == XMLNS_NS
+                || chars::check_chars(uri).is_err()
             {
-                return Err(Error::Edit(format!("cannot bind prefix {p:?} to {uri:?}")));
+                return bad();
             }
-            if uri.is_empty() || uri == XMLNS_NS {
-                return Err(Error::Edit(format!("cannot bind prefix {p:?} to {uri:?}")));
+            if namespaces[..i].iter().any(|&(q, _)| q == p) {
+                return Err(Error::Edit(format!("the prefix {p:?} is bound twice")));
             }
             let u = self.intern_uri(uri);
             bindings.push((p.into(), Some(u)));
@@ -299,7 +353,7 @@ impl Tree {
         let scope = self.push_scope(Scope::new(None, bindings));
         let (nodes, scopes, bufs) = (self.nodes.len(), self.scopes.len(), self.bufs.len());
         match parse::parse(self, xml.to_owned(), None, scope, true, &Limits::default()) {
-            Ok(ids) => Ok(ids),
+            Ok(ids) => Ok(ids.into_iter().map(|i| self.handle(i)).collect()),
             Err(e) => {
                 self.nodes.truncate(nodes);
                 self.scopes.truncate(scopes);
@@ -339,29 +393,31 @@ impl Tree {
 
     /// True if an edit reached the document since it was parsed.
     pub fn is_changed(&self) -> bool {
-        self.nodes[DOCUMENT.index()].flags != 0
+        self.nodes[DOCUMENT as usize].flags != 0
     }
 
     // ---- reading ----------------------------------------------------------
 
     /// The document node: the parent of the prolog and the root element.
     pub fn document(&self) -> NodeId {
-        DOCUMENT
+        self.handle(DOCUMENT)
     }
 
     /// The root element.
     pub fn root_element(&self) -> NodeId {
         // A parsed document always has one; the parser refuses others.
-        self.children(DOCUMENT)
+        let root = self.nodes[DOCUMENT as usize]
+            .children
             .iter()
             .copied()
-            .find(|&c| self.is_element(c))
-            .unwrap_or(DOCUMENT)
+            .find(|&c| matches!(self.n(c).data, Data::Element(_)))
+            .unwrap_or(DOCUMENT);
+        self.handle(root)
     }
 
     /// What the node is.
-    pub fn kind(&self, id: NodeId) -> NodeKind {
-        match self.node(id).data {
+    pub fn kind(&self, id: NodeId) -> Result<NodeKind, Error> {
+        Ok(match self.node(id)?.data {
             Data::Document => NodeKind::Document,
             Data::Element(_) => NodeKind::Element,
             Data::Text(_) => NodeKind::Text,
@@ -369,69 +425,81 @@ impl Tree {
             Data::Comment => NodeKind::Comment,
             Data::Pi => NodeKind::ProcessingInstruction,
             Data::Decl => NodeKind::Declaration,
-        }
-    }
-
-    /// True for an element.
-    pub fn is_element(&self, id: NodeId) -> bool {
-        matches!(self.node(id).data, Data::Element(_))
-    }
-
-    /// The name of an element, `None` for other nodes.
-    pub fn name(&self, id: NodeId) -> Option<Name<'_>> {
-        match &self.node(id).data {
-            Data::Element(e) => Some(self.name_of(e.name)),
-            _ => None,
-        }
-    }
-
-    /// True if the node is an element with this namespace and local name.
-    pub fn is(&self, id: NodeId, namespace: Option<&str>, local: &str) -> bool {
-        match &self.node(id).data {
-            Data::Element(e) => self.name_matches(e.name, namespace, local),
-            _ => false,
-        }
-    }
-
-    /// The parent, `None` for the document node and for unattached nodes.
-    pub fn parent(&self, id: NodeId) -> Option<NodeId> {
-        self.node(id).parent
-    }
-
-    /// The children in document order.
-    pub fn children(&self, id: NodeId) -> &[NodeId] {
-        &self.node(id).children
-    }
-
-    /// The child elements in document order.
-    pub fn elements(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
-        self.children(id)
-            .iter()
-            .copied()
-            .filter(|&c| self.is_element(c))
-    }
-
-    /// The first child element with this name.
-    pub fn child(&self, id: NodeId, namespace: Option<&str>, local: &str) -> Option<NodeId> {
-        self.children(id)
-            .iter()
-            .copied()
-            .find(|&c| self.is(c, namespace, local))
-    }
-
-    /// All nodes below `id` in document order, `id` itself excluded.
-    pub fn descendants(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
-        let mut stack: Vec<NodeId> = self.children(id).iter().rev().copied().collect();
-        std::iter::from_fn(move || {
-            let next = stack.pop()?;
-            stack.extend(self.children(next).iter().rev().copied());
-            Some(next)
         })
     }
 
+    /// True for an element.
+    pub fn is_element(&self, id: NodeId) -> Result<bool, Error> {
+        Ok(matches!(self.node(id)?.data, Data::Element(_)))
+    }
+
+    /// The name of an element, `None` for other nodes.
+    pub fn name(&self, id: NodeId) -> Result<Option<Name<'_>>, Error> {
+        Ok(match &self.node(id)?.data {
+            Data::Element(e) => Some(self.name_of(e.name)),
+            _ => None,
+        })
+    }
+
+    /// True if the node is an element with this namespace and local name.
+    pub fn is(&self, id: NodeId, namespace: Option<&str>, local: &str) -> Result<bool, Error> {
+        Ok(self.is_ix(self.ix(id)?, namespace, local))
+    }
+
+    /// The parent, `None` for the document node and for unattached nodes.
+    pub fn parent(&self, id: NodeId) -> Result<Option<NodeId>, Error> {
+        Ok(self.node(id)?.parent.map(|p| self.handle(p)))
+    }
+
+    /// The children in document order.
+    pub fn children(
+        &self,
+        id: NodeId,
+    ) -> Result<impl DoubleEndedIterator<Item = NodeId> + ExactSizeIterator + '_, Error> {
+        Ok(self.node(id)?.children.iter().map(|&c| self.handle(c)))
+    }
+
+    /// The child elements in document order.
+    pub fn elements(&self, id: NodeId) -> Result<impl Iterator<Item = NodeId> + '_, Error> {
+        Ok(self
+            .node(id)?
+            .children
+            .iter()
+            .copied()
+            .filter(|&c| matches!(self.n(c).data, Data::Element(_)))
+            .map(|c| self.handle(c)))
+    }
+
+    /// The first child element with this name.
+    pub fn child(
+        &self,
+        id: NodeId,
+        namespace: Option<&str>,
+        local: &str,
+    ) -> Result<Option<NodeId>, Error> {
+        Ok(self
+            .node(id)?
+            .children
+            .iter()
+            .copied()
+            .find(|&c| self.is_ix(c, namespace, local))
+            .map(|c| self.handle(c)))
+    }
+
+    /// All nodes below `id` in document order, `id` itself excluded.
+    pub fn descendants(&self, id: NodeId) -> Result<impl Iterator<Item = NodeId> + '_, Error> {
+        let mut stack: Vec<Ix> = self.node(id)?.children.iter().rev().copied().collect();
+        Ok(std::iter::from_fn(move || {
+            let next = stack.pop()?;
+            stack.extend(self.n(next).children.iter().rev().copied());
+            Some(self.handle(next))
+        }))
+    }
+
     /// The parent, its parent and so on up to the document node.
-    pub fn ancestors(&self, id: NodeId) -> impl Iterator<Item = NodeId> + '_ {
-        std::iter::successors(self.parent(id), move |&p| self.parent(p))
+    pub fn ancestors(&self, id: NodeId) -> Result<impl Iterator<Item = NodeId> + '_, Error> {
+        let first = self.node(id)?.parent;
+        Ok(std::iter::successors(first, move |&p| self.n(p).parent).map(|p| self.handle(p)))
     }
 
     /// The value of an attribute, found by namespace and local name.
@@ -440,40 +508,43 @@ impl Tree {
         id: NodeId,
         namespace: Option<&str>,
         local: &str,
-    ) -> Option<Cow<'_, str>> {
-        let Data::Element(e) = &self.node(id).data else {
-            return None;
+    ) -> Result<Option<Cow<'_, str>>, Error> {
+        let Data::Element(e) = &self.node(id)?.data else {
+            return Ok(None);
         };
-        match &e.attrs {
+        Ok(match &e.attrs {
             Some(attrs) => attrs
                 .iter()
-                .find(|a| self.name_matches(a.name, namespace, local))
+                .find(|a| !self.is_decl(a.name) && self.name_matches(a.name, namespace, local))
                 .map(|a| self.attr_value(a)),
             None => {
-                let open = e.open?;
+                let Some(open) = e.open else {
+                    return Ok(None);
+                };
                 let tag = self.src(open);
                 // Most lookups miss; a substring search is cheaper than a scan.
                 if !tag.contains(local) {
-                    return None;
+                    return Ok(None);
                 }
                 parse::source_attrs(tag)
                     .find(|a| {
                         let (prefix, l) =
                             chars::split_qname(&tag[a.name.clone()]).unwrap_or(("", ""));
-                        l == local && self.attr_ns(e, prefix) == namespace
+                        let decl = prefix == "xmlns" || (prefix.is_empty() && l == "xmlns");
+                        !decl && l == local && self.attr_ns(e, prefix) == namespace
                     })
                     .map(|a| chars::decode(&tag[a.value], true))
             }
-        }
+        })
     }
 
     /// The attributes of an element in source order, without namespace
     /// declarations. Empty for other nodes.
-    pub fn attributes(&self, id: NodeId) -> Vec<Attribute<'_>> {
-        let Data::Element(e) = &self.node(id).data else {
-            return vec![];
+    pub fn attributes(&self, id: NodeId) -> Result<Vec<Attribute<'_>>, Error> {
+        let Data::Element(e) = &self.node(id)?.data else {
+            return Ok(vec![]);
         };
-        match &e.attrs {
+        Ok(match &e.attrs {
             Some(attrs) => attrs
                 .iter()
                 .filter(|a| !self.is_decl(a.name))
@@ -483,7 +554,9 @@ impl Tree {
                 })
                 .collect(),
             None => {
-                let Some(open) = e.open else { return vec![] };
+                let Some(open) = e.open else {
+                    return Ok(vec![]);
+                };
                 let tag = self.src(open);
                 parse::source_attrs(tag)
                     .filter_map(|a| {
@@ -503,50 +576,39 @@ impl Tree {
                     })
                     .collect()
             }
-        }
+        })
     }
 
     /// The text of a text or CDATA node, references decoded and line ends
     /// normalised. `None` for other nodes.
-    pub fn text(&self, id: NodeId) -> Option<Cow<'_, str>> {
-        let n = self.node(id);
-        match (&n.data, n.span) {
-            (Data::Text(Some(s)), _) => Some(Cow::Borrowed(s)),
-            (Data::Text(None), Some(s)) => Some(chars::decode(self.src(s), false)),
-            (Data::Cdata, Some(s)) => {
-                let raw = self.src(s);
-                let inner = &raw[9..raw.len() - 3];
-                Some(match inner.contains('\r') {
-                    true => Cow::Owned(inner.replace("\r\n", "\n").replace('\r', "\n")),
-                    false => Cow::Borrowed(inner),
-                })
-            }
-            _ => None,
-        }
+    pub fn text(&self, id: NodeId) -> Result<Option<Cow<'_, str>>, Error> {
+        Ok(self.text_ix(self.ix(id)?))
     }
 
     /// The text of all text and CDATA nodes at and below `id`, in order.
-    pub fn text_content(&self, id: NodeId) -> String {
+    pub fn text_content(&self, id: NodeId) -> Result<String, Error> {
         let mut s = String::new();
-        for d in std::iter::once(id).chain(self.descendants(id)) {
-            if let Some(t) = self.text(d) {
+        for d in std::iter::once(id).chain(self.descendants(id)?) {
+            if let Some(t) = self.text(d)? {
                 s.push_str(&t);
             }
         }
-        s
+        Ok(s)
     }
 
     /// The byte range a node was parsed from, in the bytes given to
     /// [`parse`](Self::parse). `None` for nodes that were created or came
     /// from a fragment. It stays the same after edits.
-    pub fn source_range(&self, id: NodeId) -> Option<Range<usize>> {
-        let s = self.node(id).span?;
+    pub fn source_range(&self, id: NodeId) -> Result<Option<Range<usize>>, Error> {
+        let Some(s) = self.node(id)?.span else {
+            return Ok(None);
+        };
         if s.buf != 0 {
-            return None;
+            return Ok(None);
         }
         let text = &self.bufs[0];
         let r = s.range();
-        Some(match self.encoding {
+        Ok(Some(match self.encoding {
             Encoding::Utf8 { bom } => {
                 let o = if bom { 3 } else { 0 };
                 r.start + o..r.end + o
@@ -556,7 +618,7 @@ impl Tree {
                 let start = text[..r.start].encode_utf16().count() * 2 + o;
                 start..start + text[r].encode_utf16().count() * 2
             }
-        })
+        }))
     }
 
     // ---- editing ----------------------------------------------------------
@@ -575,37 +637,42 @@ impl Tree {
             close: None,
             attrs: Some(vec![]),
         };
-        Ok(self.push(Data::Element(Box::new(el)), None))
+        let i = self.push(Data::Element(Box::new(el)), None)?;
+        Ok(self.handle(i))
     }
 
-    /// Creates an unattached text node.
+    /// Creates an unattached text node. Any text of characters XML allows
+    /// can be written; the writer escapes what needs escaping.
     pub fn create_text(&mut self, text: &str) -> Result<NodeId, Error> {
         chars::check_chars(text).map_err(Error::Edit)?;
-        Ok(self.push(Data::Text(Some(text.into())), None))
+        let i = self.push(Data::Text(Some(text.into())), None)?;
+        Ok(self.handle(i))
     }
 
     /// Replaces the text of a text or CDATA node, or replaces all children
-    /// of an element by one text node.
+    /// of an element by one text node. A CDATA section becomes a text node.
     pub fn set_text(&mut self, id: NodeId, text: &str) -> Result<(), Error> {
+        let i = self.ix(id)?;
         chars::check_chars(text).map_err(Error::Edit)?;
-        match self.node(id).data {
+        match self.n(i).data {
             Data::Text(_) | Data::Cdata => {
-                if self.parent(id) == Some(DOCUMENT) {
+                if self.n(i).parent == Some(DOCUMENT) {
                     return Err(Error::Edit(
                         "text outside the root element cannot be changed".into(),
                     ));
                 }
-                self.node_mut(id).data = Data::Text(Some(text.into()));
-                self.node_mut(id).span = None;
-                self.touch(id, CHANGED);
+                let n = self.n_mut(i);
+                n.data = Data::Text(Some(text.into()));
+                n.span = None;
+                self.touch(i, CHANGED);
                 Ok(())
             }
             Data::Element(_) => {
-                for c in self.children(id).to_vec() {
+                let t = self.push(Data::Text(Some(text.into())), None)?;
+                for c in self.n(i).children.clone() {
                     self.unlink(c);
                 }
-                let t = self.push(Data::Text(Some(text.into())), None);
-                self.link(id, None, t);
+                self.link(i, None, t);
                 Ok(())
             }
             _ => Err(Error::Edit(
@@ -625,12 +692,16 @@ impl Tree {
         name: &str,
         value: &str,
     ) -> Result<(), Error> {
+        let i = self.ix(id)?;
         chars::check_chars(value).map_err(Error::Edit)?;
+        if !matches!(self.n(i).data, Data::Element(_)) {
+            return Err(Error::Edit("only elements have attributes".into()));
+        }
         let name = self.checked_name(namespace, name)?;
-        self.attrs_mut(id)?;
+        self.attrs_mut(i)?;
         let Tree { nodes, names, .. } = self;
-        let Data::Element(e) = &mut nodes[id.index()].data else {
-            unreachable!("checked by attrs_mut")
+        let Data::Element(e) = &mut nodes[i as usize].data else {
+            return Err(Error::Edit("only elements have attributes".into()));
         };
         let attrs = e.attrs.get_or_insert_with(Vec::new);
         let new = &names[name as usize];
@@ -647,20 +718,27 @@ impl Tree {
                 quote: b'"',
             }),
         }
-        self.touch(id, CHANGED);
+        self.touch(i, CHANGED);
         Ok(())
     }
 
     /// Removes an attribute. Returns whether the element had it.
-    pub fn remove_attribute(&mut self, id: NodeId, namespace: Option<&str>, local: &str) -> bool {
-        if self.attribute(id, namespace, local).is_none() || self.attrs_mut(id).is_err() {
-            return false;
+    pub fn remove_attribute(
+        &mut self,
+        id: NodeId,
+        namespace: Option<&str>,
+        local: &str,
+    ) -> Result<bool, Error> {
+        let i = self.ix(id)?;
+        if self.attribute(id, namespace, local)?.is_none() {
+            return Ok(false);
         }
+        self.attrs_mut(i)?;
         let Tree {
             nodes, names, uris, ..
         } = self;
-        let Data::Element(e) = &mut nodes[id.index()].data else {
-            return false;
+        let Data::Element(e) = &mut nodes[i as usize].data else {
+            return Ok(false);
         };
         let attrs = e.attrs.get_or_insert_with(Vec::new);
         attrs.retain(|a| {
@@ -669,8 +747,8 @@ impl Tree {
                 && *n.local == *local
                 && n.ns.map(|u| &*uris[u as usize]) == namespace)
         });
-        self.touch(id, CHANGED);
-        true
+        self.touch(i, CHANGED);
+        Ok(true)
     }
 
     /// Renames an element, for example `w:t` to `w:delText`. Attributes and
@@ -681,10 +759,11 @@ impl Tree {
         namespace: Option<&str>,
         name: &str,
     ) -> Result<(), Error> {
-        let name = self.checked_name(namespace, name)?;
-        self.attrs_mut(id)?;
+        let i = self.ix(id)?;
+        let Data::Element(e) = &self.n(i).data else {
+            return Err(Error::Edit("only elements have a name to set".into()));
+        };
         if namespace.is_none()
-            && let Data::Element(e) = &self.node(id).data
             && let Some(scope) = e.scope.filter(|&s| Some(s) != e.ctx)
             && self.scopes[scope as usize].get("").flatten().is_some()
         {
@@ -693,20 +772,22 @@ impl Tree {
                     .into(),
             ));
         }
-        if let Data::Element(e) = &mut self.node_mut(id).data {
+        let name = self.checked_name(namespace, name)?;
+        self.attrs_mut(i)?;
+        if let Data::Element(e) = &mut self.n_mut(i).data {
             e.name = name;
             e.renamed = true;
         }
-        self.touch(id, CHANGED);
+        self.touch(i, CHANGED);
         Ok(())
     }
 
     /// Appends `child` as the last child of `parent`, moving it if it is
     /// attached elsewhere.
     pub fn append(&mut self, parent: NodeId, child: NodeId) -> Result<(), Error> {
-        self.check_insert(parent, child)?;
-        self.unlink(child);
-        self.link(parent, None, child);
+        let (p, c) = self.check_insert(parent, child)?;
+        self.unlink(c);
+        self.link(p, None, c);
         Ok(())
     }
 
@@ -714,15 +795,15 @@ impl Tree {
     /// is attached elsewhere. The index counts the children after `child`
     /// has left its old place.
     pub fn insert(&mut self, parent: NodeId, index: usize, child: NodeId) -> Result<(), Error> {
-        self.check_insert(parent, child)?;
-        let len = self.children(parent).len() - usize::from(self.parent(child) == Some(parent));
+        let (p, c) = self.check_insert(parent, child)?;
+        let len = self.n(p).children.len() - usize::from(self.n(c).parent == Some(p));
         if index > len {
             return Err(Error::Edit(format!(
                 "index {index} is past the end of the element's {len} children"
             )));
         }
-        self.unlink(child);
-        self.link(parent, Some(index), child);
+        self.unlink(c);
+        self.link(p, Some(index), c);
         Ok(())
     }
 
@@ -736,69 +817,122 @@ impl Tree {
         self.insert_next_to(anchor, child, 1)
     }
 
-    /// Takes a node out of the tree. It can be attached again. The root
-    /// element and the nodes around it cannot be detached.
+    /// Takes a node out of the tree. It stays in the tree's memory and can be
+    /// attached again. The root element and the nodes around it cannot be
+    /// detached.
     pub fn detach(&mut self, id: NodeId) -> Result<(), Error> {
-        self.check_editable(id)?;
-        self.unlink(id);
+        let i = self.ix(id)?;
+        self.check_editable(i)?;
+        self.unlink(i);
         Ok(())
     }
 
     /// Copies a node and everything below it. The copy is unattached and is
     /// written as the original was wherever it is attached in the same
-    /// namespace scope.
+    /// namespace scope. The document node and the XML declaration cannot be
+    /// copied.
     pub fn deep_clone(&mut self, id: NodeId) -> Result<NodeId, Error> {
-        if matches!(self.node(id).data, Data::Document) {
-            return Err(Error::Edit("the document node cannot be copied".into()));
+        let i = self.ix(id)?;
+        if matches!(self.n(i).data, Data::Document | Data::Decl) {
+            return Err(Error::Edit(
+                "the document node and the XML declaration cannot be copied".into(),
+            ));
         }
-        let copy = |t: &mut Tree, src: NodeId, parent: Option<NodeId>| {
-            let n = t.node(src).clone();
-            let id = t.push_raw(Node {
+        let copy = |t: &mut Tree, src: Ix, parent: Option<Ix>| -> Result<Ix, Error> {
+            let n = t.n(src);
+            let node = Node {
                 parent,
                 children: vec![],
-                data: n.data,
+                data: n.data.clone(),
                 span: n.span,
                 flags: n.flags,
-            });
+            };
+            let id = t.push_raw(node)?;
             if let Some(p) = parent {
-                t.node_mut(p).children.push(id);
+                t.n_mut(p).children.push(id);
             }
-            id
+            Ok(id)
         };
-        let top = copy(self, id, None);
-        let mut stack = vec![(id, top)];
+        let top = copy(self, i, None)?;
+        let mut stack = vec![(i, top)];
         while let Some((src, dst)) = stack.pop() {
-            for c in self.children(src).to_vec() {
-                let n = copy(self, c, Some(dst));
+            for c in self.n(src).children.clone() {
+                let n = copy(self, c, Some(dst))?;
                 stack.push((c, n));
             }
         }
-        Ok(top)
+        Ok(self.handle(top))
     }
 
     // ---- internals --------------------------------------------------------
 
-    fn node(&self, id: NodeId) -> &Node {
-        &self.nodes[id.index()]
+    fn handle(&self, index: Ix) -> NodeId {
+        NodeId {
+            tree: self.id,
+            index,
+        }
     }
 
-    fn node_mut(&mut self, id: NodeId) -> &mut Node {
-        &mut self.nodes[id.index()]
+    /// The index of a handle, checked to belong to this tree.
+    fn ix(&self, id: NodeId) -> Result<Ix, Error> {
+        if id.tree != self.id || id.index as usize >= self.nodes.len() {
+            return Err(Error::ForeignNode);
+        }
+        Ok(id.index)
+    }
+
+    fn node(&self, id: NodeId) -> Result<&Node, Error> {
+        Ok(self.n(self.ix(id)?))
+    }
+
+    /// The node at an index that this tree handed out itself.
+    fn n(&self, i: Ix) -> &Node {
+        &self.nodes[i as usize]
+    }
+
+    fn n_mut(&mut self, i: Ix) -> &mut Node {
+        &mut self.nodes[i as usize]
     }
 
     fn src(&self, s: Span) -> &str {
         &self.bufs[s.buf as usize][s.range()]
     }
 
-    fn push_raw(&mut self, node: Node) -> NodeId {
-        // Spans address at most 4 GiB, and a node takes at least one byte or
-        // one call, so the count cannot overflow before memory runs out.
-        let id = NodeId(u32::try_from(self.nodes.len()).expect("fewer than 2^32 nodes"));
-        self.nodes.push(node);
-        id
+    fn is_ix(&self, i: Ix, namespace: Option<&str>, local: &str) -> bool {
+        match &self.n(i).data {
+            Data::Element(e) => self.name_matches(e.name, namespace, local),
+            _ => false,
+        }
     }
 
-    fn push(&mut self, data: Data, span: Option<Span>) -> NodeId {
+    fn text_ix(&self, i: Ix) -> Option<Cow<'_, str>> {
+        let n = self.n(i);
+        match (&n.data, n.span) {
+            (Data::Text(Some(s)), _) => Some(Cow::Borrowed(s)),
+            (Data::Text(None), Some(s)) => Some(chars::decode(self.src(s), false)),
+            (Data::Cdata, Some(s)) => {
+                let raw = self.src(s);
+                let inner = &raw[9..raw.len() - 3];
+                Some(match inner.contains('\r') {
+                    true => Cow::Owned(inner.replace("\r\n", "\n").replace('\r', "\n")),
+                    false => Cow::Borrowed(inner),
+                })
+            }
+            _ => None,
+        }
+    }
+
+    fn push_raw(&mut self, node: Node) -> Result<Ix, Error> {
+        let Ok(id) = Ix::try_from(self.nodes.len()) else {
+            return Err(Error::Edit(
+                "a tree cannot hold more than 4,294,967,295 nodes".into(),
+            ));
+        };
+        self.nodes.push(node);
+        Ok(id)
+    }
+
+    fn push(&mut self, data: Data, span: Option<Span>) -> Result<Ix, Error> {
         let flags = if span.is_some() { 0 } else { CHANGED };
         self.push_raw(Node {
             parent: None,
@@ -913,18 +1047,18 @@ impl Tree {
 
     /// The element's attributes as a list that edits can change, read from
     /// the source start tag the first time.
-    fn attrs_mut(&mut self, id: NodeId) -> Result<&mut Vec<Attr>, Error> {
-        let Data::Element(e) = &self.node(id).data else {
+    fn attrs_mut(&mut self, i: Ix) -> Result<&mut Vec<Attr>, Error> {
+        let Data::Element(e) = &self.n(i).data else {
             return Err(Error::Edit("only elements have attributes".into()));
         };
         if e.attrs.is_none() {
             let (open, scope) = (e.open, e.scope);
             let list = self.source_attr_list(open, scope);
-            if let Data::Element(e) = &mut self.node_mut(id).data {
+            if let Data::Element(e) = &mut self.n_mut(i).data {
                 e.attrs = Some(list);
             }
         }
-        match &mut self.node_mut(id).data {
+        match &mut self.n_mut(i).data {
             Data::Element(e) => Ok(e.attrs.get_or_insert_with(Vec::new)),
             _ => Err(Error::Edit("only elements have attributes".into())),
         }
@@ -985,14 +1119,17 @@ impl Tree {
         if namespace == Some("") {
             return bad("the empty string is not a namespace; pass None");
         }
+        if let Some(uri) = namespace {
+            chars::check_chars(uri).map_err(Error::Edit)?;
+        }
         let ns = namespace.map(|u| self.intern_uri(u));
         Ok(self.intern_name(prefix, local, ns))
     }
 
     /// Nodes of the prolog and epilogue, the root element and the document
     /// node stay where they are.
-    fn check_editable(&self, id: NodeId) -> Result<(), Error> {
-        if id == DOCUMENT || self.parent(id) == Some(DOCUMENT) {
+    fn check_editable(&self, i: Ix) -> Result<(), Error> {
+        if i == DOCUMENT || self.n(i).parent == Some(DOCUMENT) {
             return Err(Error::Edit(
                 "the root element and the nodes outside it cannot be moved or removed".into(),
             ));
@@ -1000,19 +1137,31 @@ impl Tree {
         Ok(())
     }
 
-    fn check_insert(&self, parent: NodeId, child: NodeId) -> Result<(), Error> {
-        if !self.is_element(parent) {
+    fn check_insert(&self, parent: NodeId, child: NodeId) -> Result<(Ix, Ix), Error> {
+        let (p, c) = (self.ix(parent)?, self.ix(child)?);
+        if !matches!(self.n(p).data, Data::Element(_)) {
             return Err(Error::Edit("only an element can take children".into()));
         }
-        self.check_editable(child)?;
-        if child == parent || self.ancestors(parent).any(|a| a == child) {
-            return Err(Error::Edit("a node cannot be inserted into itself".into()));
+        self.check_editable(c)?;
+        if matches!(self.n(c).data, Data::Decl) {
+            return Err(Error::Edit(
+                "the XML declaration cannot go inside an element".into(),
+            ));
         }
-        Ok(())
+        let mut cur = Some(p);
+        while let Some(a) = cur {
+            if a == c {
+                return Err(Error::Edit("a node cannot be inserted into itself".into()));
+            }
+            cur = self.n(a).parent;
+        }
+        Ok((p, c))
     }
 
     fn insert_next_to(&mut self, anchor: NodeId, child: NodeId, after: usize) -> Result<(), Error> {
-        let Some(parent) = self.parent(anchor) else {
+        let a = self.ix(anchor)?;
+        self.ix(child)?;
+        let Some(parent) = self.n(a).parent else {
             return Err(Error::Edit("the anchor is not attached".into()));
         };
         if anchor == child {
@@ -1020,27 +1169,23 @@ impl Tree {
                 "a node cannot be inserted next to itself".into(),
             ));
         }
-        self.check_insert(parent, child)?;
-        self.unlink(child);
-        let i = self
-            .children(parent)
-            .iter()
-            .position(|&c| c == anchor)
-            .unwrap_or(0);
-        self.link(parent, Some(i + after), child);
+        let (p, c) = self.check_insert(self.handle(parent), child)?;
+        self.unlink(c);
+        let i = self.n(p).children.iter().position(|&k| k == a).unwrap_or(0);
+        self.link(p, Some(i + after), c);
         Ok(())
     }
 
-    fn unlink(&mut self, id: NodeId) {
-        if let Some(p) = self.node_mut(id).parent.take() {
-            self.node_mut(p).children.retain(|&c| c != id);
+    fn unlink(&mut self, i: Ix) {
+        if let Some(p) = self.n_mut(i).parent.take() {
+            self.n_mut(p).children.retain(|&c| c != i);
             self.touch(p, DESCEND);
         }
     }
 
-    fn link(&mut self, parent: NodeId, index: Option<usize>, child: NodeId) {
-        self.node_mut(child).parent = Some(parent);
-        let kids = &mut self.node_mut(parent).children;
+    fn link(&mut self, parent: Ix, index: Option<usize>, child: Ix) {
+        self.n_mut(child).parent = Some(parent);
+        let kids = &mut self.n_mut(parent).children;
         match index {
             Some(i) => kids.insert(i.min(kids.len()), child),
             None => kids.push(child),
@@ -1051,21 +1196,15 @@ impl Tree {
     /// Flags a node and marks its ancestors as changed below. An attached
     /// ancestor that is already marked has marked ancestors, so the walk
     /// stops there.
-    fn touch(&mut self, id: NodeId, flag: u8) {
-        self.node_mut(id).flags |= flag;
-        let mut cur = self.parent(id);
+    fn touch(&mut self, i: Ix, flag: u8) {
+        self.n_mut(i).flags |= flag;
+        let mut cur = self.n(i).parent;
         while let Some(c) = cur {
-            if self.node(c).flags & DESCEND != 0 {
+            if self.n(c).flags & DESCEND != 0 {
                 break;
             }
-            self.node_mut(c).flags |= DESCEND;
-            cur = self.parent(c);
+            self.n_mut(c).flags |= DESCEND;
+            cur = self.n(c).parent;
         }
-    }
-}
-
-impl NodeId {
-    fn index(self) -> usize {
-        self.0 as usize
     }
 }
