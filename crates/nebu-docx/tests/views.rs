@@ -742,3 +742,21 @@ fn the_views_are_borrowed_from_one_reading() {
             .is_none()
     );
 }
+
+#[test]
+fn a_table_style_takes_part_in_the_cascade() {
+    let styles = r#"<w:style w:type="table" w:styleId="BoldTable"><w:name w:val="Bold Table"/><w:rPr><w:b/></w:rPr></w:style><w:style w:type="paragraph" w:styleId="BoldPara"><w:name w:val="Bold Para"/><w:rPr><w:b/></w:rPr></w:style><w:style w:type="character" w:styleId="BoldBase"><w:name w:val="Bold Base"/><w:rPr><w:b/></w:rPr></w:style><w:style w:type="character" w:styleId="BoldChild"><w:name w:val="Bold Child"/><w:basedOn w:val="BoldBase"/><w:rPr><w:b/></w:rPr></w:style>"#;
+    // As Word reads corpus/edge.docx: the table style and the paragraph
+    // style turn bold over twice; within one chain of styles the nearest
+    // decides.
+    let body = r#"<w:tbl><w:tblPr><w:tblStyle w:val="BoldTable"/></w:tblPr><w:tr><w:tc><w:p><w:pPr><w:pStyle w:val="BoldPara"/></w:pPr><w:r><w:t>both</w:t></w:r></w:p><w:p><w:r><w:t>table</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:rPr><w:rStyle w:val="BoldChild"/></w:rPr><w:t>chain</w:t></w:r></w:p>"#;
+    let mut d = package(body, styles, "", "");
+    let on: Vec<(String, bool)> = run_toggles(&mut d)
+        .into_iter()
+        .map(|(t, g)| (t, g.has(nebu_docx::Toggle::Bold)))
+        .collect();
+    assert_eq!(on, [("chain".to_string(), true)]);
+    // Paragraphs in tables give their runs through no view yet; their
+    // effective bold shows in the walk's toggles, tested through Word in
+    // tests/word.rs for the body.
+}

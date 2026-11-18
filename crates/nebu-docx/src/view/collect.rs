@@ -1129,13 +1129,21 @@ fn round2(v: f64) -> f64 {
 }
 
 /// Joins revisions that Word reports as one: neighbours of the same kind,
-/// author and date with no content between them.
+/// author and date with no content between them. A revision that begins
+/// where another begins and holds it (an insertion around a deletion)
+/// does not stand between them, as in Word, which lists it after.
 pub(crate) fn merge_revisions(mut done: Vec<RevisionSpans>) -> Vec<(Revision, Vec<Part>)> {
     done.sort_by_key(|d| d.seq);
-    let mut out: Vec<(Revision, Vec<Part>, usize)> = vec![];
+    // Each kept revision with the parts of its text and where its content
+    // starts and ends.
+    let mut out: Vec<(Revision, Vec<Part>, usize, usize)> = vec![];
     for d in done {
         let r = d.revision;
-        if let Some((last, parts, last_end)) = out.last_mut()
+        let mut at = out.len();
+        while at > 0 && out[at - 1].2 == d.start && out[at - 1].3 > d.start {
+            at -= 1;
+        }
+        if let Some((last, parts, _, last_end)) = at.checked_sub(1).and_then(|i| out.get_mut(i))
             && matches!(
                 last.target,
                 RevisionTarget::Text | RevisionTarget::ParagraphMark
@@ -1157,11 +1165,11 @@ pub(crate) fn merge_revisions(mut done: Vec<RevisionSpans>) -> Vec<(Revision, Ve
             *last_end = d.end;
             continue;
         }
-        out.push((r, d.parts, d.end));
+        out.push((r, d.parts, d.start, d.end));
     }
     out.into_iter()
         .enumerate()
-        .map(|(i, (mut r, parts, _))| {
+        .map(|(i, (mut r, parts, _, _))| {
             r.index = i;
             (r, parts)
         })

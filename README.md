@@ -34,7 +34,7 @@ between them. It places table cells on the grid with merged cells and
 nested tables, and lists fields with code and result, tracked changes with
 author and text, comments with their replies, footnotes and endnotes,
 bookmarks, pictures, content controls, styles (findable by the name Word
-shows in English, German or French), numbering definitions and sections
+shows in English), numbering definitions and sections
 with their headers and footers. Each view has a JSON shape, given in
 [`crates/nebu-docx/schema/views.json`](crates/nebu-docx/schema/views.json).
 The views are checked against what Word reports for a corpus of test
@@ -70,12 +70,12 @@ $ tabellion inspect corpus/birds.docx
 birds.docx: 27 blocks in 2 sections
 
 KIND       ID          TEXT
-title      p:1C0F4262  Breeding bird survey of the Alder Marshes
-heading 1  p:40F87D84  Survey sites
-table      t:46016ED2  Table 1: Sites, visits and counts (5 × 4)
-heading 1  p:004956FE  Species
-figure     p:7574F01D  Figure 1: A wren at the north site
-heading 1  p:6C2A1ADB  Methods
+title      p:70D81267  Breeding bird survey of the Alder Marshes
+heading 1  p:43751766  Survey sites
+table      t:4B0A3871  Table 1: Sites, visits and counts (5 × 4)
+heading 1  p:6E909CDC  Species
+figure     p:2FC0B331  Figure 1: A wren at the north site
+heading 1  p:3351007F  Methods
 
 2 tables, 2 images, 13 fields, 0 revisions, 0 comments, 1 footnote, 1 endnote, 5 bookmarks
 ```

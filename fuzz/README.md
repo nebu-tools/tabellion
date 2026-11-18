@@ -15,10 +15,14 @@ which needs a nightly toolchain:
   what the tree reports, and every node no edit touched must keep its bytes.
   The checks are those of the property tests, in
   `crates/nebu-docx/tests/support/edits.rs`.
-- `views` runs every view of `nebu-docx` and the text with every option.
-  An even first byte makes the rest a file to open; an odd one makes it XML
-  for the body of the sample template, with the usual prefixes bound.
-  Nothing may panic.
+- `views` reads every view of `nebu-docx`, the text with every option and
+  every kind of locator. An even first byte makes the rest a file to open;
+  an odd one makes it XML for the body of the sample template, with the
+  usual prefixes bound. Nothing may panic, and the blocks' text must be the
+  text of the document, white space aside.
+
+`fuzz/Cargo.lock` is committed, so a fuzz build uses the versions it was
+tested with.
 
 ```sh
 cd fuzz

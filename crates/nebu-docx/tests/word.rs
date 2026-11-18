@@ -102,14 +102,6 @@ fn lines(s: &str) -> Vec<String> {
         .collect()
 }
 
-/// The words of a text, after [`lines`].
-fn tokens(s: &str) -> Vec<String> {
-    lines(s)
-        .iter()
-        .flat_map(|l| l.split_whitespace().map(str::to_string).collect::<Vec<_>>())
-        .collect()
-}
-
 fn diff(what: &str, word: &[String], ours: &[String]) -> Option<String> {
     if word == ours {
         return None;
@@ -137,33 +129,167 @@ fn story(r: &Value, key: &str, kind: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// A table being laid out: its index and its cells' pieces of text by row
+/// and column.
+type OpenTable = (usize, std::collections::BTreeMap<(u64, u64), Vec<String>>);
+
+/// Word's reading of the main story laid out as Tabellion lays out text:
+/// a line for each paragraph, and a line for each row of a table, its
+/// cells separated by tabs and the paragraphs of a cell, those of nested
+/// tables too, joined by spaces.
+///
+/// Word gives the paragraphs with their marks and where they start, and
+/// each top-level table's cells with where they start and end, so each
+/// paragraph of a table goes to its cell. A paragraph whose mark is hidden
+/// has no mark in Word's text and runs on into the next, as in Tabellion.
+fn word_layout(paragraphs: &[Value], tables: &[Value]) -> String {
+    struct Cell {
+        table: usize,
+        row: u64,
+        column: u64,
+        start: u64,
+        end: u64,
+    }
+    let mut cells = vec![];
+    for (table, t) in tables.iter().enumerate() {
+        for c in t["cells"].as_array().unwrap() {
+            cells.push(Cell {
+                table,
+                row: c["row"].as_u64().unwrap(),
+                column: c["column"].as_u64().unwrap(),
+                start: c["start"].as_u64().unwrap(),
+                end: c["end"].as_u64().unwrap(),
+            });
+        }
+    }
+    let mut out = String::new();
+    // The open table: its cells' pieces of text by row and column.
+    let mut open: Option<OpenTable> = None;
+    let flush = |out: &mut String, open: &mut Option<OpenTable>| {
+        let Some((_, grid)) = open.take() else { return };
+        let mut row = None;
+        let mut line: Vec<String> = vec![];
+        for ((r, _), pieces) in grid {
+            if row.is_some_and(|x| x != r) {
+                out.push_str(&line.join("\t"));
+                out.push('\n');
+                line.clear();
+            }
+            row = Some(r);
+            line.push(pieces.join(" "));
+        }
+        if row.is_some() {
+            out.push_str(&line.join("\t"));
+            out.push('\n');
+        }
+    };
+    for p in paragraphs {
+        let text = picture_free(p["text"].as_str().unwrap_or(""));
+        if p["table"].as_bool().unwrap_or(false) {
+            let start = p["start"].as_u64().unwrap();
+            // The mark that ends a row lies in no cell.
+            let Some(c) = cells.iter().find(|c| c.start <= start && start < c.end) else {
+                continue;
+            };
+            if open.as_ref().is_some_and(|o| o.0 != c.table) {
+                flush(&mut out, &mut open);
+            }
+            let grid = &mut open.get_or_insert_with(|| (c.table, Default::default())).1;
+            let pieces = grid.entry((c.row, c.column)).or_default();
+            for piece in plain(&text).split('\n') {
+                if !piece.is_empty() {
+                    pieces.push(piece.to_string());
+                }
+            }
+        } else {
+            flush(&mut out, &mut open);
+            out.push_str(&plain(&text));
+        }
+    }
+    flush(&mut out, &mut open);
+    out
+}
+
+/// Word gives an inline picture as the character `/`, where Tabellion's
+/// text has no character for a picture: a `/` that stands alone at the
+/// end of a paragraph is left out.
+fn picture_free(s: &str) -> String {
+    let (body, mark) = match s
+        .char_indices()
+        .rev()
+        .find(|(_, c)| !matches!(c, '\r' | '\u{07}' | '\u{0C}'))
+    {
+        Some((i, c)) => s.split_at(i + c.len_utf8()),
+        None => ("", s),
+    };
+    let body = match body.strip_suffix('/') {
+        Some(b) if b.is_empty() || b.ends_with(' ') => b,
+        _ => body,
+    };
+    format!("{body}{mark}")
+}
+
+/// Lines of text as both sides give them, with the differences named:
+/// Word gives a symbol (`w:sym`) as `(`, where Tabellion gives the code the
+/// symbol font has for it, often in the private use area from U+F000; and
+/// Word's list of cells has one cell for a merged cell and none for the
+/// grid columns a row skips, where Tabellion writes a tab for each grid
+/// column, so runs of tabs compare as one and tabs at the ends of a line
+/// are left out.
+fn layout_lines(s: &str) -> Vec<String> {
+    s.lines()
+        .map(|l| {
+            let l: String = l
+                .chars()
+                .map(|c| {
+                    if ('\u{F000}'..='\u{F0FF}').contains(&c) {
+                        '('
+                    } else {
+                        c
+                    }
+                })
+                .collect();
+            let mut out = String::new();
+            for c in l.trim_matches('\t').chars() {
+                if !(c == '\t' && out.ends_with('\t')) {
+                    out.push(c);
+                }
+            }
+            out
+        })
+        .collect()
+}
+
 #[test]
-fn main_text_matches_word() {
+fn main_text_matches_word_paragraph_by_paragraph() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        for (view, key) in [
-            (Revisions::Current, "stories"),
-            (Revisions::Accepted, "accepted"),
-            (Revisions::Rejected, "rejected"),
+        for (view, key, tables) in [
+            (Revisions::Current, "paragraphs", "tables"),
+            (
+                Revisions::Accepted,
+                "accepted_paragraphs",
+                "accepted_tables",
+            ),
+            (
+                Revisions::Rejected,
+                "rejected_paragraphs",
+                "rejected_tables",
+            ),
         ] {
-            let word = story(&r, key, "1");
-            // Word saves the stories it changed when accepting; a document
-            // without revisions has only the first reading.
-            let word = if word.is_empty() {
-                story(&r, "stories", "1")
-            } else {
-                word
-            };
-            let ours = doc.views().unwrap().text(&TextOptions {
+            let paragraphs = r[key]
+                .as_array()
+                .unwrap_or_else(|| panic!("{name} has no {key}; run corpus/build.sh read"));
+            let tables = r[tables]
+                .as_array()
+                .unwrap_or_else(|| panic!("{name} has no {tables}"));
+            let word = layout_lines(&word_layout(paragraphs, tables));
+            let ours = layout_lines(&doc.views().unwrap().text(&TextOptions {
                 revisions: view,
                 text_boxes: false,
                 ..TextOptions::default()
-            });
-            // Tabellion puts the cells of a nested table into the text of
-            // the outer cell, separated by spaces, so that a row stays one
-            // line. The comparison is therefore word by word.
-            let w = tokens(&plain(&word.concat()));
-            if let Some(d) = diff(&format!("{name}, {key}"), &w, &tokens(&ours)) {
+            }));
+            if let Some(d) = diff(&format!("{name}, {key}"), &word, &ours) {
                 failures.push(d);
             }
         }
@@ -284,7 +410,8 @@ fn word_code(s: &str) -> String {
 fn fields_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let fields = doc.views().unwrap().fields();
+        let views = doc.views().unwrap();
+        let fields = views.fields();
         for (story, kinds) in [
             (1, &[StoryKind::Main][..]),
             (2, &[StoryKind::Footnote]),
@@ -322,28 +449,52 @@ fn fields_match_word() {
                 ));
             }
         }
-        // Headers and footers: Word lists a header's fields once per
-        // section that shows it; compare the codes as a set.
-        let mut word: Vec<String> = r["fields"]
+        // Headers and footers: each section's, kind by kind, with codes,
+        // results and order.
+        let sections = views.sections();
+        for (w, sec) in r["sections"]
             .as_array()
             .unwrap()
             .iter()
-            .filter(|f| (6..=11).contains(&f["story"].as_i64().unwrap_or(0)))
-            .map(|f| word_code(f["code"].as_str().unwrap_or("")))
-            .collect();
-        let mut ours: Vec<String> = fields
-            .iter()
-            .filter(|f| matches!(f.location.story, StoryKind::Header | StoryKind::Footer))
-            .map(|f| f.code.clone())
-            .collect();
-        word.sort();
-        word.dedup();
-        ours.sort();
-        ours.dedup();
-        if word != ours {
-            failures.push(format!(
-                "{name}, headers and footers:\n  Word:      {word:?}\n  Tabellion: {ours:?}"
-            ));
+            .zip(sections.iter())
+        {
+            for (key, list) in [("headers", &sec.headers), ("footers", &sec.footers)] {
+                for h in w[key].as_array().unwrap() {
+                    let kind = match h["kind"].as_i64() {
+                        Some(1) => "default",
+                        Some(2) => "first",
+                        _ => "even",
+                    };
+                    let word: Vec<(String, Vec<String>)> = h["fields"]
+                        .as_array()
+                        .map(|a| {
+                            a.iter()
+                                .map(|f| {
+                                    (
+                                        word_code(f["code"].as_str().unwrap_or("")),
+                                        lines(&plain(f["result"].as_str().unwrap_or(""))),
+                                    )
+                                })
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    let ours: Vec<(String, Vec<String>)> =
+                        match list.iter().find(|x| x.kind == kind) {
+                            Some(x) => fields
+                                .iter()
+                                .filter(|f| f.location.part == x.part)
+                                .map(|f| (f.code.clone(), lines(&f.result)))
+                                .collect(),
+                            None => vec![],
+                        };
+                    if word != ours {
+                        failures.push(format!(
+                            "{name}, section {}, {kind} {key}:\n  Word:      {word:?}\n  Tabellion: {ours:?}",
+                            sec.index
+                        ));
+                    }
+                }
+            }
         }
     }
     check(failures);
@@ -491,6 +642,14 @@ fn notes_match_word() {
             ("footnotes", NoteKind::Footnote),
             ("endnotes", NoteKind::Endnote),
         ] {
+            // The views show revisions accepted; so does Word's reading
+            // after accepting them, where it has one.
+            let accepted = format!("accepted_{key}");
+            let key = if r[&accepted].is_array() {
+                accepted.as_str()
+            } else {
+                key
+            };
             let word: Vec<(usize, String)> = r[key]
                 .as_array()
                 .map(|a| {
@@ -528,7 +687,14 @@ fn headers_and_footers_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
         let sections = doc.views().unwrap().sections();
-        let word = r["sections"].as_array().cloned().unwrap_or_default();
+        // The views show revisions accepted, as Word's reading after
+        // accepting them does.
+        let key = if r["accepted_sections"].is_array() {
+            "accepted_sections"
+        } else {
+            "sections"
+        };
+        let word = r[key].as_array().cloned().unwrap_or_default();
         if word.len() != sections.len() {
             failures.push(format!(
                 "{name}: Word has {} sections, Tabellion {}",
@@ -806,4 +972,256 @@ fn every_block_has_an_id_and_text_matches_its_content() {
             }
         }
     }
+}
+
+/// Bold, italic and hidden text after the style cascade, against Word's
+/// `Range.Font` for each paragraph. Word's paragraphs are those it shows:
+/// a paragraph whose mark is hidden is one with the next, and hidden text
+/// is not in their text. So a run that is not hidden must stand in a
+/// paragraph of Word's that is not wholly hidden and, where Word's value
+/// is not mixed, have Word's bold and italic; a hidden run must stand in
+/// no paragraph's text unless it also appears as visible text elsewhere.
+#[test]
+fn toggles_match_word() {
+    use nebu_docx::Toggle;
+    let mut failures = vec![];
+    let mut compared = 0;
+    for (name, mut doc, r) in documents() {
+        let word: Vec<(String, i64, i64, i64)> = r["paragraphs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|p| !p["table"].as_bool().unwrap_or(false))
+            .map(|p| {
+                (
+                    plain(p["text"].as_str().unwrap_or("")),
+                    p["hidden"].as_i64().unwrap_or(0),
+                    p["bold"].as_i64().unwrap_or(0),
+                    p["italic"].as_i64().unwrap_or(0),
+                )
+            })
+            .collect();
+        let views = doc.views().unwrap();
+        for b in views.blocks() {
+            if b.content
+                .iter()
+                .any(|i| matches!(i, Inline::FieldStart { .. } | Inline::Math { .. }))
+            {
+                continue;
+            }
+            for i in &b.content {
+                let Inline::Text {
+                    text,
+                    toggles,
+                    revision: None,
+                    ..
+                } = i
+                else {
+                    continue;
+                };
+                let t = text.trim();
+                if t.len() < 4 {
+                    continue;
+                }
+                let hits: Vec<&(String, i64, i64, i64)> =
+                    word.iter().filter(|w| w.0.contains(t)).collect();
+                if toggles.has(Toggle::Hidden) {
+                    if let Some(w) = hits.first() {
+                        failures.push(format!(
+                            "{name}: {t:?} is hidden here, Word shows it in {:?}",
+                            w.0
+                        ));
+                    }
+                    compared += 1;
+                    continue;
+                }
+                let Some(&&(ref w, hidden, bold, italic)) = hits.first() else {
+                    failures.push(format!("{name}: {t:?} is shown here, Word hides it"));
+                    continue;
+                };
+                if hidden == -1 {
+                    failures.push(format!("{name}: {t:?} is shown here, Word hides {w:?}"));
+                }
+                for (what, value, on) in [
+                    ("bold", bold, toggles.has(Toggle::Bold)),
+                    ("italic", italic, toggles.has(Toggle::Italic)),
+                ] {
+                    if value != 9_999_999 && (value == -1) != on {
+                        failures.push(format!("{name}: {t:?} {what} {on}, Word {value}"));
+                    }
+                }
+                compared += 1;
+            }
+        }
+    }
+    assert!(compared > 100, "compared only {compared} runs");
+    check(failures);
+}
+
+/// Revisions in headers, footers and notes, story by story, against Word's
+/// revisions of each story (`WdStoryType` 2 and 3 for notes, 6 to 11 for
+/// headers and footers).
+#[test]
+fn revisions_in_headers_footers_and_notes_match_word() {
+    let mut failures = vec![];
+    let mut compared = 0;
+    for (name, mut doc, r) in documents() {
+        let views = doc.views().unwrap();
+        for (kind, types) in [
+            (StoryKind::Footnote, &[2][..]),
+            (StoryKind::Endnote, &[3]),
+            (StoryKind::Header, &[6, 7, 10]),
+            (StoryKind::Footer, &[8, 9, 11]),
+        ] {
+            let mut word: Vec<(i64, String, String)> = r["revisions"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|v| v["story"].as_i64().is_some_and(|s| types.contains(&s)))
+                .map(|v| {
+                    (
+                        v["type"].as_i64().unwrap(),
+                        v["author"].as_str().unwrap().to_string(),
+                        words(&plain(v["text"].as_str().unwrap_or(""))),
+                    )
+                })
+                .collect();
+            let mut ours: Vec<(i64, String, String)> = views
+                .revisions()
+                .iter()
+                .filter(|v| v.location.story == kind)
+                .map(|v| {
+                    (
+                        word_type(v.kind, v.target),
+                        v.author.clone(),
+                        words(&v.text),
+                    )
+                })
+                .collect();
+            // Word lists a header's revisions with each story range that
+            // shows it; the views list each once.
+            word.sort();
+            word.dedup();
+            ours.sort();
+            compared += ours.len();
+            if word != ours {
+                failures.push(format!(
+                    "{name}, {kind:?}:\n  Word:      {word:?}\n  Tabellion: {ours:?}"
+                ));
+            }
+        }
+    }
+    assert!(compared >= 4, "only {compared} revisions outside the body");
+    check(failures);
+}
+
+/// The cases the corpus is there for, each where it is, with what the views
+/// give for it; the tests above compare them with Word.
+#[test]
+fn the_corpus_has_the_cases_it_claims() {
+    let open = |name: &str| Document::open(corpus().join(name)).unwrap();
+    let (mut e, mut c, mut p, mut b) = (
+        open("edge.docx"),
+        open("changes.docx"),
+        open("parts.docx"),
+        open("birds.docx"),
+    );
+
+    // A vertical merge that continues into a row with gridBefore.
+    let edge = e.views().unwrap();
+    assert!(edge.tables().iter().any(|t| {
+        t.cells
+            .iter()
+            .any(|c| c.column == 1 && c.row_span == 2 && c.text == "Reed beds")
+    }));
+    // A text box in both branches of mc:AlternateContent is read once.
+    let text = edge.text(&TextOptions::default());
+    assert_eq!(text.matches("Box text, read once.").count(), 1, "{text}");
+    // Content controls around a paragraph, a row, a cell and words.
+    let mut tags: Vec<String> = edge
+        .content_controls()
+        .iter()
+        .filter_map(|c| c.control.tag.clone())
+        .collect();
+    let changes = c.views().unwrap();
+    tags.extend(
+        changes
+            .content_controls()
+            .iter()
+            .filter_map(|c| c.control.tag.clone()),
+    );
+    for tag in [
+        "visit:group",
+        "visit:row",
+        "visit:cell",
+        "note:block",
+        "note:row",
+        "note:words",
+    ] {
+        assert!(tags.iter().any(|t| t == tag), "no control {tag}: {tags:?}");
+    }
+    // A comment over two cells of a row, read with a tab between them.
+    let comment = &changes.comments()[0];
+    assert_eq!(comment.anchor.as_deref(), Some("Heron\tEast pool"));
+    // A deletion over another author's insertion, and changes in a header,
+    // a footer and a footnote.
+    let kinds: Vec<(RevisionKind, StoryKind)> = changes
+        .revisions()
+        .iter()
+        .map(|r| (r.kind, r.location.story))
+        .collect();
+    for k in [
+        (RevisionKind::Insertion, StoryKind::Main),
+        (RevisionKind::Deletion, StoryKind::Main),
+        (RevisionKind::Insertion, StoryKind::Header),
+        (RevisionKind::Deletion, StoryKind::Header),
+        (RevisionKind::Insertion, StoryKind::Footer),
+        (RevisionKind::Insertion, StoryKind::Footnote),
+        (RevisionKind::Deletion, StoryKind::Footnote),
+    ] {
+        assert!(kinds.contains(&k), "{k:?} missing: {kinds:?}");
+    }
+    assert_eq!(
+        changes.text(&TextOptions::default()).lines().nth(1),
+        Some("The heron fed at the reed beds.")
+    );
+    assert_eq!(
+        changes
+            .text(&TextOptions {
+                revisions: Revisions::Rejected,
+                ..TextOptions::default()
+            })
+            .lines()
+            .nth(1),
+        Some("The heron fed at the east pool.")
+    );
+    // A moved paragraph and comment replies.
+    let parts = p.views().unwrap();
+    assert!(
+        parts
+            .revisions()
+            .iter()
+            .any(|r| r.kind == RevisionKind::MoveFrom)
+    );
+    assert!(
+        parts
+            .revisions()
+            .iter()
+            .any(|r| r.kind == RevisionKind::MoveTo)
+    );
+    assert!(parts.comments().iter().any(|c| c.parent.is_some()));
+    // Nested fields and a field whose result spans paragraphs.
+    let birds = b.views().unwrap();
+    assert!(
+        birds
+            .fields()
+            .iter()
+            .any(|f| f.kind == "TOC" && f.result.lines().count() > 2)
+    );
+    assert!(
+        birds
+            .fields()
+            .iter()
+            .any(|f| f.kind == "IF" && f.code.contains("{ SEQ Table \\c }"))
+    );
 }
