@@ -1,6 +1,7 @@
-//! The styles of a document, read from its styles part.
+//! The styles of a document, read from its styles part, and the cascade
+//! that gives a run its toggle properties.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
@@ -26,13 +27,145 @@ pub enum StyleKind {
     Numbering,
 }
 
+impl StyleKind {
+    fn slot(self) -> usize {
+        match self {
+            StyleKind::Paragraph => 0,
+            StyleKind::Character => 1,
+            StyleKind::Table => 2,
+            StyleKind::Numbering => 3,
+        }
+    }
+}
+
 /// The name of a built-in style in a language other than English.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct LocalName {
-    /// A language tag: `de`, `fr`.
+    /// A language tag, such as `de`.
     pub language: &'static str,
     /// The name Word shows in that language.
     pub name: &'static str,
+}
+
+/// A toggle property of text (ECMA-376 part 1, 17.7.3): one that a style
+/// switches on and off rather than sets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Toggle {
+    /// `w:b`.
+    Bold,
+    /// `w:bCs`, bold for complex scripts.
+    BoldComplex,
+    /// `w:i`.
+    Italic,
+    /// `w:iCs`, italic for complex scripts.
+    ItalicComplex,
+    /// `w:caps`.
+    AllCaps,
+    /// `w:smallCaps`.
+    SmallCaps,
+    /// `w:strike`.
+    Strike,
+    /// `w:dstrike`.
+    DoubleStrike,
+    /// `w:outline`.
+    Outline,
+    /// `w:shadow`.
+    Shadow,
+    /// `w:emboss`.
+    Emboss,
+    /// `w:imprint`.
+    Imprint,
+    /// `w:vanish`: hidden text.
+    Hidden,
+}
+
+/// Every toggle property with its element name.
+const TOGGLES: [(Toggle, &str); 13] = [
+    (Toggle::Bold, "b"),
+    (Toggle::BoldComplex, "bCs"),
+    (Toggle::Italic, "i"),
+    (Toggle::ItalicComplex, "iCs"),
+    (Toggle::AllCaps, "caps"),
+    (Toggle::SmallCaps, "smallCaps"),
+    (Toggle::Strike, "strike"),
+    (Toggle::DoubleStrike, "dstrike"),
+    (Toggle::Outline, "outline"),
+    (Toggle::Shadow, "shadow"),
+    (Toggle::Emboss, "emboss"),
+    (Toggle::Imprint, "imprint"),
+    (Toggle::Hidden, "vanish"),
+];
+
+impl Toggle {
+    fn bit(self) -> u16 {
+        1 << TOGGLES.iter().position(|t| t.0 == self).unwrap_or(0)
+    }
+}
+
+/// The toggle properties that are on for some text, after the style
+/// cascade. Serialises as the list of those that are on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Toggles(u16);
+
+impl Toggles {
+    /// True if this property is on.
+    pub fn has(self, t: Toggle) -> bool {
+        self.0 & t.bit() != 0
+    }
+
+    /// The properties that are on.
+    pub fn iter(self) -> impl Iterator<Item = Toggle> {
+        TOGGLES.iter().map(|t| t.0).filter(move |&t| self.has(t))
+    }
+}
+
+impl Serialize for Toggles {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.collect_seq(self.iter())
+    }
+}
+
+/// The toggle properties one level of the cascade states: which it names,
+/// and which of those it sets on. A property it does not name is not
+/// specified there.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Stated {
+    named: u16,
+    on: u16,
+}
+
+impl Stated {
+    /// Reads the toggle properties of a `w:rPr`, in one pass over it.
+    pub(crate) fn read(tree: &Tree, rpr: Option<NodeId>) -> Result<Stated, Error> {
+        let mut out = Stated::default();
+        let Some(rpr) = rpr else { return Ok(out) };
+        for c in tree.elements(rpr)? {
+            let Some(name) = tree.name(c)? else { continue };
+            if name.namespace != Some(W) {
+                continue;
+            }
+            if let Some((t, _)) = TOGGLES.iter().find(|t| t.1 == name.local) {
+                let bit = t.bit();
+                out.named |= bit;
+                if on_off(tree, c)? {
+                    out.on |= bit;
+                } else {
+                    out.on &= !bit;
+                }
+            }
+        }
+        Ok(out)
+    }
+
+    /// What a style states after the styles it is based on: the nearest
+    /// style that names a property decides it.
+    fn over(self, base: Stated) -> Stated {
+        Stated {
+            named: self.named | base.named,
+            on: (self.on & self.named) | (base.on & base.named & !self.named),
+        }
+    }
 }
 
 /// One style.
@@ -71,18 +204,30 @@ pub struct Style {
     #[serde(skip)]
     own_numbering: Option<NumberingRef>,
     #[serde(skip)]
-    own_hidden_text: Option<bool>,
+    custom: bool,
     #[serde(skip)]
-    hidden_text: bool,
+    own_toggles: Stated,
+    /// The toggle properties through the styles it is based on.
+    #[serde(skip)]
+    toggles: Stated,
 }
 
 /// The styles of a document. Find a style by id, by stored name, or by the
-/// name Word shows in English, German or French.
+/// name Word shows.
+///
+/// Every lookup is a hash lookup; building the styles costs one pass over
+/// the styles part and at most 64 steps of `basedOn` for each style.
 #[derive(Debug, Clone, Default)]
 pub struct Styles {
     list: Vec<Style>,
     by_id: HashMap<String, usize>,
-    default_hidden: bool,
+    /// Lower-case names to styles, one map for each kind of name in the
+    /// order [`Styles::find`] tries them: stored name, English name Word
+    /// shows, names in other languages, id.
+    by_name: [HashMap<String, Vec<usize>>; 4],
+    defaults: [Option<usize>; 4],
+    /// The document defaults' toggle properties.
+    doc_defaults: Stated,
 }
 
 /// A chain of `basedOn` longer than this is a loop or an attack.
@@ -96,22 +241,41 @@ impl Styles {
             return Ok(out);
         };
         let root = t.root_element();
-        let mut latent: Vec<String> = vec![];
+        let mut latent: HashSet<String> = HashSet::new();
         for el in t.elements(root)? {
             if t.is(el, Some(W), "latentStyles")? {
                 for e in t.elements(el)? {
                     if let Some(n) = t.attribute(e, Some(W), "name")? {
-                        latent.push(n.to_ascii_lowercase());
+                        latent.insert(n.to_lowercase());
                     }
                 }
             } else if t.is(el, Some(W), "docDefaults")? {
-                out.default_hidden = default_hidden(t, el)?;
+                if let Some(rd) = t.child(el, Some(W), "rPrDefault")? {
+                    out.doc_defaults = Stated::read(t, t.child(rd, Some(W), "rPr")?)?;
+                }
             } else if t.is(el, Some(W), "style")? {
-                out.list.push(style(t, el, &latent)?);
+                out.list.push(style(t, el)?);
             }
         }
-        for (i, s) in out.list.iter().enumerate() {
+        for (i, s) in out.list.iter_mut().enumerate() {
+            s.built_in = s.built_in || (!s.custom && latent.contains(&s.name.to_lowercase()));
             out.by_id.entry(s.id.clone()).or_insert(i);
+            let slot = s.kind.slot();
+            if s.default && out.defaults[slot].is_none() {
+                out.defaults[slot] = Some(i);
+            }
+            let mut add = |map: usize, name: &str| {
+                out.by_name[map]
+                    .entry(name.trim().to_lowercase())
+                    .or_default()
+                    .push(i);
+            };
+            add(0, &s.name);
+            add(1, &s.display_name);
+            for l in &s.local_names {
+                add(2, l.name);
+            }
+            add(3, &s.id);
         }
         out.resolve();
         Ok(out)
@@ -121,14 +285,15 @@ impl Styles {
         for i in 0..self.list.len() {
             let mut outline = None;
             let mut numbering = None;
-            let mut hidden = None;
+            let mut toggles = Stated::default();
             let mut j = Some(i);
             for _ in 0..MAX_CHAIN {
                 let Some(k) = j else { break };
+                crate::cost::tick(1);
                 let s = &self.list[k];
                 outline = outline.or(s.own_outline);
                 numbering = numbering.or_else(|| s.own_numbering.clone());
-                hidden = hidden.or(s.own_hidden_text);
+                toggles = toggles.over(s.own_toggles);
                 j = s.based_on.as_ref().and_then(|b| self.by_id.get(b).copied());
                 if j == Some(i) {
                     break;
@@ -143,7 +308,7 @@ impl Styles {
             }
             s.outline_level = outline;
             s.numbering = numbering;
-            s.hidden_text = hidden.unwrap_or(self.default_hidden);
+            s.toggles = toggles;
         }
     }
 
@@ -167,38 +332,36 @@ impl Styles {
         self.by_id.get(id).map(|&i| &self.list[i])
     }
 
-    /// Finds a style by id, by stored name, by the English name Word shows,
-    /// or by the German or French name of a built-in style, in this order.
-    /// Names compare without case.
+    /// Finds a style of any kind by id, by stored name, by the English name
+    /// Word shows, or by its name in another language of the table of
+    /// built-in names, in this order. Names compare without case.
     pub fn find(&self, name: &str) -> Option<&Style> {
-        self.find_kind(name, None)
+        self.search(name, None)
     }
 
-    /// Like [`find`](Self::find), among the styles of one kind.
-    pub fn find_kind(&self, name: &str, kind: Option<StyleKind>) -> Option<&Style> {
+    /// Like [`find`](Self::find), among the styles of one kind only: a
+    /// paragraph style and a table style may share a name in a file.
+    pub fn find_of(&self, kind: StyleKind, name: &str) -> Option<&Style> {
+        self.search(name, Some(kind))
+    }
+
+    fn search(&self, name: &str, kind: Option<StyleKind>) -> Option<&Style> {
         let ok = |s: &&Style| kind.is_none_or(|k| s.kind == k);
         if let Some(s) = self.get(name).filter(ok) {
             return Some(s);
         }
-        let name = name.trim();
-        let same = |a: &str| a.to_lowercase() == name.to_lowercase();
-        self.list
-            .iter()
-            .filter(ok)
-            .find(|s| same(&s.name))
-            .or_else(|| self.list.iter().filter(ok).find(|s| same(&s.display_name)))
-            .or_else(|| {
-                self.list
-                    .iter()
-                    .filter(ok)
-                    .find(|s| s.local_names.iter().any(|l| same(l.name)))
-            })
-            .or_else(|| self.list.iter().filter(ok).find(|s| same(&s.id)))
+        let key = name.trim().to_lowercase();
+        self.by_name.iter().find_map(|map| {
+            map.get(&key)?
+                .iter()
+                .map(|&i| &self.list[i])
+                .find(|s| ok(s))
+        })
     }
 
     /// The default style of a kind.
     pub fn default_of(&self, kind: StyleKind) -> Option<&Style> {
-        self.list.iter().find(|s| s.kind == kind && s.default)
+        self.defaults[kind.slot()].map(|i| &self.list[i])
     }
 
     /// The paragraph style with this id, or the default paragraph style.
@@ -209,30 +372,41 @@ impl Styles {
         }
     }
 
-    /// Whether text in this character style, in a paragraph of this style,
-    /// is hidden.
-    pub(crate) fn hidden(&self, char_style: Option<&str>, para_style: Option<&str>) -> bool {
-        if let Some(s) = char_style.and_then(|c| self.get(c)) {
-            return s.hidden_text;
+    /// The toggle properties of text after the cascade of ECMA-376 part 1,
+    /// 17.7.2: document defaults, then the table style, the paragraph style
+    /// and the character style, then direct formatting.
+    ///
+    /// Between the levels of styles a property toggles (17.7.3): a style
+    /// that sets it on turns it over, one that sets it off leaves it as it
+    /// was. Within one style, the nearest style of its `basedOn` chain that
+    /// names the property decides it. Direct formatting sets it outright.
+    /// A missing paragraph or table style is the default of its kind.
+    pub(crate) fn toggles(
+        &self,
+        direct: Stated,
+        character: Option<&str>,
+        paragraph: Option<&str>,
+        table: Option<&str>,
+    ) -> Toggles {
+        let mut on = self.doc_defaults.on & self.doc_defaults.named;
+        let table = match table {
+            Some(id) => self.get(id),
+            None => self.default_of(StyleKind::Table),
+        };
+        let styles = [
+            table,
+            self.paragraph_style(paragraph),
+            character.and_then(|c| self.get(c)),
+        ];
+        for s in styles.into_iter().flatten() {
+            on ^= s.toggles.on & s.toggles.named;
         }
-        match self.paragraph_style(para_style) {
-            Some(s) => s.hidden_text,
-            None => self.default_hidden,
-        }
+        on = (on & !direct.named) | (direct.on & direct.named);
+        Toggles(on)
     }
 }
 
-fn default_hidden(t: &Tree, defaults: NodeId) -> Result<bool, Error> {
-    if let Some(rd) = t.child(defaults, Some(W), "rPrDefault")?
-        && let Some(rpr) = t.child(rd, Some(W), "rPr")?
-        && let Some(v) = t.child(rpr, Some(W), "vanish")?
-    {
-        return on_off(t, v);
-    }
-    Ok(false)
-}
-
-fn style(t: &Tree, el: NodeId, latent: &[String]) -> Result<Style, Error> {
+fn style(t: &Tree, el: NodeId) -> Result<Style, Error> {
     let kind = match t.attribute(el, Some(W), "type")?.as_deref() {
         Some("character") => StyleKind::Character,
         Some("table") => StyleKind::Table,
@@ -248,22 +422,10 @@ fn style(t: &Tree, el: NodeId, latent: &[String]) -> Result<Style, Error> {
         .attribute(el, Some(W), "customStyle")?
         .is_some_and(|v| matches!(&*v, "1" | "true" | "on"));
     let row = if custom { None } else { names::built_in(&name) };
-    let built_in = !custom && (row.is_some() || latent.contains(&name.to_ascii_lowercase()));
-    let display_name = row.map(|r| r.1.to_string()).unwrap_or_else(|| name.clone());
-    let local_names = row
-        .map(|r| {
-            vec![
-                LocalName {
-                    language: names::LANGUAGES[0],
-                    name: r.2,
-                },
-                LocalName {
-                    language: names::LANGUAGES[1],
-                    name: r.3,
-                },
-            ]
-        })
-        .unwrap_or_default();
+    let display_name = row
+        .map(|r| r.display.to_string())
+        .unwrap_or_else(|| name.clone());
+    let local_names = row.map(|r| r.local_names()).unwrap_or_default();
     let flag = |local| -> Result<bool, Error> {
         match t.child(el, Some(W), local)? {
             Some(c) => on_off(t, c),
@@ -279,19 +441,15 @@ fn style(t: &Tree, el: NodeId, latent: &[String]) -> Result<Style, Error> {
             .map(|l| l + 1);
         own_numbering = numbering_ref(t, ppr)?.map(|(id, level)| NumberingRef { id, level });
     }
-    let mut own_hidden_text = None;
-    if let Some(rpr) = t.child(el, Some(W), "rPr")?
-        && let Some(v) = t.child(rpr, Some(W), "vanish")?
-    {
-        own_hidden_text = Some(on_off(t, v)?);
-    }
+    let own_toggles = Stated::read(t, t.child(el, Some(W), "rPr")?)?;
     Ok(Style {
         id,
         name,
         display_name,
         local_names,
         kind,
-        built_in,
+        // Completed with the latent styles once they are all read.
+        built_in: row.is_some(),
         default: t
             .attribute(el, Some(W), "default")?
             .is_some_and(|v| matches!(&*v, "1" | "true" | "on")),
@@ -303,7 +461,8 @@ fn style(t: &Tree, el: NodeId, latent: &[String]) -> Result<Style, Error> {
         numbering: None,
         own_outline,
         own_numbering,
-        own_hidden_text,
-        hidden_text: false,
+        custom,
+        own_toggles,
+        toggles: Stated::default(),
     })
 }

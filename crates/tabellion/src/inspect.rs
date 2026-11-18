@@ -2,7 +2,9 @@
 
 use std::path::Path;
 
-use nebu_docx::{Block, BlockKind, Document, DrawingKind, Inline, NoteKind};
+use std::collections::HashMap;
+
+use nebu_docx::{Block, BlockId, BlockKind, DrawingKind, Inline, NoteKind, Views};
 use serde::Serialize;
 
 use crate::View;
@@ -16,14 +18,14 @@ pub(crate) fn run(file: &Path, view: Option<View>, json: bool) -> Result<(), Str
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let sha = doc.sha256();
+    let views = doc.views().map_err(fail)?;
     let Some(view) = view else {
-        let text = outline(&mut doc, &name).map_err(fail)?;
-        emit(&text);
+        emit(&outline(views, &name));
         return Ok(());
     };
     macro_rules! show {
         ($key:literal, $value:expr, $text:expr) => {{
-            let v = $value.map_err(fail)?;
+            let v = $value;
             if json {
                 emit(&to_json($key, &sha, &v));
             } else {
@@ -31,23 +33,20 @@ pub(crate) fn run(file: &Path, view: Option<View>, json: bool) -> Result<(), Str
             }
         }};
     }
+    let v = views;
     match view {
-        View::Blocks => show!("blocks", doc.blocks(), blocks_text),
-        View::Styles => show!(
-            "styles",
-            doc.styles().map(|s| s.iter().cloned().collect::<Vec<_>>()),
-            styles_text
-        ),
-        View::Tables => show!("tables", doc.tables(), tables_text),
-        View::Fields => show!("fields", doc.fields(), fields_text),
-        View::Comments => show!("comments", doc.comments(), comments_text),
-        View::Revisions => show!("revisions", doc.revisions(), revisions_text),
-        View::Images => show!("images", doc.images(), images_text),
-        View::Bookmarks => show!("bookmarks", doc.bookmarks(), bookmarks_text),
-        View::Notes => show!("notes", doc.notes(), notes_text),
-        View::Sections => show!("sections", doc.sections(), sections_text),
-        View::Numbering => show!("numbering", doc.numbering(), numbering_text),
-        View::ContentControls => show!("content_controls", doc.content_controls(), controls_text),
+        View::Blocks => show!("blocks", v.blocks(), blocks_text),
+        View::Styles => show!("styles", v.styles().iter().collect::<Vec<_>>(), styles_text),
+        View::Tables => show!("tables", v.tables(), tables_text),
+        View::Fields => show!("fields", v.fields(), fields_text),
+        View::Comments => show!("comments", v.comments(), comments_text),
+        View::Revisions => show!("revisions", v.revisions(), revisions_text),
+        View::Images => show!("images", v.images(), images_text),
+        View::Bookmarks => show!("bookmarks", v.bookmarks(), bookmarks_text),
+        View::Notes => show!("notes", v.notes(), notes_text),
+        View::Sections => show!("sections", v.sections(), sections_text),
+        View::Numbering => show!("numbering", v.numbering(), numbering_text),
+        View::ContentControls => show!("content_controls", v.content_controls(), controls_text),
     }
     Ok(())
 }
@@ -76,6 +75,10 @@ fn to_json<T: Serialize>(key: &str, sha: &str, value: &T) -> String {
 
 fn opt(s: &Option<String>) -> String {
     s.clone().unwrap_or_default()
+}
+
+fn id(b: &Option<BlockId>) -> String {
+    b.map(|b| b.to_string()).unwrap_or_default()
 }
 
 fn is_caption(b: &Block) -> bool {
@@ -124,47 +127,53 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-fn outline(doc: &mut Document, name: &str) -> Result<String, nebu_docx::Error> {
-    let blocks = doc.blocks()?;
-    let tables = doc.tables()?;
+fn outline(v: &Views, name: &str) -> String {
+    let blocks = v.blocks();
+    let tables = v.tables();
+    let by_id: HashMap<BlockId, &nebu_docx::Table> = tables
+        .iter()
+        .filter_map(|t| t.id.map(|id| (id, t)))
+        .collect();
     let mut rows = vec![];
     for (i, b) in blocks.iter().enumerate() {
         if b.style_name.as_deref() == Some("Title") {
-            rows.push(vec!["title".into(), b.id.clone(), b.text.clone()]);
+            rows.push(vec!["title".into(), b.id.to_string(), b.text.clone()]);
         } else if let Some(l) = b.level {
             let indent = "  ".repeat(usize::from(l.saturating_sub(1)));
             rows.push(vec![
                 format!("heading {l}"),
-                b.id.clone(),
+                b.id.to_string(),
                 format!("{indent}{}", b.text),
             ]);
         } else if b.kind == BlockKind::Table {
-            let size = tables
-                .iter()
-                .find(|t| t.id.as_deref() == Some(&b.id))
+            let size = by_id
+                .get(&b.id)
                 .map(|t| format!(" ({} × {})", t.row_count, t.column_count))
                 .unwrap_or_default();
-            let cap = caption(&blocks, i, true).unwrap_or_else(|| "(no caption)".into());
-            rows.push(vec!["table".into(), b.id.clone(), format!("{cap}{size}")]);
+            let cap = caption(blocks, i, true).unwrap_or_else(|| "(no caption)".into());
+            rows.push(vec![
+                "table".into(),
+                b.id.to_string(),
+                format!("{cap}{size}"),
+            ]);
         } else if is_figure(b) {
-            let cap = caption(&blocks, i, false)
+            let cap = caption(blocks, i, false)
                 .or_else(|| is_caption(b).then(|| b.text.clone()))
                 .unwrap_or_else(|| "(no caption)".into());
-            rows.push(vec!["figure".into(), b.id.clone(), cap]);
+            rows.push(vec!["figure".into(), b.id.to_string(), cap]);
         }
     }
-    let sections = doc.sections()?.len();
     let mut out = format!(
         "{name}: {} in {}\n\n",
         plural(blocks.len(), "block", "blocks"),
-        plural(sections, "section", "sections")
+        plural(v.sections().len(), "section", "sections")
     );
     if rows.is_empty() {
         out.push_str("No headings, tables or figures.\n");
     } else {
         out.push_str(&columns(&["KIND", "ID", "TEXT"], &rows));
     }
-    let notes = doc.notes()?;
+    let notes = v.notes();
     let footnotes = notes
         .iter()
         .filter(|n| n.kind == NoteKind::Footnote)
@@ -172,18 +181,32 @@ fn outline(doc: &mut Document, name: &str) -> Result<String, nebu_docx::Error> {
     let endnotes = notes.len() - footnotes;
     let counts = [
         plural(tables.len(), "table", "tables"),
-        plural(doc.images()?.len(), "image", "images"),
-        plural(doc.fields()?.len(), "field", "fields"),
-        plural(doc.revisions()?.len(), "revision", "revisions"),
-        plural(doc.comments()?.len(), "comment", "comments"),
+        plural(v.images().len(), "image", "images"),
+        plural(v.fields().len(), "field", "fields"),
+        plural(v.revisions().len(), "revision", "revisions"),
+        plural(v.comments().len(), "comment", "comments"),
         plural(footnotes, "footnote", "footnotes"),
         plural(endnotes, "endnote", "endnotes"),
-        plural(doc.bookmarks()?.len(), "bookmark", "bookmarks"),
+        plural(v.bookmarks().len(), "bookmark", "bookmarks"),
     ];
     out.push('\n');
     out.push_str(&counts.join(", "));
     out.push('\n');
-    Ok(out)
+    // Blocks that share a paragraph id have numbered ids, which hold only
+    // for this file.
+    let shared: Vec<String> = blocks
+        .iter()
+        .filter(|b| b.shared_para_id)
+        .map(|b| b.id.to_string())
+        .collect();
+    if !shared.is_empty() {
+        out.push_str(&format!(
+            "\n{} share a paragraph id with another block and are numbered instead: {}\n",
+            plural(shared.len(), "block", "blocks"),
+            shared.join(", ")
+        ));
+    }
+    out
 }
 
 fn blocks_text(blocks: &[Block]) -> String {
@@ -192,7 +215,7 @@ fn blocks_text(blocks: &[Block]) -> String {
         .map(|b| {
             vec![
                 b.index.to_string(),
-                b.id.clone(),
+                b.id.to_string(),
                 kind_name(b.kind).into(),
                 opt(&b.style_name),
                 b.level.map(|l| l.to_string()).unwrap_or_default(),
@@ -217,7 +240,7 @@ fn kind_name(k: BlockKind) -> &'static str {
     }
 }
 
-fn styles_text(styles: &[nebu_docx::Style]) -> String {
+fn styles_text(styles: &[&nebu_docx::Style]) -> String {
     let rows: Vec<Vec<String>> = styles
         .iter()
         .map(|s| {
@@ -253,7 +276,7 @@ fn tables_text(tables: &[nebu_docx::Table]) -> String {
     let mut out = String::new();
     for t in tables {
         let place = match (&t.id, &t.parent) {
-            (Some(id), _) => id.clone(),
+            (Some(id), _) => id.to_string(),
             (None, Some(p)) => format!(
                 "in table {}, row {}, column {}",
                 p.table + 1,
@@ -389,7 +412,7 @@ fn bookmarks_text(marks: &[nebu_docx::Bookmark]) -> String {
             vec![
                 b.name.clone(),
                 if b.hidden { "hidden" } else { "" }.into(),
-                opt(&b.location.block),
+                id(&b.location.block),
                 b.text.clone(),
             ]
         })
@@ -408,10 +431,7 @@ fn notes_text(notes: &[nebu_docx::Note]) -> String {
                 }
                 .into(),
                 n.number.map(|v| v.to_string()).unwrap_or_default(),
-                n.location
-                    .as_ref()
-                    .and_then(|l| l.block.clone())
-                    .unwrap_or_default(),
+                id(&n.location.as_ref().and_then(|l| l.block)),
                 n.text.clone(),
             ]
         })
@@ -429,8 +449,8 @@ fn sections_text(sections: &[nebu_docx::Section]) -> String {
         out.push_str(&format!(
             "Section {}: blocks {} to {}, starts on {}, {size}, text width {} pt, {}\n",
             s.index + 1,
-            opt(&s.first_block),
-            opt(&s.last_block),
+            id(&s.first_block),
+            id(&s.last_block),
             s.start.replace('_', " "),
             s.text_width.map(|w| w.to_string()).unwrap_or_default(),
             plural(s.columns as usize, "column", "columns"),
@@ -496,7 +516,7 @@ fn controls_text(controls: &[nebu_docx::Control]) -> String {
                 kind.as_str().unwrap_or_default().replace('_', " "),
                 opt(&c.control.tag),
                 opt(&c.control.title),
-                opt(&c.location.block),
+                id(&c.location.block),
                 if c.control.placeholder {
                     format!("{} (placeholder)", c.text)
                 } else {

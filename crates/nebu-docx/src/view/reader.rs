@@ -1,23 +1,23 @@
-//! Finds the parts and stories of a document, walks them with a sink and
-//! puts the views together.
+//! Finds the parts and stories of a document, walks them once and puts the
+//! views together.
 
 use std::collections::{HashMap, VecDeque};
 
 use crate::xml::{NodeId, Tree};
 use crate::{Document, Error};
 
-use super::collect::{
-    BlocksSink, Collect, Common, FieldsSink, MarksSink, Rel, RevisionsSink, TablesSink, TextSink,
-    merge_revisions, qualified, roman,
-};
-use super::props::{self, child_val, on_off};
+use super::collect::{Collector, NoteRef, Part, Place, Rel, merge_revisions, qualified};
+use super::locate::Place as Wanted;
+use super::numbering::Numbering;
+use super::props::{self, child_val, on_off, parse_para_id};
 use super::styles::Styles;
-use super::walk::{self, W};
+use super::text::{Pieces, Show, Span, roman};
+use super::walk::{self, Shared, W};
 use super::{
-    Block, BlockKind, Comment, ContentControl, Field, HeaderFooter, Image, Locator, Margins, Note,
-    NoteKind, Numbering, NumberingRef, Revision, Revisions, Section, StoryKind, Table, TextOptions,
+    Block, BlockId, BlockKind, Bookmark, Comment, ContentControl, Control, Field, HeaderFooter,
+    Image, Inline, Locator, Margins, Note, NoteKind, NumberingRef, Revision, Section, StoryKind,
+    Table, TextOptions,
 };
-use super::{Bookmark, Control};
 
 const COMMENTS_EXTENDED: &str = "commentsExtended";
 
@@ -46,14 +46,15 @@ struct Story {
 
 pub(crate) struct Reader<'d> {
     doc: &'d Document,
-    pub styles: Styles,
+    styles: Styles,
     main: String,
     parts: Parts,
     rels: HashMap<String, HashMap<String, Rel>>,
     content_types: HashMap<String, String>,
-    /// The top-level blocks of the body with their ids and kinds.
-    blocks: Vec<(NodeId, String, BlockKind)>,
-    ids: HashMap<NodeId, String>,
+    /// The top-level blocks of the body with their ids and kinds, and
+    /// whether their paragraph id is shared.
+    blocks: Vec<(NodeId, BlockId, BlockKind, bool)>,
+    ids: HashMap<NodeId, BlockId>,
     no_rels: HashMap<String, Rel>,
 }
 
@@ -184,12 +185,12 @@ impl<'d> Reader<'d> {
                 _ => BlockKind::Other,
             };
             let para = match kind {
-                BlockKind::Paragraph => props::para_id(t, n)?.map(|id| format!("p:{id}")),
+                BlockKind::Paragraph => props::para_id(t, n)?.map(BlockId::Paragraph),
                 BlockKind::Table => {
                     let mut id = None;
                     for d in t.descendants(n)? {
                         if t.is(d, Some(W), "p")? {
-                            id = props::para_id(t, d)?.map(|id| format!("t:{id}"));
+                            id = props::para_id(t, d)?.map(BlockId::Table);
                             break;
                         }
                     }
@@ -199,24 +200,29 @@ impl<'d> Reader<'d> {
             };
             list.push((n, para, kind));
         }
-        let mut seen: HashMap<String, usize> = HashMap::new();
+        let number = |id: &BlockId| match id {
+            BlockId::Paragraph(n) | BlockId::Table(n) => *n,
+            BlockId::Index(_) => u32::MAX,
+        };
+        let mut seen: HashMap<u32, usize> = HashMap::new();
         for (_, id, _) in &list {
             if let Some(id) = id {
-                *seen.entry(id[2..].to_string()).or_default() += 1;
+                *seen.entry(number(id)).or_default() += 1;
             }
         }
         for (i, (n, id, kind)) in list.into_iter().enumerate() {
-            let id = match id {
-                Some(id) if seen.get(&id[2..]) == Some(&1) => id,
-                _ => format!("#{i}"),
+            let (id, shared) = match id {
+                Some(id) if seen.get(&number(&id)) == Some(&1) => (id, false),
+                Some(_) => (BlockId::Index(i), true),
+                None => (BlockId::Index(i), false),
             };
-            self.ids.insert(n, id.clone());
-            self.blocks.push((n, id, kind));
+            self.ids.insert(n, id);
+            self.blocks.push((n, id, kind, shared));
         }
         Ok(())
     }
 
-    fn stories(&self, main_only: bool) -> Result<Vec<Story>, Error> {
+    fn stories(&self) -> Result<Vec<Story>, Error> {
         let mut out = vec![];
         if let Some(body) = self.body()? {
             out.push(Story {
@@ -225,9 +231,6 @@ impl<'d> Reader<'d> {
                 root: body,
                 id: None,
             });
-        }
-        if main_only {
-            return Ok(out);
         }
         for (list, kind) in [
             (&self.parts.headers, StoryKind::Header),
@@ -242,48 +245,24 @@ impl<'d> Reader<'d> {
                 });
             }
         }
-        out.extend(self.notes_stories(NoteKind::Footnote)?);
-        out.extend(self.notes_stories(NoteKind::Endnote)?);
-        out.extend(self.comment_stories()?);
-        Ok(out)
-    }
-
-    fn notes_stories(&self, kind: NoteKind) -> Result<Vec<Story>, Error> {
-        let (part, local, story) = match kind {
-            NoteKind::Footnote => (&self.parts.footnotes, "footnote", StoryKind::Footnote),
-            NoteKind::Endnote => (&self.parts.endnotes, "endnote", StoryKind::Endnote),
-        };
-        let Some(part) = part else { return Ok(vec![]) };
-        let t = self.tree(part)?;
-        let mut out = vec![];
-        for n in t.elements(t.root_element())? {
-            if !t.is(n, Some(W), local)? {
-                continue;
-            }
-            let kind_attr = t.attribute(n, Some(W), "type")?;
-            if kind_attr.is_some_and(|k| k != "normal") {
-                continue;
-            }
-            out.push(Story {
-                kind: story,
-                part: part.clone(),
-                root: n,
-                id: t.attribute(n, Some(W), "id")?.map(|v| v.into_owned()),
-            });
-        }
-        Ok(out)
-    }
-
-    fn comment_stories(&self) -> Result<Vec<Story>, Error> {
-        let Some(part) = &self.parts.comments else {
-            return Ok(vec![]);
-        };
-        let t = self.tree(part)?;
-        let mut out = vec![];
-        for n in t.elements(t.root_element())? {
-            if t.is(n, Some(W), "comment")? {
+        for (part, local, kind) in [
+            (&self.parts.footnotes, "footnote", StoryKind::Footnote),
+            (&self.parts.endnotes, "endnote", StoryKind::Endnote),
+            (&self.parts.comments, "comment", StoryKind::Comment),
+        ] {
+            let Some(part) = part else { continue };
+            let t = self.tree(part)?;
+            for n in t.elements(t.root_element())? {
+                if !t.is(n, Some(W), local)? {
+                    continue;
+                }
+                // Separators and continuation notices are not notes.
+                let kind_attr = t.attribute(n, Some(W), "type")?;
+                if kind != StoryKind::Comment && kind_attr.is_some_and(|k| k != "normal") {
+                    continue;
+                }
                 out.push(Story {
-                    kind: StoryKind::Comment,
+                    kind,
                     part: part.clone(),
                     root: n,
                     id: t.attribute(n, Some(W), "id")?.map(|v| v.into_owned()),
@@ -293,143 +272,169 @@ impl<'d> Reader<'d> {
         Ok(out)
     }
 
-    /// The stamp of the document's trees now.
-    pub fn stamp(&self) -> Vec<(u64, u64)> {
-        self.doc.stamp()
-    }
-
-    /// The views read before, if any.
-    pub fn cache(&self) -> Option<&'d super::Cache> {
-        self.doc.views.as_deref()
-    }
-
-    /// The text the views may cut out of the stories, in bytes.
-    fn budget(&self) -> u64 {
-        self.doc.limits().max_total_size
-    }
-
-    fn common(&self) -> Result<Common<'_>, Error> {
-        Ok(Common::new(
-            self.tree(&self.main)?,
-            &self.ids,
-            &self.no_rels,
-        ))
-    }
-
-    /// Walks stories with a sink, and after each story the text boxes it
-    /// holds if `boxes` is set. Fields are numbered across all stories.
-    fn run<'r, S: Collect<'r>>(
-        &'r self,
-        stories: &[Story],
-        boxes: bool,
-        sink: &mut S,
-    ) -> Result<(), Error> {
-        let mut fields = 0;
-        for s in stories {
-            let tree = self.tree(&s.part)?;
-            let rels = self.rels_of(&s.part);
-            sink.common().enter(tree, s.kind, &s.part, None, rels);
-            fields = walk::walk(tree, s.root, &self.styles, fields, sink)?;
-            if !boxes {
-                continue;
-            }
-            let mut queue: VecDeque<_> = std::mem::take(&mut sink.common().boxes).into();
-            while let Some((b, block)) = queue.pop_front() {
-                sink.common()
-                    .enter(tree, StoryKind::TextBox, &s.part, block, rels);
-                fields = walk::walk(tree, b, &self.styles, fields, sink)?;
-                queue.extend(std::mem::take(&mut sink.common().boxes));
-            }
-        }
-        Ok(())
-    }
-
-    /// The text of one story, without its text boxes.
-    fn story_text(&self, s: &Story, view: Revisions) -> Result<String, Error> {
-        let mut sink = TextSink::new(self.common()?, view, false);
-        self.run(std::slice::from_ref(s), false, &mut sink)?;
-        Ok(sink.out.trim_end_matches('\n').to_string())
-    }
-
-    /// The text of a text box in the main part.
-    fn box_text(&self, b: NodeId) -> Result<String, Error> {
-        let story = Story {
-            kind: StoryKind::TextBox,
-            part: self.main.clone(),
-            root: b,
-            id: None,
-        };
-        self.story_text(&story, Revisions::Accepted)
-    }
-
     /// Reads every view in one walk over the stories.
-    pub fn read_all(&self) -> Result<Reading, Error> {
-        let box_text = |b: NodeId| self.box_text(b);
-        let mut all = All {
-            blocks: BlocksSink::new(self.common()?, &box_text),
-            tables: TablesSink::new(self.common()?),
-            fields: FieldsSink::new(self.common()?, self.budget()),
-            revisions: RevisionsSink::new(self.common()?),
-            marks: MarksSink::new(self.common()?, &self.content_types, self.budget()),
-        };
-        let mut fields = 0;
-        for s in self.stories(false)? {
+    pub fn read(self) -> Result<Views, Error> {
+        let mut shared = Shared::default();
+        let main_tree = self.tree(&self.main)?;
+        let mut c = Collector::new(
+            Place {
+                tree: main_tree,
+                story: StoryKind::Main,
+                part: self.main.clone(),
+                block: None,
+                rels: &self.no_rels,
+            },
+            &self.ids,
+            &self.content_types,
+        );
+        let mut walked: Vec<(Story, Span, Option<u32>)> = vec![];
+        let mut box_spans: HashMap<NodeId, Span> = HashMap::new();
+        let mut main_boxes: Vec<(Option<BlockId>, Span)> = vec![];
+        for s in self.stories()? {
             let tree = self.tree(&s.part)?;
             let rels = self.rels_of(&s.part);
-            all.enter(tree, s.kind, &s.part, None, rels);
-            fields = walk::walk(tree, s.root, &self.styles, fields, &mut all)?;
-            let mut queue: VecDeque<_> = all.take_boxes().into();
+            let numbered = s.kind == StoryKind::Main;
+            c.enter(tree, s.kind, &s.part, None, rels);
+            let start = shared.pieces.len();
+            walk::walk(tree, s.root, &self.styles, numbered, &mut shared, &mut c)?;
+            c.close_all(shared.pieces.len());
+            let para_id = c.last_para_id;
+            walked.push((s.clone(), shared.pieces.span_from(start, 0), para_id));
+            // Text boxes after the story that holds them, those inside text
+            // boxes after those.
+            let mut queue: VecDeque<_> = std::mem::take(&mut c.boxes).into();
             while let Some((b, block)) = queue.pop_front() {
-                all.enter(tree, StoryKind::TextBox, &s.part, block, rels);
-                fields = walk::walk(tree, b, &self.styles, fields, &mut all)?;
-                queue.extend(all.take_boxes());
+                c.enter(tree, StoryKind::TextBox, &s.part, block, rels);
+                let start = shared.pieces.len();
+                walk::walk(tree, b, &self.styles, numbered, &mut shared, &mut c)?;
+                c.close_all(shared.pieces.len());
+                let span = shared.pieces.span_from(start, 0);
+                box_spans.insert(b, span);
+                if s.kind == StoryKind::Main {
+                    main_boxes.push((block, span));
+                }
+                queue.extend(std::mem::take(&mut c.boxes));
             }
-            all.marks.close_all()?;
         }
-        let All {
+        let pieces = shared.pieces;
+        let mut cut = Cut::new(&pieces, self.doc.limits().max_total_size);
+        let blocks = self.blocks_from(&mut c, &pieces, &box_spans)?;
+        let tables = tables_from(std::mem::take(&mut c.tables), &pieces);
+        let fields = std::mem::take(&mut c.fields)
+            .into_iter()
+            .flatten()
+            .map(|(mut f, r)| {
+                if let Some(r) = r {
+                    f.result = cut.text(r)?;
+                }
+                Ok(f)
+            })
+            .collect::<Result<Vec<Field>, Error>>()?;
+        let revisions = merge_revisions(std::mem::take(&mut c.revisions))
+            .into_iter()
+            .map(|(mut r, parts)| {
+                for p in parts {
+                    match p {
+                        Part::Span(s) => r.text.push_str(&cut.render(s, Show::ALL)?),
+                        Part::Mark => r.text.push('\n'),
+                    }
+                }
+                Ok(r)
+            })
+            .collect::<Result<Vec<Revision>, Error>>()?;
+        let bookmarks = std::mem::take(&mut c.bookmarks)
+            .into_iter()
+            .map(|(mut b, s)| {
+                if let Some(s) = s {
+                    b.text = cut.text(s)?;
+                }
+                Ok(b)
+            })
+            .collect::<Result<Vec<Bookmark>, Error>>()?;
+        let controls = std::mem::take(&mut c.controls)
+            .into_iter()
+            .map(|(mut k, s)| {
+                if let Some(s) = s {
+                    k.text = cut.text(s)?;
+                }
+                Ok(k)
+            })
+            .collect::<Result<Vec<Control>, Error>>()?;
+        let mut anchors = HashMap::new();
+        for (id, s) in std::mem::take(&mut c.anchors) {
+            anchors.insert(id, (s, cut.text(s)?));
+        }
+        let (comments, comment_spans) = self.comments(&walked, &c, &anchors, &pieces)?;
+        let (notes, note_spans) = self.notes(&walked, &c.note_refs, &pieces);
+        let headers: HashMap<String, Span> = walked
+            .iter()
+            .filter(|(s, _, _)| matches!(s.kind, StoryKind::Header | StoryKind::Footer))
+            .map(|(s, span, _)| (s.part.to_ascii_lowercase(), *span))
+            .collect();
+        let sections = self.sections(&headers, &pieces)?;
+        let block_spans = self
+            .blocks
+            .iter()
+            .map(|(n, ..)| c.block_spans.get(n).copied())
+            .collect();
+        Ok(Views {
             blocks,
+            styles: self.styles.clone(),
             tables,
             fields,
             revisions,
-            marks,
-        } = all;
-        let blocks = self.blocks_from(blocks)?;
-        let comments = self.comments(&marks)?;
-        let notes = self.notes(&marks)?;
-        Ok(Reading {
-            blocks,
-            styles: self.styles.clone(),
-            tables: tables_from(tables),
-            fields: fields.fields.into_iter().flatten().collect(),
-            revisions: merge_revisions(revisions.done),
             comments,
             notes,
-            images: marks.images,
-            bookmarks: marks.bookmarks,
-            controls: marks.controls,
-            sections: self.sections()?,
+            images: std::mem::take(&mut c.images),
+            bookmarks,
+            controls,
+            sections,
             numbering: self.numbering()?,
+            text: Text {
+                block_spans,
+                main_boxes,
+                headers,
+                notes: note_spans,
+                comments: comment_spans,
+            },
+            pieces,
         })
     }
 
-    fn blocks_from(&self, mut sink: BlocksSink<'_>) -> Result<Vec<Block>, Error> {
-        let ranges: HashMap<NodeId, (usize, usize)> = sink
-            .text
-            .blocks
-            .iter()
-            .map(|&(n, a, b)| (n, (a, b)))
-            .collect();
+    fn blocks_from(
+        &self,
+        c: &mut Collector<'_>,
+        pieces: &Pieces,
+        box_spans: &HashMap<NodeId, Span>,
+    ) -> Result<Vec<Block>, Error> {
         let t = self.tree(&self.main)?;
         let mut out = Vec::with_capacity(self.blocks.len());
-        for (index, (n, id, kind)) in self.blocks.iter().enumerate() {
-            let text = ranges
-                .get(n)
-                .map(|&(a, b)| sink.text.out[a..b].trim_end_matches('\n').to_string())
+        for (index, &(n, id, kind, shared_para_id)) in self.blocks.iter().enumerate() {
+            let text = c
+                .block_spans
+                .get(&n)
+                .map(|&s| pieces.item_text(s, Show::VIEWS))
                 .unwrap_or_default();
+            let mut content = c.content.remove(&n).unwrap_or_default();
+            for (i, boxes) in std::mem::take(&mut content.boxes) {
+                let mut all = String::new();
+                for b in boxes {
+                    if let Some(&s) = box_spans.get(&b) {
+                        if !all.is_empty() {
+                            all.push('\n');
+                        }
+                        all.push_str(&pieces.item_text(s, Show::VIEWS));
+                    }
+                }
+                if let Some(Inline::Drawing { text, .. }) = content.items.get_mut(i) {
+                    *text = Some(all);
+                }
+            }
             let mut block = Block {
-                id: id.clone(),
+                id,
+                shared_para_id,
                 index,
-                kind: *kind,
+                kind,
                 style: None,
                 style_name: None,
                 level: None,
@@ -437,12 +442,12 @@ impl<'d> Reader<'d> {
                 text,
                 element: None,
                 control: None,
-                content: sink.content.remove(n).unwrap_or_default(),
-                node: *n,
+                content: content.items,
+                node: n,
             };
             match kind {
                 BlockKind::Paragraph => {
-                    let p = props::paragraph_props(t, *n)?;
+                    let p = props::paragraph_props(t, n)?;
                     let style = self.styles.paragraph_style(p.style.as_deref());
                     block.style = p.style.clone().or_else(|| style.map(|s| s.id.clone()));
                     block.style_name = style.map(|s| s.display_name.clone()).or(p.style);
@@ -458,7 +463,7 @@ impl<'d> Reader<'d> {
                     .filter(|r| r.id != "0");
                 }
                 BlockKind::Table => {
-                    if let Some(pr) = t.child(*n, Some(W), "tblPr")? {
+                    if let Some(pr) = t.child(n, Some(W), "tblPr")? {
                         block.style = child_val(t, pr, "tblStyle")?;
                         block.style_name = block
                             .style
@@ -467,9 +472,9 @@ impl<'d> Reader<'d> {
                             .map(|s| s.display_name.clone());
                     }
                 }
-                BlockKind::Other | BlockKind::Bookmark => block.element = Some(qualified(t, *n)?),
+                BlockKind::Other | BlockKind::Bookmark => block.element = Some(qualified(t, n)?),
                 BlockKind::ContentControl => {
-                    let p = props::control_props(t, *n)?;
+                    let p = props::control_props(t, n)?;
                     block.control = Some(ContentControl {
                         kind: p.kind,
                         tag: p.tag,
@@ -483,216 +488,62 @@ impl<'d> Reader<'d> {
         }
         Ok(out)
     }
-}
 
-/// Every view of a document, read in one walk.
-pub(crate) struct Reading {
-    pub blocks: Vec<Block>,
-    pub styles: Styles,
-    pub tables: Vec<Table>,
-    pub fields: Vec<Field>,
-    pub revisions: Vec<Revision>,
-    pub comments: Vec<Comment>,
-    pub notes: Vec<Note>,
-    pub images: Vec<Image>,
-    pub bookmarks: Vec<Bookmark>,
-    pub controls: Vec<Control>,
-    pub sections: Vec<Section>,
-    pub numbering: Numbering,
-}
-
-impl Reading {
-    pub fn locate(&self, locator: &Locator) -> Result<Block, Error> {
-        let blocks = &self.blocks;
-        let found: Vec<&Block> = match locator {
-            Locator::Block(id) => blocks.iter().filter(|b| b.id == *id).collect(),
-            Locator::Heading(text) => blocks
-                .iter()
-                .filter(|b| b.level.is_some() && b.text.trim() == text.trim())
-                .collect(),
-            Locator::Placeholder(name) => {
-                let mark = format!("{{{{{name}}}}}");
-                blocks
-                    .iter()
-                    .filter(|b| b.kind == BlockKind::Paragraph && b.text.contains(&mark))
-                    .collect()
-            }
-            Locator::Text(s) => blocks
-                .iter()
-                .filter(|b| b.text.contains(s.as_str()))
-                .collect(),
-            Locator::Bookmark(name) => {
-                let Some(b) = self.bookmarks.iter().find(|b| b.name == *name) else {
-                    return Err(Error::Invalid(format!(
-                        "the document has no bookmark {name:?}"
-                    )));
-                };
-                match &b.location.block {
-                    Some(id) => {
-                        // A bookmark between blocks names the block after it.
-                        let i = blocks.iter().position(|x| x.id == *id);
-                        let i = i.map(|i| {
-                            let mut j = i;
-                            while j + 1 < blocks.len() && blocks[j].kind == BlockKind::Bookmark {
-                                j += 1;
-                            }
-                            j
-                        });
-                        i.map(|i| vec![&blocks[i]]).unwrap_or_default()
-                    }
-                    None => vec![],
-                }
-            }
-        };
-        match found.as_slice() {
-            [one] => Ok((*one).clone()),
-            [] => Err(Error::Invalid(format!(
-                "no block matches {}",
-                describe(locator)
-            ))),
-            many => Err(Error::Invalid(format!(
-                "{} blocks match {}: {}",
-                many.len(),
-                describe(locator),
-                many.iter()
-                    .take(5)
-                    .map(|b| b.id.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ))),
-        }
-    }
-}
-
-/// The sinks of every view, fed from one walk.
-struct All<'r> {
-    blocks: BlocksSink<'r>,
-    tables: TablesSink<'r>,
-    fields: FieldsSink<'r>,
-    revisions: RevisionsSink<'r>,
-    marks: MarksSink<'r>,
-}
-
-impl<'r> All<'r> {
-    fn enter(
-        &mut self,
-        tree: &'r Tree,
-        story: StoryKind,
-        part: &str,
-        block: Option<String>,
-        rels: &'r HashMap<String, Rel>,
-    ) {
-        for c in [
-            self.blocks.common(),
-            self.tables.common(),
-            self.fields.common(),
-            self.revisions.common(),
-            self.marks.common(),
-        ] {
-            c.enter(tree, story, part, block.clone(), rels);
-        }
-    }
-
-    /// The text boxes met since the last call. Every sink sees them; one
-    /// list is kept.
-    fn take_boxes(&mut self) -> Vec<(NodeId, Option<String>)> {
-        for c in [
-            self.blocks.common(),
-            self.tables.common(),
-            self.fields.common(),
-            self.revisions.common(),
-        ] {
-            c.boxes.clear();
-        }
-        std::mem::take(&mut self.marks.common().boxes)
-    }
-}
-
-impl walk::Sink for All<'_> {
-    fn event(&mut self, st: &walk::State, ev: walk::Event<'_>) -> Result<(), Error> {
-        // Blocks are the top level of the body only.
-        if self.marks.c.story == StoryKind::Main {
-            self.blocks.event(st, ev)?;
-        }
-        self.tables.event(st, ev)?;
-        self.fields.event(st, ev)?;
-        self.revisions.event(st, ev)?;
-        self.marks.event(st, ev)
-    }
-}
-
-fn tables_from(sink: TablesSink<'_>) -> Vec<Table> {
-    let mut out: Vec<Table> = sink.tables.into_iter().flatten().collect();
-    // Indexes count skipped tables too; number the ones that remain.
-    let map: HashMap<usize, usize> = out.iter().enumerate().map(|(i, t)| (t.index, i)).collect();
-    for t in &mut out {
-        t.index = map[&t.index];
-        if let Some(p) = &mut t.parent {
-            p.table = map.get(&p.table).copied().unwrap_or(p.table);
-        }
-        for c in &mut t.cells {
-            c.tables = c
-                .tables
-                .iter()
-                .filter_map(|i| map.get(i).copied())
-                .collect();
-        }
-    }
-    out
-}
-
-impl<'d> Reader<'d> {
-    fn comments(&self, marks: &MarksSink<'_>) -> Result<Vec<Comment>, Error> {
+    #[allow(clippy::type_complexity)]
+    fn comments(
+        &self,
+        walked: &[(Story, Span, Option<u32>)],
+        c: &Collector<'_>,
+        anchors: &HashMap<String, (Span, String)>,
+        pieces: &Pieces,
+    ) -> Result<(Vec<Comment>, Vec<(Span, Option<Span>)>), Error> {
         let replies = self.replies()?;
         let mut out = vec![];
-        for s in self.comment_stories()? {
+        for (s, span, para) in walked.iter().filter(|w| w.0.kind == StoryKind::Comment) {
             let t = self.tree(&s.part)?;
             let (author, date) = props::author_date(t, s.root)?;
             let id = s.id.clone().unwrap_or_default();
-            let mut para = None;
-            for d in t.descendants(s.root)? {
-                if t.is(d, Some(W), "p")? {
-                    para = props::para_id(t, d)?.or(para);
-                }
-            }
             let (parent, done) = para
-                .as_ref()
-                .and_then(|p| replies.get(p).cloned())
+                .and_then(|p| replies.get(&p).copied())
                 .unwrap_or((None, false));
+            let anchor = anchors.get(&id);
             out.push((
-                para,
+                *para,
+                parent,
                 Comment {
-                    anchor: marks.anchors.get(&id).cloned(),
-                    location: marks.comment_places.get(&id).cloned(),
+                    anchor: anchor.map(|a| a.1.clone()),
+                    location: c.comment_places.get(&id).cloned(),
                     initials: t
                         .attribute(s.root, Some(W), "initials")?
                         .map(|v| v.into_owned()),
-                    text: self.story_text(&s, Revisions::Accepted)?,
+                    text: pieces.item_text(*span, Show::VIEWS),
                     id,
                     author,
                     date,
-                    parent: parent.clone(),
+                    parent: None,
                     done,
                 },
+                (*span, anchor.map(|a| a.0)),
             ));
         }
         // The parent is named by paragraph id; give the comment id.
-        let by_para: HashMap<String, String> = out
+        let by_para: HashMap<u32, String> = out
             .iter()
-            .filter_map(|(p, c)| p.clone().map(|p| (p, c.id.clone())))
+            .filter_map(|(p, _, c, _)| p.map(|p| (p, c.id.clone())))
             .collect();
-        Ok(out
-            .into_iter()
-            .map(|(_, mut c)| {
-                c.parent = c.parent.and_then(|p| by_para.get(&p).cloned());
-                c
-            })
-            .collect())
+        let mut comments = vec![];
+        let mut spans = vec![];
+        for (_, parent, mut c, s) in out {
+            c.parent = parent.and_then(|p| by_para.get(&p).cloned());
+            comments.push(c);
+            spans.push(s);
+        }
+        Ok((comments, spans))
     }
 
     /// From `commentsExtended`: a comment's paragraph id to the paragraph
     /// id of the comment it answers, and whether it is done.
-    fn replies(&self) -> Result<HashMap<String, (Option<String>, bool)>, Error> {
+    fn replies(&self) -> Result<HashMap<u32, (Option<u32>, bool)>, Error> {
         let mut out = HashMap::new();
         let Some(part) = &self.parts.comments_extended else {
             return Ok(out);
@@ -707,52 +558,57 @@ impl<'d> Reader<'d> {
             let get = |l| -> Result<Option<String>, Error> {
                 Ok(t.attribute(n, ns, l)?.map(|v| v.into_owned()))
             };
-            if let Some(p) = get("paraId")? {
+            if let Some(p) = get("paraId")?.and_then(|p| parse_para_id(&p)) {
                 let done = get("done")?.is_some_and(|d| d == "1" || d == "true");
-                out.insert(p, (get("paraIdParent")?, done));
+                let parent = get("paraIdParent")?.and_then(|p| parse_para_id(&p));
+                out.insert(p, (parent, done));
             }
         }
         Ok(out)
     }
 
-    fn notes(&self, marks: &MarksSink<'_>) -> Result<Vec<Note>, Error> {
+    fn notes(
+        &self,
+        walked: &[(Story, Span, Option<u32>)],
+        refs: &[NoteRef],
+        pieces: &Pieces,
+    ) -> (Vec<Note>, Vec<(Span, Option<String>)>) {
         // The first reference to each note, and its position.
-        let mut refs = HashMap::new();
-        for (i, r) in marks.note_refs.iter().enumerate() {
-            refs.entry((r.kind, r.id.clone())).or_insert((i, r));
+        let mut first = HashMap::new();
+        for (i, r) in refs.iter().enumerate() {
+            first.entry((r.kind, r.id.as_str())).or_insert((i, r));
         }
         let mut out = vec![];
         for kind in [NoteKind::Footnote, NoteKind::Endnote] {
+            let story = match kind {
+                NoteKind::Footnote => StoryKind::Footnote,
+                NoteKind::Endnote => StoryKind::Endnote,
+            };
             let mut notes = vec![];
-            for (k, s) in self.notes_stories(kind)?.iter().enumerate() {
+            for (k, (s, span, _)) in walked.iter().filter(|w| w.0.kind == story).enumerate() {
                 let id = s.id.clone().unwrap_or_default();
-                let r = refs.get(&(kind, id.clone()));
+                let r = first.get(&(kind, id.as_str()));
                 // Referenced notes in the order of their references, then
                 // the others in the order of the part.
                 let order = r.map(|r| r.0).unwrap_or(usize::MAX / 2 + k);
-                // The note's text without its own mark, if it has one, and
-                // without the space after the mark.
-                let text = self.story_text(s, Revisions::Accepted)?;
-                let mark = r.and_then(|r| r.1.mark.as_deref());
-                let text = match mark {
-                    Some(m) => text.trim_start().strip_prefix(m).unwrap_or(&text),
-                    None => &text,
-                };
+                let mark = r.and_then(|r| r.1.mark.clone());
+                let text = note_text(pieces, *span, mark.as_deref(), Show::VIEWS);
                 notes.push((
                     order,
                     Note {
                         kind,
                         number: r.and_then(|r| r.1.number),
                         location: r.map(|r| r.1.location.clone()),
-                        text: text.trim_start().to_string(),
+                        text,
                         id,
                     },
+                    (*span, mark),
                 ));
             }
             notes.sort_by_key(|n| n.0);
-            out.extend(notes.into_iter().map(|n| n.1));
+            out.extend(notes.into_iter().map(|n| (n.1, n.2)));
         }
-        Ok(out)
+        out.into_iter().unzip()
     }
 
     fn numbering(&self) -> Result<Numbering, Error> {
@@ -764,23 +620,27 @@ impl<'d> Reader<'d> {
         )
     }
 
-    fn sections(&self) -> Result<Vec<Section>, Error> {
+    fn sections(
+        &self,
+        headers: &HashMap<String, Span>,
+        pieces: &Pieces,
+    ) -> Result<Vec<Section>, Error> {
         let t = self.tree(&self.main)?;
-        let mut ends: Vec<(NodeId, Option<String>, Option<String>)> = vec![];
-        let mut first: Option<String> = None;
-        let mut last: Option<String> = None;
-        for (n, id, kind) in &self.blocks {
+        let mut ends: Vec<(NodeId, Option<BlockId>, Option<BlockId>)> = vec![];
+        let mut first: Option<BlockId> = None;
+        let mut last: Option<BlockId> = None;
+        for &(n, id, kind, _) in &self.blocks {
             match kind {
                 BlockKind::Section => {
-                    ends.push((*n, first.take(), last.take()));
+                    ends.push((n, first.take(), last.take()));
                 }
                 _ => {
                     if first.is_none() {
-                        first = Some(id.clone());
+                        first = Some(id);
                     }
-                    last = Some(id.clone());
-                    if *kind == BlockKind::Paragraph
-                        && let Some(ppr) = t.child(*n, Some(W), "pPr")?
+                    last = Some(id);
+                    if kind == BlockKind::Paragraph
+                        && let Some(ppr) = t.child(n, Some(W), "pPr")?
                         && let Some(s) = t.child(ppr, Some(W), "sectPr")?
                     {
                         ends.push((s, first.take(), last.take()));
@@ -790,9 +650,7 @@ impl<'d> Reader<'d> {
         }
         let rels = self.rels_of(&self.main);
         let mut out = vec![];
-        let mut inherited: HashMap<(bool, String), String> = HashMap::new();
-        // Many sections share a header; each part is read once.
-        let mut texts = HashMap::new();
+        let mut inherited: HashMap<(bool, &str), String> = HashMap::new();
         for (index, (s, first_block, last_block)) in ends.into_iter().enumerate() {
             let twips = |el: Option<NodeId>, a: &str| -> Result<Option<f64>, Error> {
                 let Some(el) = el else { return Ok(None) };
@@ -840,29 +698,32 @@ impl<'d> Reader<'d> {
                     own.insert((header, kind), p);
                 }
             }
-            let mut headers = vec![];
-            let mut footers = vec![];
+            let mut headers_of = vec![];
+            let mut footers_of = vec![];
             for header in [true, false] {
                 for kind in ["default", "first", "even"] {
-                    let key = (header, kind.to_string());
-                    let (part, from_before) = match own.get(&key) {
+                    let (part, from_before) = match own.get(&(header, kind.to_string())) {
                         Some(p) => (p.clone(), false),
-                        None => match inherited.get(&key) {
+                        None => match inherited.get(&(header, kind)) {
                             Some(p) => (p.clone(), true),
                             None => continue,
                         },
                     };
-                    inherited.insert(key, part.clone());
+                    inherited.insert((header, kind), part.clone());
+                    let text = headers
+                        .get(&part.to_ascii_lowercase())
+                        .map(|&s| pieces.item_text(s, Show::VIEWS))
+                        .unwrap_or_default();
                     let hf = HeaderFooter {
                         kind: kind.to_string(),
-                        text: self.part_text(&part, header, Revisions::Accepted, &mut texts)?,
+                        text,
                         part,
                         inherited: from_before,
                     };
                     if header {
-                        headers.push(hf)
+                        headers_of.push(hf)
                     } else {
-                        footers.push(hf)
+                        footers_of.push(hf)
                     }
                 }
             }
@@ -892,52 +753,293 @@ impl<'d> Reader<'d> {
                 margins,
                 columns,
                 title_page,
-                headers,
-                footers,
+                headers: headers_of,
+                footers: footers_of,
             });
         }
         Ok(out)
     }
+}
 
-    /// The text of a header or footer part, read once for each part.
-    fn part_text(
-        &self,
-        part: &str,
-        header: bool,
-        view: Revisions,
-        cache: &mut HashMap<String, String>,
-    ) -> Result<String, Error> {
-        if let Some(t) = cache.get(part) {
-            return Ok(t.clone());
+/// Text of ranges that may overlap, such as bookmarks and field results:
+/// together they may hold no more than [`Limits::max_total_size`] bytes.
+///
+/// [`Limits::max_total_size`]: crate::Limits
+struct Cut<'p> {
+    pieces: &'p Pieces,
+    budget: u64,
+    used: u64,
+}
+
+impl<'p> Cut<'p> {
+    fn new(pieces: &'p Pieces, budget: u64) -> Cut<'p> {
+        Cut {
+            pieces,
+            budget,
+            used: 0,
         }
-        let story = Story {
-            kind: if header {
-                StoryKind::Header
-            } else {
-                StoryKind::Footer
-            },
-            root: self.tree(part)?.root_element(),
-            part: part.to_string(),
-            id: None,
-        };
-        let t = self.story_text(&story, view)?;
-        cache.insert(part.to_string(), t.clone());
-        Ok(t)
     }
 
-    /// The text with the options asked for. Sections, notes and comments
-    /// come from the reading.
-    pub fn text(
-        &self,
-        o: &TextOptions,
-        sections: &[Section],
-        notes: &[Note],
-        comments: &[Comment],
-    ) -> Result<String, Error> {
-        let mut sink = TextSink::new(self.common()?, o.revisions, o.notes);
-        self.run(&self.stories(true)?, false, &mut sink)?;
-        let boxes = std::mem::take(&mut sink.c.boxes);
-        let sections = if o.headers_footers { sections } else { &[] };
+    fn render(&mut self, span: Span, show: Show) -> Result<String, Error> {
+        let s = self.pieces.render(span, show);
+        self.used = self.used.saturating_add(s.len() as u64);
+        if self.used > self.budget {
+            return Err(Error::Limit {
+                what: format!(
+                    "ranges such as bookmarks or fields that hold more than {} bytes of text together",
+                    self.budget
+                ),
+                field: "max_total_size",
+                limit: self.budget,
+            });
+        }
+        Ok(s)
+    }
+
+    fn text(&mut self, span: Span) -> Result<String, Error> {
+        let mut s = self.render(span, Show::VIEWS)?;
+        let keep = s.trim_end_matches('\n').len();
+        s.truncate(keep);
+        Ok(s)
+    }
+}
+
+fn tables_from(raw: Vec<Option<super::collect::TableSpans>>, pieces: &Pieces) -> Vec<Table> {
+    let mut out: Vec<Table> = raw
+        .into_iter()
+        .flatten()
+        .map(|t| {
+            let mut table = t.table;
+            for (cell, spans) in table.cells.iter_mut().zip(t.cells) {
+                let texts: Vec<String> = spans
+                    .into_iter()
+                    .map(|s| pieces.item_text(s, Show::VIEWS))
+                    .filter(|s| !s.is_empty())
+                    .collect();
+                cell.text = texts.join("\n");
+            }
+            let mut rows = vec![vec![Some(String::new()); table.column_count]; table.row_count];
+            for c in &table.cells {
+                for (r, row) in rows.iter_mut().enumerate().skip(c.row).take(c.row_span) {
+                    for (k, slot) in row
+                        .iter_mut()
+                        .enumerate()
+                        .skip(c.column)
+                        .take(c.column_span)
+                    {
+                        *slot = (r == c.row && k == c.column).then(|| c.text.clone());
+                    }
+                }
+            }
+            table.rows = rows;
+            table
+        })
+        .collect();
+    // Indexes count skipped tables too; number the ones that remain.
+    let map: HashMap<usize, usize> = out.iter().enumerate().map(|(i, t)| (t.index, i)).collect();
+    for t in &mut out {
+        t.index = map[&t.index];
+        if let Some(p) = &mut t.parent {
+            p.table = map.get(&p.table).copied().unwrap_or(p.table);
+        }
+        for c in &mut t.cells {
+            c.tables = c
+                .tables
+                .iter()
+                .filter_map(|i| map.get(i).copied())
+                .collect();
+        }
+    }
+    out
+}
+
+/// A note's text without its own mark, if it has one, and without the
+/// space after the mark.
+fn note_text(pieces: &Pieces, span: Span, mark: Option<&str>, show: Show) -> String {
+    let text = pieces.item_text(span, show);
+    let text = match mark {
+        Some(m) => text.trim_start().strip_prefix(m).unwrap_or(&text),
+        None => &text,
+    };
+    text.trim_start().to_string()
+}
+
+/// What [`Views::text`] needs besides the views: the spans of the blocks,
+/// text boxes, headers, notes and comments.
+struct Text {
+    block_spans: Vec<Option<Span>>,
+    main_boxes: Vec<(Option<BlockId>, Span)>,
+    headers: HashMap<String, Span>,
+    notes: Vec<(Span, Option<String>)>,
+    comments: Vec<(Span, Option<Span>)>,
+}
+
+/// Every view of a document, read in one walk over its stories.
+///
+/// The views hold what the walk found; each method returns it borrowed,
+/// at no cost. [`Views::text`] renders the text anew for its options, at a
+/// cost in proportion to the text of the stories it includes.
+pub struct Views {
+    blocks: Vec<Block>,
+    styles: Styles,
+    tables: Vec<Table>,
+    fields: Vec<Field>,
+    revisions: Vec<Revision>,
+    comments: Vec<Comment>,
+    notes: Vec<Note>,
+    images: Vec<Image>,
+    bookmarks: Vec<Bookmark>,
+    controls: Vec<Control>,
+    sections: Vec<Section>,
+    numbering: Numbering,
+    text: Text,
+    pieces: Pieces,
+}
+
+impl std::fmt::Debug for Views {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Views")
+            .field("blocks", &self.blocks.len())
+            .field("tables", &self.tables.len())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Views {
+    /// The top-level blocks of the body with ids, kinds, styles, levels,
+    /// text and the content of paragraphs. No cost.
+    pub fn blocks(&self) -> &[Block] {
+        &self.blocks
+    }
+
+    /// The styles. No cost.
+    pub fn styles(&self) -> &Styles {
+        &self.styles
+    }
+
+    /// All tables of all stories, nested ones included, in reading order.
+    /// No cost.
+    pub fn tables(&self) -> &[Table] {
+        &self.tables
+    }
+
+    /// All fields of all stories, nested ones after the field that holds
+    /// them. No cost.
+    pub fn fields(&self) -> &[Field] {
+        &self.fields
+    }
+
+    /// All tracked changes of all stories. No cost.
+    pub fn revisions(&self) -> &[Revision] {
+        &self.revisions
+    }
+
+    /// The comments, in the order of the comments part. No cost.
+    pub fn comments(&self) -> &[Comment] {
+        &self.comments
+    }
+
+    /// The pictures of all stories. No cost.
+    pub fn images(&self) -> &[Image] {
+        &self.images
+    }
+
+    /// The bookmarks of all stories. No cost.
+    pub fn bookmarks(&self) -> &[Bookmark] {
+        &self.bookmarks
+    }
+
+    /// The content controls of all stories, an enclosing control before
+    /// those it holds. No cost.
+    pub fn content_controls(&self) -> &[Control] {
+        &self.controls
+    }
+
+    /// The footnotes, then the endnotes, without separators, each in the
+    /// order of their references in the body. No cost.
+    pub fn notes(&self) -> &[Note] {
+        &self.notes
+    }
+
+    /// The sections with their page setup, headers and footers. No cost.
+    pub fn sections(&self) -> &[Section] {
+        &self.sections
+    }
+
+    /// The numbering definitions and instances. No cost.
+    pub fn numbering(&self) -> &Numbering {
+        &self.numbering
+    }
+
+    /// The one block a locator names. A locator that matches no block or
+    /// several gives [`Error::Invalid`], which names the candidates' ids.
+    /// Costs one pass over the blocks.
+    pub fn locate(&self, locator: &Locator) -> Result<&Block, Error> {
+        let blocks = &self.blocks;
+        let mut found: Vec<usize> = match &locator.0 {
+            Wanted::Block(id) => (0..blocks.len()).filter(|&i| blocks[i].id == *id).collect(),
+            Wanted::Heading(text) => (0..blocks.len())
+                .filter(|&i| blocks[i].level.is_some() && blocks[i].text.trim() == text)
+                .collect(),
+            Wanted::Placeholder(name) => {
+                let mark = format!("{{{{{name}}}}}");
+                (0..blocks.len())
+                    .filter(|&i| {
+                        blocks[i].kind == BlockKind::Paragraph && blocks[i].text.contains(&mark)
+                    })
+                    .collect()
+            }
+            Wanted::Text(s) => (0..blocks.len())
+                .filter(|&i| blocks[i].text.contains(s.as_str()))
+                .collect(),
+            Wanted::Bookmark(name) => {
+                let index: HashMap<BlockId, usize> =
+                    blocks.iter().enumerate().map(|(i, b)| (b.id, i)).collect();
+                self.bookmarks
+                    .iter()
+                    .filter(|b| b.name.eq_ignore_ascii_case(name))
+                    .filter_map(|b| b.location.block.and_then(|id| index.get(&id).copied()))
+                    .map(|mut i| {
+                        // A bookmark between blocks names the block after it.
+                        while i + 1 < blocks.len() && blocks[i].kind == BlockKind::Bookmark {
+                            i += 1;
+                        }
+                        i
+                    })
+                    .collect()
+            }
+        };
+        found.sort_unstable();
+        found.dedup();
+        match found.as_slice() {
+            [one] => Ok(&blocks[*one]),
+            [] => Err(Error::Invalid(format!("no block matches {locator}"))),
+            many => {
+                let ids: Vec<String> = many
+                    .iter()
+                    .take(10)
+                    .map(|&i| blocks[i].id.to_string())
+                    .collect();
+                let more = if many.len() > 10 { ", …" } else { "" };
+                Err(Error::Invalid(format!(
+                    "{} blocks match {locator}: {}{more}",
+                    many.len(),
+                    ids.join(", ")
+                )))
+            }
+        }
+    }
+
+    /// The text as a reader sees it: paragraphs as lines, tables as lines
+    /// of tab-separated cells, with the options asked for. Costs one pass
+    /// over the text of the stories it includes.
+    pub fn text(&self, o: &TextOptions) -> String {
+        let show = Show {
+            revisions: o.revisions,
+            note_marks: o.notes,
+        };
+        let pieces = &self.pieces;
+        let t = &self.text;
         let mut out = String::new();
         let line = |out: &mut String, s: &str| {
             if !s.is_empty() {
@@ -945,84 +1047,81 @@ impl<'d> Reader<'d> {
                 out.push('\n');
             }
         };
-        let by_block: HashMap<NodeId, (usize, usize)> =
-            sink.blocks.iter().map(|&(n, a, b)| (n, (a, b))).collect();
-        let mut boxes_of: HashMap<&str, Vec<NodeId>> = HashMap::new();
-        for (b, blk) in &boxes {
-            if let Some(blk) = blk {
-                boxes_of.entry(blk.as_str()).or_default().push(*b);
+        let mut boxes_of: HashMap<BlockId, Vec<Span>> = HashMap::new();
+        if o.text_boxes {
+            for (b, s) in &t.main_boxes {
+                if let Some(b) = b {
+                    boxes_of.entry(*b).or_default().push(*s);
+                }
             }
         }
         // A section's headers come before its first block and its footers
-        // after its last, in the view of revisions asked for.
-        let mut before: HashMap<&str, Vec<String>> = HashMap::new();
-        let mut after: HashMap<&str, Vec<String>> = HashMap::new();
-        let mut cache = HashMap::new();
-        for s in sections {
-            for (header, list, at, map) in [
-                (true, &s.headers, &s.first_block, &mut before),
-                (false, &s.footers, &s.last_block, &mut after),
-            ] {
-                let Some(at) = at else { continue };
-                // The first page's header and footer, then the others'.
-                let kinds: &[&str] = if s.title_page {
-                    &["first", "default"]
-                } else {
-                    &["default"]
-                };
-                for k in kinds {
-                    for h in list.iter().filter(|h| h.kind == *k) {
-                        let t = self.part_text(&h.part, header, o.revisions, &mut cache)?;
-                        map.entry(at.as_str()).or_default().push(t);
+        // after its last: the first page's, then the others'.
+        let mut before: HashMap<BlockId, Vec<String>> = HashMap::new();
+        let mut after: HashMap<BlockId, Vec<String>> = HashMap::new();
+        if o.headers_footers {
+            for s in &self.sections {
+                for (list, at, map) in [
+                    (&s.headers, &s.first_block, &mut before),
+                    (&s.footers, &s.last_block, &mut after),
+                ] {
+                    let Some(at) = at else { continue };
+                    let kinds: &[&str] = if s.title_page {
+                        &["first", "default"]
+                    } else {
+                        &["default"]
+                    };
+                    for k in kinds {
+                        for h in list.iter().filter(|h| h.kind == *k) {
+                            if let Some(&span) = t.headers.get(&h.part.to_ascii_lowercase()) {
+                                map.entry(*at)
+                                    .or_default()
+                                    .push(pieces.item_text(span, show));
+                            }
+                        }
                     }
                 }
             }
         }
-        for (n, id, _) in &self.blocks {
-            for t in before.get(id.as_str()).into_iter().flatten() {
-                line(&mut out, t);
+        for (b, span) in self.blocks.iter().zip(&t.block_spans) {
+            for s in before.get(&b.id).into_iter().flatten() {
+                line(&mut out, s);
             }
-            if let Some(&(a, b)) = by_block.get(n) {
-                out.push_str(&sink.out[a..b]);
+            if let Some(span) = span {
+                out.push_str(&pieces.render(*span, show));
             }
-            if o.text_boxes {
-                for b in boxes_of.get(id.as_str()).into_iter().flatten() {
-                    let story = Story {
-                        kind: StoryKind::TextBox,
-                        part: self.main.clone(),
-                        root: *b,
-                        id: None,
-                    };
-
-                    let mut s = TextSink::new(self.common()?, o.revisions, o.notes);
-                    self.run(std::slice::from_ref(&story), true, &mut s)?;
-                    line(&mut out, &s.out);
-                }
+            for s in boxes_of.get(&b.id).into_iter().flatten() {
+                line(&mut out, &pieces.render(*s, show));
             }
-            for t in after.get(id.as_str()).into_iter().flatten() {
-                line(&mut out, t);
+            for s in after.get(&b.id).into_iter().flatten() {
+                line(&mut out, s);
             }
         }
         if o.notes {
-            let numbered: Vec<&Note> = notes.iter().filter(|n| n.number.is_some()).collect();
+            let numbered: Vec<(&Note, &(Span, Option<String>))> = self
+                .notes
+                .iter()
+                .zip(&t.notes)
+                .filter(|(n, _)| n.number.is_some())
+                .collect();
             if !numbered.is_empty() {
                 out.push('\n');
-                for n in numbered {
+                for (n, (span, mark)) in numbered {
                     let num = n.number.unwrap_or_default();
-                    let mark = match n.kind {
+                    let label = match n.kind {
                         NoteKind::Footnote => num.to_string(),
                         NoteKind::Endnote => roman(num),
                     };
-                    line(&mut out, &format!("[{mark}] {}", n.text.trim()));
+                    let text = note_text(pieces, *span, mark.as_deref(), show);
+                    line(&mut out, &format!("[{label}] {}", text.trim()));
                 }
             }
         }
-        if o.comments && !comments.is_empty() {
+        if o.comments && !self.comments.is_empty() {
             out.push('\n');
-            for c in comments {
-                let about = c
-                    .anchor
-                    .as_deref()
+            for (c, (span, anchor)) in self.comments.iter().zip(&t.comments) {
+                let about = anchor
+                    .map(|a| pieces.item_text(a, show))
                     .map(|a| format!(" on \u{201C}{}\u{201D}", a.trim()))
                     .unwrap_or_default();
                 let verb = if c.parent.is_some() {
@@ -1030,22 +1129,13 @@ impl<'d> Reader<'d> {
                 } else {
                     "Comment"
                 };
+                let text = pieces.item_text(*span, show);
                 line(
                     &mut out,
-                    &format!("[{verb} by {}{about}] {}", c.author, c.text.trim()),
+                    &format!("[{verb} by {}{about}] {}", c.author, text.trim()),
                 );
             }
         }
-        Ok(out)
-    }
-}
-
-fn describe(l: &Locator) -> String {
-    match l {
-        Locator::Block(id) => format!("the block id {id}"),
-        Locator::Bookmark(n) => format!("the bookmark {n:?}"),
-        Locator::Heading(t) => format!("the heading {t:?}"),
-        Locator::Placeholder(n) => format!("the placeholder {{{{{n}}}}}"),
-        Locator::Text(t) => format!("the text {t:?}"),
+        out
     }
 }

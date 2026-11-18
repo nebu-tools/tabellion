@@ -197,3 +197,51 @@ fn bad_input_gives_one_line_and_a_status() {
     let (code, _, _) = run(&["inspect", &corpus("parts.docx"), "chapters"]);
     assert_eq!(code, Some(2));
 }
+
+#[test]
+fn a_wrong_command_line_gives_a_hint_on_standard_error() {
+    for args in [
+        vec!["inspect"],
+        vec!["inspect", "x.docx", "chapters"],
+        vec!["text", "x.docx", "--revisions", "some"],
+        vec!["frobnicate"],
+    ] {
+        let (code, out, err) = run(&args);
+        assert_eq!(code, Some(2), "{args:?}");
+        assert!(out.is_empty(), "{args:?}: {out}");
+        assert!(err.starts_with("error: "), "{args:?}: {err}");
+        assert!(
+            err.contains("Usage: tabellion") || err.contains("[possible values: "),
+            "{args:?}: {err}"
+        );
+        assert!(
+            err.ends_with("For more information, try '--help'.\n"),
+            "{args:?}: {err}"
+        );
+        assert!(err.lines().count() > 1, "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn a_file_that_cannot_be_read_gives_one_line_on_standard_error() {
+    let (code, out, err) = run(&["text", "no/such/file.docx"]);
+    assert_eq!(code, Some(3));
+    assert!(out.is_empty());
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(
+        err.starts_with("tabellion: cannot read no/such/file.docx"),
+        "{err}"
+    );
+}
+
+#[test]
+fn inspect_names_blocks_that_share_a_paragraph_id() {
+    let (code, out, err) = run(&["inspect", &corpus("edge.docx")]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(
+        out.contains(
+            "2 blocks share a paragraph id with another block and are numbered instead: #"
+        ),
+        "{out}"
+    );
+}

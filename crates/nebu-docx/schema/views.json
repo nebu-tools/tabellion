@@ -269,7 +269,7 @@
       "description": "One item of a paragraph's content.",
       "oneOf": [
         {
-          "description": "Text of one run.",
+          "description": "Text of one run, deleted and hidden text included.",
           "type": "object",
           "properties": {
             "type": {
@@ -281,6 +281,27 @@
             "format": {
               "$ref": "#/$defs/format"
             },
+            "toggles": {
+              "description": "The toggle properties that are on after the style cascade; hidden text is text a reader does not see.",
+              "type": "array",
+              "items": {
+                "enum": [
+                  "bold",
+                  "bold_complex",
+                  "italic",
+                  "italic_complex",
+                  "all_caps",
+                  "small_caps",
+                  "strike",
+                  "double_strike",
+                  "outline",
+                  "shadow",
+                  "emboss",
+                  "imprint",
+                  "hidden"
+                ]
+              }
+            },
             "revision": {
               "oneOf": [
                 {
@@ -290,17 +311,14 @@
                   "$ref": "#/$defs/change"
                 }
               ]
-            },
-            "hidden": {
-              "type": "boolean"
             }
           },
           "required": [
             "type",
             "text",
             "format",
-            "revision",
-            "hidden"
+            "toggles",
+            "revision"
           ],
           "additionalProperties": false
         },
@@ -682,7 +700,12 @@
       "type": "object",
       "properties": {
         "id": {
+          "description": "A block id: p: or t: and eight capital hexadecimal digits, or # and an index.",
           "type": "string"
+        },
+        "shared_para_id": {
+          "description": "True if another block of the body has the same w14:paraId, so that this one has a #index id.",
+          "type": "boolean"
         },
         "index": {
           "type": "integer",
@@ -755,6 +778,7 @@
       },
       "required": [
         "id",
+        "shared_para_id",
         "index",
         "kind",
         "style",

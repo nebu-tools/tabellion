@@ -1,12 +1,14 @@
 //! The one walk over a story that every view uses.
 //!
 //! A story is the content of the body, a header or footer, a note, a
-//! comment or a text box. [`walk`] goes through it in document order and
-//! tells a [`Sink`] what it meets: block and inline structure, text, field
-//! code, and objects such as drawings and note references. It keeps the
-//! state that decides what a reader sees: the revisions around the current
-//! point, the fields whose code is being read, and whether the current run
-//! is hidden. [`State::visible`] is the one definition of visible text.
+//! comment or a text box. [`walk`] goes through it in document order,
+//! records its visible text as [`Pieces`](super::text::Pieces) and tells a
+//! [`Sink`] what it meets: block and inline structure, text, field code,
+//! and objects such as drawings and note references. It keeps the state
+//! that decides what a reader sees: the revisions around the current
+//! point, the fields whose code is being read, the tables around it, and
+//! whether the current run is hidden. Each piece carries that state, and
+//! [`Pieces::render`](super::text::Pieces::render) decides from it.
 //!
 //! The walk uses no recursion: it keeps its own stack, so a deeply nested
 //! document costs memory in proportion to its size and no call stack.
@@ -15,8 +17,11 @@ use crate::Error;
 use crate::ns;
 use crate::xml::{NodeId, Tree};
 
-use super::styles::Styles;
-use super::{RevisionKind, Revisions};
+use super::RevisionKind;
+use super::Revisions;
+use super::props::child_val;
+use super::styles::{Stated, Styles, Toggle, Toggles};
+use super::text::{self, Piece, Pieces, What};
 
 pub(crate) const W: &str = ns::W;
 pub(crate) const MC: &str = "http://schemas.openxmlformats.org/markup-compatibility/2006";
@@ -68,7 +73,6 @@ pub(crate) enum Kind {
     /// `w:moveTo`.
     Change,
     Drawing,
-    Math,
     NoteReference,
     CommentReference,
     BookmarkStart,
@@ -96,9 +100,12 @@ pub(crate) enum Event<'a> {
     End(Kind, NodeId),
     /// A point object with no content of interest.
     Object(Kind, NodeId),
-    /// Text of the current run: `w:t`, `w:delText`, tabs, breaks, hyphens
-    /// and symbols. Whether a reader sees it is [`State::visible`].
+    /// Text of the current run as the file holds it: `w:t`, `w:delText`,
+    /// tabs, breaks as `\n`, hyphens and symbols, deleted and hidden text
+    /// too. What a reader sees is decided by the pieces.
     Text(&'a str),
+    /// An equation and its text.
+    Math(&'a str),
     /// Text of a field code, from `w:instrText`, `w:delInstrText`, or
     /// `w:t` in a code. [`State::code`] holds the code so far.
     Code,
@@ -145,41 +152,71 @@ struct OpenField {
     code_end: Option<usize>,
 }
 
+/// What lasts from one story to the next: the pieces, the count of fields
+/// and the count of note references.
+#[derive(Debug, Default)]
+pub(crate) struct Shared {
+    pub pieces: Pieces,
+    next_field: usize,
+    notes: [usize; 2],
+}
+
 /// The walk's state, which a sink may read at every event.
-pub(crate) struct State {
+pub(crate) struct State<'s> {
+    shared: &'s mut Shared,
+    styles: &'s Styles,
+    /// Note references in this story are numbered.
+    numbered: bool,
     changes: Vec<Change>,
-    /// Open deletions and moves away, and open insertions and moves here.
-    removed_if_accepted: usize,
-    removed_if_rejected: usize,
+    /// Open revisions of each kind, row and cell marks included: inserted,
+    /// deleted, moved away, moved here.
+    open: [usize; 4],
     fields: Vec<OpenField>,
+    /// Open simple fields among `fields`.
+    simple: usize,
     /// The codes of the open complex fields. A field's code is a range of
     /// it, and a nested field's code lies inside the range of the code
     /// that holds it, so nesting costs no copies.
     codes: String,
     in_code: usize,
-    next_field: usize,
-    hidden: bool,
+    toggles: Toggles,
     pub paragraph: Option<NodeId>,
     pub run: Option<NodeId>,
-    /// The style of the current paragraph, for hidden text.
+    /// The style of the current paragraph.
     para_style: Option<String>,
+    /// The style of each open table, innermost last.
+    tables: Vec<Option<String>>,
+    /// For each open row: no cell has begun yet, and its `w:gridBefore`.
+    rows: Vec<(bool, u16)>,
+    /// The number of the last note reference, if it is numbered.
+    note_number: Option<usize>,
 }
 
-impl State {
-    /// True if a reader sees the current text under this view of the
-    /// revisions: not in a field code, not hidden, and not removed by the
-    /// revisions around it.
-    pub fn visible(&self, view: Revisions) -> bool {
-        self.in_code == 0 && !self.hidden && self.shown(view)
+fn slot(k: RevisionKind) -> Option<usize> {
+    match k {
+        RevisionKind::Insertion => Some(0),
+        RevisionKind::Deletion => Some(1),
+        RevisionKind::MoveFrom => Some(2),
+        RevisionKind::MoveTo => Some(3),
+        RevisionKind::Formatting => None,
     }
+}
 
+const BITS: [u8; 4] = [
+    text::INSERTED,
+    text::DELETED,
+    text::MOVED_FROM,
+    text::MOVED_TO,
+];
+
+impl<'s> State<'s> {
     /// True if the revisions around the current point leave it in the
     /// document under this view.
     pub fn shown(&self, view: Revisions) -> bool {
         match view {
             Revisions::Current => true,
-            Revisions::Accepted => self.removed_if_accepted == 0,
-            Revisions::Rejected => self.removed_if_rejected == 0,
+            Revisions::Accepted => self.open[1] + self.open[2] == 0,
+            Revisions::Rejected => self.open[0] + self.open[3] == 0,
         }
     }
 
@@ -188,9 +225,9 @@ impl State {
         self.in_code > 0
     }
 
-    /// True if the current run is hidden text.
-    pub fn hidden(&self) -> bool {
-        self.hidden
+    /// The toggle properties of the current run after the style cascade.
+    pub fn toggles(&self) -> Toggles {
+        self.toggles
     }
 
     /// The innermost revision around the current point.
@@ -218,7 +255,28 @@ impl State {
             .unwrap_or_default()
     }
 
-    fn code_of<'s>(&'s self, f: &'s OpenField) -> &'s str {
+    /// The number of pieces recorded so far: where a range that begins
+    /// here begins and one that ends here ends.
+    pub fn at(&self) -> usize {
+        self.shared.pieces.len()
+    }
+
+    /// The number of tables around the current point.
+    pub fn depth(&self) -> u16 {
+        u16::try_from(self.tables.len()).unwrap_or(u16::MAX)
+    }
+
+    /// The number of field codes around the current point.
+    pub fn code_depth(&self) -> u16 {
+        u16::try_from(self.in_code).unwrap_or(u16::MAX)
+    }
+
+    /// The number Word shows for the last note reference, if it has one.
+    pub fn note_number(&self) -> Option<usize> {
+        self.note_number
+    }
+
+    fn code_of<'a>(&'a self, f: &'a OpenField) -> &'a str {
         match &f.simple {
             Some(c) => c,
             None => {
@@ -228,22 +286,55 @@ impl State {
         }
     }
 
-    fn push_change(&mut self, c: Change) {
-        match c.kind {
-            RevisionKind::Deletion | RevisionKind::MoveFrom => self.removed_if_accepted += 1,
-            RevisionKind::Insertion | RevisionKind::MoveTo => self.removed_if_rejected += 1,
-            RevisionKind::Formatting => {}
+    /// A piece with the state of the current point.
+    fn piece(&self, text: bool) -> Piece {
+        let mut revisions = 0;
+        for (n, bit) in self.open.iter().zip(BITS) {
+            if *n > 0 {
+                revisions |= bit;
+            }
         }
+        Piece {
+            what: What::Break,
+            revisions,
+            hidden: text && self.toggles.has(Toggle::Hidden),
+            code: self.code_depth(),
+            depth: self.depth(),
+        }
+    }
+
+    fn push(&mut self, what: What) {
+        let p = self.piece(false);
+        self.shared.pieces.push(what, p);
+    }
+
+    /// Records text of the current run and tells the sink.
+    fn text(&mut self, s: &str, sink: &mut impl Sink) -> Result<(), Error> {
+        let p = self.piece(true);
+        self.shared.pieces.push_text(s, p);
+        sink.event(self, Event::Text(s))
+    }
+
+    fn open_revision(&mut self, k: RevisionKind) {
+        if let Some(i) = slot(k) {
+            self.open[i] += 1;
+        }
+    }
+
+    fn close_revision(&mut self, k: RevisionKind) {
+        if let Some(i) = slot(k) {
+            self.open[i] = self.open[i].saturating_sub(1);
+        }
+    }
+
+    fn push_change(&mut self, c: Change) {
+        self.open_revision(c.kind);
         self.changes.push(c);
     }
 
     fn pop_change(&mut self) {
         if let Some(c) = self.changes.pop() {
-            match c.kind {
-                RevisionKind::Deletion | RevisionKind::MoveFrom => self.removed_if_accepted -= 1,
-                RevisionKind::Insertion | RevisionKind::MoveTo => self.removed_if_rejected -= 1,
-                RevisionKind::Formatting => {}
-            }
+            self.close_revision(c.kind);
         }
     }
 
@@ -254,6 +345,9 @@ impl State {
         };
         if f.phase == Phase::Code {
             self.in_code -= 1;
+        }
+        if f.simple.is_some() {
+            self.simple -= 1;
         }
         sink.event(
             self,
@@ -275,32 +369,14 @@ impl State {
         self.fields.last().is_some_and(|f| f.phase == Phase::Code)
     }
 
-    /// Numbers fields from this one on, so that walks of several stories
-    /// number fields in one sequence.
-    pub fn start_fields_at(&mut self, n: usize) {
-        self.next_field = n;
-    }
-
-    fn new() -> State {
-        State {
-            changes: vec![],
-            removed_if_accepted: 0,
-            removed_if_rejected: 0,
-            fields: vec![],
-            codes: String::new(),
-            in_code: 0,
-            next_field: 0,
-            hidden: false,
-            paragraph: None,
-            run: None,
-            para_style: None,
-        }
+    fn table_style(&self) -> Option<&str> {
+        self.tables.last().and_then(|t| t.as_deref())
     }
 }
 
 /// Receives the events of a walk.
 pub(crate) trait Sink {
-    fn event(&mut self, state: &State, event: Event<'_>) -> Result<(), Error>;
+    fn event(&mut self, state: &State<'_>, event: Event<'_>) -> Result<(), Error>;
 }
 
 /// What to do when leaving an element.
@@ -312,10 +388,13 @@ enum Leave {
     Change,
     /// End a simple field and pop it.
     SimpleField,
-    /// End a run.
     Run,
-    /// End a paragraph.
     Paragraph,
+    Table,
+    /// End a row, and the revision of its mark.
+    Row(Option<RevisionKind>),
+    /// End a cell of this span, and the revision of its mark.
+    Cell(u16, Option<RevisionKind>),
 }
 
 struct Frame {
@@ -334,6 +413,8 @@ enum Role {
     Container(Kind),
     /// Report it as a point object; skip its content.
     Object(Kind),
+    /// An equation.
+    Math,
     /// Neither report nor walk it.
     Skip,
     /// Walk only this child (a branch of `mc:AlternateContent`, the content
@@ -341,17 +422,34 @@ enum Role {
     Only(Option<NodeId>, Kind),
 }
 
-/// Walks a story from its root element and returns the number of fields
-/// it saw, counting from `first_field`.
+/// Walks a story from its root element. `numbered` says whether its note
+/// references take numbers, as those of the body and its text boxes do.
 pub(crate) fn walk(
     tree: &Tree,
     root: NodeId,
     styles: &Styles,
-    first_field: usize,
+    numbered: bool,
+    shared: &mut Shared,
     sink: &mut impl Sink,
-) -> Result<usize, Error> {
-    let mut st = State::new();
-    st.start_fields_at(first_field);
+) -> Result<(), Error> {
+    let mut st = State {
+        shared,
+        styles,
+        numbered,
+        changes: vec![],
+        open: [0; 4],
+        fields: vec![],
+        simple: 0,
+        codes: String::new(),
+        in_code: 0,
+        toggles: Toggles::default(),
+        paragraph: None,
+        run: None,
+        para_style: None,
+        tables: vec![],
+        rows: vec![],
+        note_number: None,
+    };
     let mut stack = vec![Frame {
         node: root,
         next: 0,
@@ -370,7 +468,7 @@ pub(crate) fn walk(
             crate::xml::NodeKind::Element => {}
             _ => continue,
         }
-        let mut role = role(tree, child, &st)?;
+        let mut role = role(tree, child, st.run.is_some())?;
         if let Role::Only(None, Kind::Opaque) = role {
             // No branch of mc:AlternateContent applies: report it whole.
             role = Role::Object(Kind::Opaque);
@@ -386,7 +484,14 @@ pub(crate) fn walk(
                 object(tree, &mut st, kind, child, sink)?;
                 None
             }
-            Role::Container(kind) => Some(start(tree, &mut st, styles, kind, child, sink)?),
+            Role::Math => {
+                let t = math_text(tree, child)?;
+                let p = st.piece(true);
+                st.shared.pieces.push_text(&t, p);
+                sink.event(&st, Event::Math(&t))?;
+                None
+            }
+            Role::Container(kind) => Some(start(tree, &mut st, kind, child, sink)?),
             Role::Only(only, kind) => {
                 if kind == Kind::ContentControl {
                     sink.event(&st, Event::Start(kind, child))?;
@@ -434,10 +539,10 @@ pub(crate) fn walk(
     while !st.fields.is_empty() {
         st.end_field(sink)?;
     }
-    Ok(st.next_field)
+    Ok(())
 }
 
-fn leave(tree: &Tree, st: &mut State, f: &Frame, sink: &mut impl Sink) -> Result<(), Error> {
+fn leave(tree: &Tree, st: &mut State<'_>, f: &Frame, sink: &mut impl Sink) -> Result<(), Error> {
     match f.leave {
         Leave::Nothing => {}
         Leave::End(kind) => sink.event(st, Event::End(kind, f.node))?,
@@ -446,7 +551,7 @@ fn leave(tree: &Tree, st: &mut State, f: &Frame, sink: &mut impl Sink) -> Result
             st.pop_change();
         }
         Leave::SimpleField => {
-            if st.fields.iter().any(|o| o.simple.is_some()) {
+            if st.simple > 0 {
                 sink.event(st, Event::End(Kind::SimpleField, f.node))?;
                 // Complex fields that began inside the simple field and did
                 // not end there end with it.
@@ -462,22 +567,71 @@ fn leave(tree: &Tree, st: &mut State, f: &Frame, sink: &mut impl Sink) -> Result
         Leave::Run => {
             sink.event(st, Event::End(Kind::Run, f.node))?;
             st.run = None;
-            st.hidden = false;
+            st.toggles = Toggles::default();
         }
         Leave::Paragraph => {
-            // The paragraph mark: a change to it, then the end.
-            if let Some((_, mark)) = paragraph_mark_change(tree, f.node)? {
-                sink.event(st, Event::Object(Kind::MarkChange, mark))?;
+            // The paragraph mark: a change to it, then its piece and the
+            // end.
+            let mark = paragraph_mark_change(tree, f.node)?;
+            if let Some((_, m)) = mark {
+                sink.event(st, Event::Object(Kind::MarkChange, m))?;
             }
+            let mut p = st.piece(false);
+            if let Some((k, _)) = mark
+                && let Some(i) = slot(k)
+            {
+                p.revisions |= BITS[i];
+            }
+            p.hidden = mark_hidden(tree, f.node, st)?;
+            st.shared.pieces.push(What::ParagraphEnd, p);
             sink.event(st, Event::End(Kind::Paragraph, f.node))?;
             st.paragraph = None;
             st.para_style = None;
+        }
+        Leave::Table => {
+            sink.event(st, Event::End(Kind::Table, f.node))?;
+            st.tables.pop();
+        }
+        Leave::Row(mark) => {
+            st.push(What::RowEnd);
+            sink.event(st, Event::End(Kind::Row, f.node))?;
+            st.rows.pop();
+            if let Some(k) = mark {
+                st.close_revision(k);
+            }
+        }
+        Leave::Cell(span, mark) => {
+            sink.event(st, Event::End(Kind::Cell, f.node))?;
+            st.push(What::CellEnd { span });
+            if let Some(k) = mark {
+                st.close_revision(k);
+            }
         }
     }
     if f.block {
         sink.event(st, Event::BlockEnd(f.node))?;
     }
     Ok(())
+}
+
+/// Whether a paragraph's mark is hidden: its `w:pPr/w:rPr` through the
+/// style cascade.
+fn mark_hidden(tree: &Tree, p: NodeId, st: &State<'_>) -> Result<bool, Error> {
+    let rpr = match tree.child(p, Some(W), "pPr")? {
+        Some(ppr) => tree.child(ppr, Some(W), "rPr")?,
+        None => None,
+    };
+    let character = match rpr {
+        Some(r) => child_val(tree, r, "rStyle")?,
+        None => None,
+    };
+    let t = st.styles.toggles(
+        Stated::read(tree, rpr)?,
+        character.as_deref(),
+        st.para_style.as_deref(),
+        st.table_style(),
+    );
+    Ok(t.has(Toggle::Hidden))
 }
 
 /// The revision of a paragraph mark: `w:pPr/w:rPr/w:ins` and the like.
@@ -519,10 +673,10 @@ pub(crate) fn change_kind(tree: &Tree, n: NodeId) -> Result<Option<RevisionKind>
 
 /// True if an element of a story's top level is listed as a block.
 pub(crate) fn listed(tree: &Tree, n: NodeId) -> Result<bool, Error> {
-    Ok(tree.is_element(n)? && !matches!(role(tree, n, &State::new())?, Role::Skip))
+    Ok(tree.is_element(n)? && !matches!(role(tree, n, false)?, Role::Skip))
 }
 
-fn role(tree: &Tree, n: NodeId, st: &State) -> Result<Role, Error> {
+fn role(tree: &Tree, n: NodeId, in_run: bool) -> Result<Role, Error> {
     let Some(name) = tree.name(n)? else {
         return Ok(Role::Skip);
     };
@@ -535,7 +689,7 @@ fn role(tree: &Tree, n: NodeId, st: &State) -> Result<Role, Error> {
     }
     if ns == M {
         return Ok(match name.local {
-            "oMath" | "oMathPara" => Role::Object(Kind::Math),
+            "oMath" | "oMathPara" => Role::Math,
             _ => Role::Object(Kind::Opaque),
         });
     }
@@ -560,7 +714,7 @@ fn role(tree: &Tree, n: NodeId, st: &State) -> Result<Role, Error> {
         // Inside a run.
         "t" | "delText" | "instrText" | "delInstrText" | "tab" | "ptab" | "br" | "cr"
         | "noBreakHyphen" | "softHyphen" | "sym" | "fldChar"
-            if st.run.is_some() =>
+            if in_run =>
         {
             Role::Object(Opaque)
         }
@@ -617,7 +771,7 @@ fn role(tree: &Tree, n: NodeId, st: &State) -> Result<Role, Error> {
 /// The branch of `mc:AlternateContent` that Word takes: the first
 /// `mc:Choice` whose required namespaces it understands, else
 /// `mc:Fallback`.
-fn choose(tree: &Tree, ac: NodeId) -> Result<Option<NodeId>, Error> {
+pub(crate) fn choose(tree: &Tree, ac: NodeId) -> Result<Option<NodeId>, Error> {
     let mut fallback = None;
     for c in tree.elements(ac)? {
         if tree.is(c, Some(MC), "Choice")? {
@@ -642,10 +796,41 @@ fn choose(tree: &Tree, ac: NodeId) -> Result<Option<NodeId>, Error> {
     Ok(fallback)
 }
 
+/// The text of an equation: its `m:t` elements.
+fn math_text(tree: &Tree, n: NodeId) -> Result<String, Error> {
+    let mut s = String::new();
+    for d in tree.descendants(n)? {
+        if tree.is(d, Some(M), "t")? {
+            s.push_str(&tree.text_content(d)?);
+        }
+    }
+    Ok(s)
+}
+
+fn int_val(tree: &Tree, parent: Option<NodeId>, local: &str) -> Result<usize, Error> {
+    let Some(p) = parent else { return Ok(0) };
+    Ok(child_val(tree, p, local)?
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(0))
+}
+
+/// The revision mark among the children of a row's or cell's properties.
+fn mark_of(tree: &Tree, pr: Option<NodeId>) -> Result<Option<RevisionKind>, Error> {
+    let Some(pr) = pr else { return Ok(None) };
+    for c in tree.elements(pr)? {
+        if let Some(k) = change_kind(tree, c)? {
+            return Ok(Some(k));
+        }
+    }
+    Ok(None)
+}
+
+/// More grid positions per cell than this is not a table a person made.
+pub(crate) const MAX_SPAN: usize = 1024;
+
 fn start(
     tree: &Tree,
-    st: &mut State,
-    styles: &Styles,
+    st: &mut State<'_>,
     kind: Kind,
     n: NodeId,
     sink: &mut impl Sink,
@@ -658,8 +843,8 @@ fn start(
             Leave::Change
         }
         Kind::SimpleField => {
-            let index = st.next_field;
-            st.next_field += 1;
+            let index = st.shared.next_field;
+            st.shared.next_field += 1;
             let code = tree
                 .attribute(n, Some(W), "instr")?
                 .unwrap_or_default()
@@ -677,14 +862,25 @@ fn start(
                 code_start: 0,
                 code_end: None,
             });
+            st.simple += 1;
             sink.event(st, Event::Start(Kind::SimpleField, n))?;
             Leave::SimpleField
         }
         Kind::Run => {
             st.run = Some(n);
-            st.hidden = run_hidden(tree, n, styles, st.para_style.as_deref())?;
+            let rpr = tree.child(n, Some(W), "rPr")?;
+            let character = match rpr {
+                Some(r) => child_val(tree, r, "rStyle")?,
+                None => None,
+            };
+            st.toggles = st.styles.toggles(
+                Stated::read(tree, rpr)?,
+                character.as_deref(),
+                st.para_style.as_deref(),
+                st.table_style(),
+            );
             sink.event(st, Event::Start(Kind::Run, n))?;
-            if let Some(rpr) = tree.child(n, Some(W), "rPr")?
+            if let Some(rpr) = rpr
                 && let Some(c) = tree.child(rpr, Some(W), "rPrChange")?
             {
                 sink.event(st, Event::Object(Kind::PropertyChange, c))?;
@@ -706,8 +902,11 @@ fn start(
             Leave::Paragraph
         }
         Kind::Row => {
+            let pr = tree.child(n, Some(W), "trPr")?;
+            let before = int_val(tree, pr, "gridBefore")?.min(MAX_SPAN) as u16;
+            st.rows.push((true, before));
             sink.event(st, Event::Start(Kind::Row, n))?;
-            if let Some(pr) = tree.child(n, Some(W), "trPr")? {
+            if let Some(pr) = pr {
                 for c in tree.elements(pr)? {
                     if change_kind(tree, c)?.is_some() {
                         sink.event(st, Event::Object(Kind::MarkChange, c))?;
@@ -716,11 +915,30 @@ fn start(
                     }
                 }
             }
-            Leave::End(Kind::Row)
+            // A row inserted or deleted takes its content with it.
+            let mark = mark_of(tree, pr)?;
+            if let Some(k) = mark {
+                st.open_revision(k);
+            }
+            Leave::Row(mark)
         }
         Kind::Cell => {
+            let pr = tree.child(n, Some(W), "tcPr")?;
+            let span = int_val(tree, pr, "gridSpan")?.clamp(1, MAX_SPAN) as u16;
+            let tabs = match st.rows.last_mut() {
+                Some((first @ true, before)) => {
+                    *first = false;
+                    *before
+                }
+                _ => 1,
+            };
+            let mark = mark_of(tree, pr)?;
+            if let Some(k) = mark {
+                st.open_revision(k);
+            }
+            st.push(What::CellStart { tabs });
             sink.event(st, Event::Start(Kind::Cell, n))?;
-            if let Some(pr) = tree.child(n, Some(W), "tcPr")? {
+            if let Some(pr) = pr {
                 for c in tree.elements(pr)? {
                     if change_kind(tree, c)?.is_some() {
                         sink.event(st, Event::Object(Kind::MarkChange, c))?;
@@ -729,16 +947,21 @@ fn start(
                     }
                 }
             }
-            Leave::End(Kind::Cell)
+            Leave::Cell(span, mark)
         }
         Kind::Table => {
             sink.event(st, Event::Start(Kind::Table, n))?;
-            if let Some(pr) = tree.child(n, Some(W), "tblPr")?
+            let pr = tree.child(n, Some(W), "tblPr")?;
+            st.tables.push(match pr {
+                Some(p) => child_val(tree, p, "tblStyle")?,
+                None => None,
+            });
+            if let Some(pr) = pr
                 && let Some(c) = tree.child(pr, Some(W), "tblPrChange")?
             {
                 sink.event(st, Event::Object(Kind::PropertyChange, c))?;
             }
-            Leave::End(Kind::Table)
+            Leave::Table
         }
         other => {
             sink.event(st, Event::Start(other, n))?;
@@ -750,11 +973,31 @@ fn start(
 /// A point object. Run content arrives here as `Opaque` and is sorted out.
 fn object(
     tree: &Tree,
-    st: &mut State,
+    st: &mut State<'_>,
     kind: Kind,
     n: NodeId,
     sink: &mut impl Sink,
 ) -> Result<(), Error> {
+    if kind == Kind::NoteReference {
+        let custom = tree
+            .attribute(n, Some(W), "customMarkFollows")?
+            .is_some_and(|v| matches!(&*v, "1" | "true" | "on"));
+        let endnote = tree.is(n, Some(W), "endnoteReference")?;
+        // A reference in deleted text or a field code is not counted.
+        st.note_number = if custom || !st.numbered || !st.shown(Revisions::Accepted) || st.in_code()
+        {
+            None
+        } else {
+            let c = &mut st.shared.notes[usize::from(endnote)];
+            *c += 1;
+            Some(*c)
+        };
+        if let Some(number) = st.note_number {
+            let p = st.piece(true);
+            st.shared.pieces.push(What::NoteMark { endnote, number }, p);
+        }
+        return sink.event(st, Event::Object(kind, n));
+    }
     if kind != Kind::Opaque
         || st.run.is_none()
         || tree.name(n)?.map(|m| m.namespace) != Some(Some(W))
@@ -777,7 +1020,7 @@ fn object(
                     st.codes.push_str(&s);
                     sink.event(st, Event::Code)?;
                 } else {
-                    sink.event(st, Event::Text(&s))?;
+                    st.text(&s, sink)?;
                 }
             }
         }
@@ -786,7 +1029,7 @@ fn object(
             // Word writes the result of a simple field nested in a code as
             // instrText inside the simple field.
             if st.fields.last().is_some_and(|f| f.simple.is_some()) {
-                sink.event(st, Event::Text(&s))?;
+                st.text(&s, sink)?;
             } else {
                 if st.innermost_in_code() {
                     st.codes.push_str(&s);
@@ -794,17 +1037,18 @@ fn object(
                 sink.event(st, Event::Code)?;
             }
         }
-        "tab" | "ptab" => sink.event(st, Event::Text("\t"))?,
-        "cr" => sink.event(st, Event::Text("\n"))?,
-        "br" => {
+        "tab" | "ptab" => st.text("\t", sink)?,
+        "cr" | "br" => {
             let t = tree.attribute(n, Some(W), "type")?;
-            if matches!(t.as_deref(), Some("page") | Some("column")) {
+            if local == "br" && matches!(t.as_deref(), Some("page") | Some("column")) {
                 sink.event(st, Event::Object(Kind::Break, n))?;
             }
+            let p = st.piece(true);
+            st.shared.pieces.push(What::Break, p);
             sink.event(st, Event::Text("\n"))?;
         }
-        "noBreakHyphen" => sink.event(st, Event::Text("\u{2011}"))?,
-        "softHyphen" => sink.event(st, Event::Text("\u{AD}"))?,
+        "noBreakHyphen" => st.text("\u{2011}", sink)?,
+        "softHyphen" => st.text("\u{AD}", sink)?,
         "sym" => {
             // The character as the symbol font numbers it, often in the
             // private use area from U+F000; there is no general way to
@@ -816,13 +1060,13 @@ fn object(
                 .filter(|c| !c.is_control());
             if let Some(c) = c {
                 let mut b = [0; 4];
-                sink.event(st, Event::Text(c.encode_utf8(&mut b)))?;
+                st.text(c.encode_utf8(&mut b), sink)?;
             }
         }
         "fldChar" => match tree.attribute(n, Some(W), "fldCharType")?.as_deref() {
             Some("begin") => {
-                let index = st.next_field;
-                st.next_field += 1;
+                let index = st.shared.next_field;
+                st.shared.next_field += 1;
                 if st.innermost_in_code() {
                     st.codes.push('{');
                 }
@@ -856,19 +1100,4 @@ fn object(
         _ => sink.event(st, Event::Object(Kind::Opaque, n))?,
     }
     Ok(())
-}
-
-/// Whether a run is hidden: its own `w:vanish`, else its character style,
-/// else the paragraph's style, else the document defaults.
-fn run_hidden(tree: &Tree, r: NodeId, styles: &Styles, para: Option<&str>) -> Result<bool, Error> {
-    let mut char_style = None;
-    if let Some(rpr) = tree.child(r, Some(W), "rPr")? {
-        if let Some(v) = tree.child(rpr, Some(W), "vanish")? {
-            return super::props::on_off(tree, v);
-        }
-        if let Some(s) = tree.child(rpr, Some(W), "rStyle")? {
-            char_style = tree.attribute(s, Some(W), "val")?.map(|v| v.into_owned());
-        }
-    }
-    Ok(styles.hidden(char_style.as_deref(), para))
 }

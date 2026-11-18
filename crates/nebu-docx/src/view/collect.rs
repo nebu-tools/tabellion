@@ -1,20 +1,23 @@
-//! The sinks that turn the events of a walk into views.
+//! What the views collect from the events of the walk.
 //!
-//! Each sink keeps a [`Common`] that knows the story, the current
-//! top-level block and the text boxes met so far, which the reader walks
-//! after their story.
+//! [`Collector`] is the one sink of the walk. It keeps the place (story,
+//! part, block) and hands each event to the collector of each view. The
+//! collectors keep no text: where a view gives text, they keep a
+//! [`Span`] of the pieces the walk records, and the reader renders it
+//! when the walk is done.
 
 use std::collections::{HashMap, HashSet};
 
 use crate::Error;
 use crate::xml::{NodeId, Tree};
 
-use super::props::{self, child_val};
-use super::walk::{self, Event, Kind, M, R, Sink, State, W};
+use super::props::{self, DrawingProps, child_val};
+use super::text::Span;
+use super::walk::{self, Event, Kind, R, Sink, State, W};
 use super::{
-    Bookmark, Cell, CellRef, Change, ContentControl, Control, DrawingKind, Field, Format, Image,
-    Inline, Location, NoteKind, Revision, RevisionKind, RevisionTarget, Revisions, StoryKind,
-    Table,
+    BlockId, Bookmark, Cell, CellRef, Change, ContentControl, Control, DrawingKind, Field, Format,
+    Image, Inline, Location, NoteKind, Revision, RevisionKind, RevisionTarget, Revisions,
+    StoryKind, Table,
 };
 
 /// A relationship's target as the views need it.
@@ -25,85 +28,209 @@ pub(crate) struct Rel {
     pub part: Option<String>,
 }
 
-/// Text that ranges of the stories share. Bookmarks, comment anchors and
-/// field results are ranges of it, cut out when they end, so that ranges
-/// open at the same time cost no more than the text itself.
-pub(crate) struct Spans {
-    text: String,
-    budget: u64,
-    used: u64,
-}
-
-impl Spans {
-    pub fn new(budget: u64) -> Spans {
-        Spans {
-            text: String::new(),
-            budget,
-            used: 0,
-        }
-    }
-
-    pub fn push(&mut self, s: &str) {
-        self.text.push_str(s);
-    }
-
-    pub fn pos(&self) -> usize {
-        self.text.len()
-    }
-
-    /// The text from `start` to here. All cuts together may hold no more
-    /// text than [`Limits::max_total_size`](crate::Limits).
-    pub fn cut(&mut self, start: usize) -> Result<String, Error> {
-        let s = self.text.get(start..).unwrap_or_default();
-        self.used = self.used.saturating_add(s.len() as u64);
-        if self.used > self.budget {
-            return Err(Error::Limit {
-                what: format!(
-                    "ranges such as bookmarks or fields that hold more than {} bytes of text together",
-                    self.budget
-                ),
-                field: "max_total_size",
-                limit: self.budget,
-            });
-        }
-        Ok(s.to_string())
-    }
-}
-
-/// What every sink tracks.
-pub(crate) struct Common<'r> {
+/// Where the walk is.
+pub(crate) struct Place<'r> {
     pub tree: &'r Tree,
     pub story: StoryKind,
     pub part: String,
-    pub block: Option<String>,
-    /// Block ids of the main story.
-    ids: &'r HashMap<NodeId, String>,
+    pub block: Option<BlockId>,
     /// Relationships of the story's part, by id.
     pub rels: &'r HashMap<String, Rel>,
-    /// Text boxes met, with the block that holds them.
-    pub boxes: Vec<(NodeId, Option<String>)>,
-    /// Note references counted so far, footnotes and endnotes.
-    notes: [usize; 2],
-    /// The number of the last note reference, if it is numbered.
-    pub note_number: Option<usize>,
 }
 
-impl<'r> Common<'r> {
+impl Place<'_> {
+    fn location(&self) -> Location {
+        Location {
+            story: self.story,
+            part: self.part.clone(),
+            block: self.block,
+        }
+    }
+}
+
+/// The content of a top-level paragraph of the body, with the drawings
+/// whose text boxes give their text once those are read.
+#[derive(Debug, Default)]
+pub(crate) struct Content {
+    pub items: Vec<Inline>,
+    /// Items that are drawings, with their text boxes.
+    pub boxes: Vec<(usize, Vec<NodeId>)>,
+}
+
+/// A table with the spans of its cells' text.
+pub(crate) struct TableSpans {
+    pub table: Table,
+    /// For each cell, the spans of the cells it was merged from.
+    pub cells: Vec<Vec<Span>>,
+}
+
+/// A part of the text of a revision.
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Part {
+    Span(Span),
+    /// A paragraph mark, which Word gives as one line end.
+    Mark,
+}
+
+/// A revision as collected: its order, the revision, the parts of its
+/// text, and the count of visible text before and after it, which tells
+/// whether two revisions have content between them.
+pub(crate) struct RevisionSpans {
+    pub seq: usize,
+    pub revision: Revision,
+    pub parts: Vec<Part>,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// A reference to a note.
+pub(crate) struct NoteRef {
+    pub kind: NoteKind,
+    pub id: String,
+    pub number: Option<usize>,
+    pub location: Location,
+    /// The mark of a note that has its own.
+    pub mark: Option<String>,
+}
+
+/// Everything the walk gives the views.
+pub(crate) struct Collector<'r> {
+    pub at: Place<'r>,
+    /// Block ids of the main story.
+    ids: &'r HashMap<NodeId, BlockId>,
+    content_types: &'r HashMap<String, String>,
+    /// Text boxes met in the current story, with the block that holds
+    /// them.
+    pub boxes: Vec<(NodeId, Option<BlockId>)>,
+    /// The paragraph id of the last paragraph of the current story, for a
+    /// comment.
+    pub last_para_id: Option<u32>,
+
+    // Blocks.
+    pub block_spans: HashMap<NodeId, Span>,
+    block_start: Option<(NodeId, usize)>,
+    pub content: HashMap<NodeId, Content>,
+    current: Option<(NodeId, Content)>,
+    last_run: Option<NodeId>,
+    run_format: Format,
+    bookmark_names: HashMap<String, String>,
+    started: HashSet<usize>,
+
+    // Tables.
+    stack: Vec<TableBuild>,
+    containers: Vec<(Kind, NodeId)>,
+    pub tables: Vec<Option<TableSpans>>,
+
+    // Fields.
+    pub fields: Vec<Option<(Field, Option<Span>)>>,
+    results: HashMap<usize, (usize, u16, u16)>,
+
+    // Revisions.
+    open: Vec<OpenRevision>,
+    pub revisions: Vec<RevisionSpans>,
+    seq: usize,
+    marks: usize,
+    /// Open revision records of rows and cells: kind and author.
+    row_records: Vec<(RevisionKind, String)>,
+    /// Open records of table property changes: their authors.
+    table_records: Vec<String>,
+    /// The element whose start the walk reported last.
+    last_start: Option<NodeId>,
+    /// The current row has a property change, and where it began.
+    row_changed: bool,
+    row_start: usize,
+
+    // Bookmarks, comment anchors, content controls, references, pictures.
+    pub bookmarks: Vec<(Bookmark, Option<Span>)>,
+    open_bookmarks: HashMap<String, (usize, usize, u16)>,
+    pub anchors: HashMap<String, Span>,
+    open_anchors: HashMap<String, (usize, u16)>,
+    pub controls: Vec<(Control, Option<Span>)>,
+    open_controls: Vec<(usize, usize, u16)>,
+    pub comment_places: HashMap<String, Location>,
+    pub note_refs: Vec<NoteRef>,
+    /// The run of a note reference with its own mark, which follows it.
+    mark_run: Option<NodeId>,
+    pub images: Vec<Image>,
+    pictures: usize,
+}
+
+struct TableBuild {
+    index: usize,
+    table: Table,
+    spans: Vec<Vec<Span>>,
+    skip: bool,
+    row: usize,
+    row_hidden: bool,
+    column: usize,
+    width: usize,
+    /// The cell that holds each grid column while a vertical merge goes on.
+    vertical: HashMap<usize, usize>,
+    current: Option<usize>,
+    cell_start: (usize, u16),
+}
+
+struct OpenRevision {
+    seq: usize,
+    until: NodeId,
+    start: usize,
+    depth: u16,
+    record: Option<Revision>,
+    /// A change of table properties covers the rows whose properties
+    /// changed with it, as Word reports it, and the whole table if no row
+    /// shares it.
+    table: bool,
+    parts: Vec<Part>,
+    /// The kind and author it was counted under in `row_records`.
+    row_record: bool,
+    mark_start: usize,
+}
+
+impl<'r> Collector<'r> {
     pub fn new(
-        tree: &'r Tree,
-        ids: &'r HashMap<NodeId, String>,
-        rels: &'r HashMap<String, Rel>,
-    ) -> Common<'r> {
-        Common {
-            tree,
-            story: StoryKind::Main,
-            part: String::new(),
-            block: None,
+        at: Place<'r>,
+        ids: &'r HashMap<NodeId, BlockId>,
+        content_types: &'r HashMap<String, String>,
+    ) -> Collector<'r> {
+        Collector {
+            at,
             ids,
-            rels,
+            content_types,
             boxes: vec![],
-            notes: [0, 0],
-            note_number: None,
+            last_para_id: None,
+            block_spans: HashMap::new(),
+            block_start: None,
+            content: HashMap::new(),
+            current: None,
+            last_run: None,
+            run_format: Format::default(),
+            bookmark_names: HashMap::new(),
+            started: HashSet::new(),
+            stack: vec![],
+            containers: vec![],
+            tables: vec![],
+            fields: vec![],
+            results: HashMap::new(),
+            open: vec![],
+            revisions: vec![],
+            seq: 0,
+            marks: 0,
+            row_records: vec![],
+            table_records: vec![],
+            last_start: None,
+            row_changed: false,
+            row_start: 0,
+            bookmarks: vec![],
+            open_bookmarks: HashMap::new(),
+            anchors: HashMap::new(),
+            open_anchors: HashMap::new(),
+            controls: vec![],
+            open_controls: vec![],
+            comment_places: HashMap::new(),
+            note_refs: vec![],
+            mark_run: None,
+            images: vec![],
+            pictures: 0,
         }
     }
 
@@ -113,60 +240,46 @@ impl<'r> Common<'r> {
         tree: &'r Tree,
         story: StoryKind,
         part: &str,
-        block: Option<String>,
+        block: Option<BlockId>,
         rels: &'r HashMap<String, Rel>,
     ) {
-        self.tree = tree;
-        self.story = story;
-        self.part = part.to_string();
-        self.block = block;
-        self.rels = rels;
+        self.at = Place {
+            tree,
+            story,
+            part: part.to_string(),
+            block,
+            rels,
+        };
+        self.last_para_id = None;
     }
 
-    pub fn location(&self) -> Location {
-        Location {
-            story: self.story,
-            part: self.part.clone(),
-            block: self.block.clone(),
+    /// Ends the bookmarks, comment ranges and content controls still open
+    /// at the end of a story, at `end`.
+    pub fn close_all(&mut self, end: usize) {
+        for (_, (i, start, depth)) in std::mem::take(&mut self.open_bookmarks) {
+            self.bookmarks[i].1 = Some(span(start, end, depth, 0));
         }
-    }
-
-    fn track(&mut self, st: &State, ev: &Event<'_>) -> Result<(), Error> {
-        match *ev {
-            Event::BlockStart(n) if self.story == StoryKind::Main => {
-                self.block = self.ids.get(&n).cloned();
-            }
-            Event::Object(Kind::Drawing, n) => {
-                for b in props::drawing_props(self.tree, n)?.text_boxes {
-                    self.boxes.push((b, self.block.clone()));
-                }
-            }
-            Event::Object(Kind::NoteReference, n) => {
-                let custom = self
-                    .tree
-                    .attribute(n, Some(W), "customMarkFollows")?
-                    .is_some_and(|v| matches!(&*v, "1" | "true" | "on"));
-                let k = usize::from(self.tree.is(n, Some(W), "endnoteReference")?);
-                // A reference in deleted text or a field code is not counted.
-                self.note_number = if custom || !st.shown(Revisions::Accepted) || st.in_code() {
-                    None
-                } else {
-                    self.notes[k] += 1;
-                    Some(self.notes[k])
-                };
-            }
-            _ => {}
+        for (id, (start, depth)) in std::mem::take(&mut self.open_anchors) {
+            self.anchors.insert(id, span(start, end, depth, 0));
         }
-        Ok(())
+        while let Some((i, start, depth)) = self.open_controls.pop() {
+            self.controls[i].1 = Some(span(start, end, depth, 0));
+        }
+        self.mark_run = None;
     }
 }
 
-/// Sinks that keep a [`Common`].
-pub(crate) trait Collect<'r>: Sink {
-    fn common(&mut self) -> &mut Common<'r>;
+fn span(start: usize, end: usize, depth: u16, code: u16) -> Span {
+    Span {
+        start,
+        end,
+        depth,
+        code,
+        own_level: false,
+    }
 }
 
-fn change_info(tree: &Tree, st: &State) -> Result<Option<Change>, Error> {
+fn change_info(tree: &Tree, st: &State<'_>) -> Result<Option<Change>, Error> {
     let Some(c) = st.change() else {
         return Ok(None);
     };
@@ -200,277 +313,83 @@ fn int_val(tree: &Tree, parent: Option<NodeId>, local: &str) -> Result<usize, Er
         .unwrap_or(0))
 }
 
-/// The text of an equation: its `m:t` elements.
-fn math_text(tree: &Tree, n: NodeId) -> Result<String, Error> {
-    let mut s = String::new();
-    for d in tree.descendants(n)? {
-        if tree.is(d, Some(M), "t")? {
-            s.push_str(&tree.text_content(d)?);
-        }
-    }
-    Ok(s)
+/// An element's name as written.
+pub(crate) fn qualified(tree: &Tree, n: NodeId) -> Result<String, Error> {
+    Ok(match tree.name(n)? {
+        Some(m) if m.prefix.is_empty() => m.local.to_string(),
+        Some(m) => format!("{}:{}", m.prefix, m.local),
+        None => String::new(),
+    })
 }
 
-// ---- text ------------------------------------------------------------------
-
-/// Renders a story as plain text: paragraphs as lines, a table's rows as
-/// lines of tab-separated cells, nested tables inline with spaces.
-pub(crate) struct TextSink<'r> {
-    pub c: Common<'r>,
-    view: Revisions,
-    note_marks: bool,
-    pub out: String,
-    containers: Vec<Kind>,
-    tables: usize,
-    first_cell: Vec<bool>,
-    hidden_rows: Vec<bool>,
-    spans: Vec<usize>,
-    suppress: usize,
-    mark_removed: bool,
-    pending: Option<char>,
-    /// The top-level blocks with the range of `out` they gave.
-    pub blocks: Vec<(NodeId, usize, usize)>,
-    block_start: usize,
+fn attr(tree: &Tree, n: NodeId, local: &str) -> Result<String, Error> {
+    Ok(tree
+        .attribute(n, Some(W), local)?
+        .unwrap_or_default()
+        .into_owned())
 }
 
-impl<'r> TextSink<'r> {
-    pub fn new(c: Common<'r>, view: Revisions, note_marks: bool) -> TextSink<'r> {
-        TextSink {
-            c,
-            view,
-            note_marks,
-            out: String::new(),
-            containers: vec![],
-            tables: 0,
-            first_cell: vec![],
-            hidden_rows: vec![],
-            spans: vec![],
-            suppress: 0,
-            mark_removed: false,
-            pending: None,
-            blocks: vec![],
-            block_start: 0,
-        }
-    }
-
-    fn push(&mut self, text: &str) {
-        if let Some(p) = self.pending.take() {
-            self.out.push(p);
-        }
-        if self.tables > 0 && text.contains('\n') {
-            self.out.push_str(&text.replace('\n', " "));
-        } else {
-            self.out.push_str(text);
-        }
-    }
-
-    fn sep(&self) -> char {
-        if self.tables > 1 { ' ' } else { '\t' }
-    }
-}
-
-impl<'r> Collect<'r> for TextSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.c
-    }
-}
-
-impl Sink for TextSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.c.track(st, &ev)?;
-        let tree = self.c.tree;
+impl Sink for Collector<'_> {
+    fn event(&mut self, st: &State<'_>, ev: Event<'_>) -> Result<(), Error> {
+        let tree = self.at.tree;
         match ev {
-            Event::BlockStart(_) => self.block_start = self.out.len(),
-            Event::BlockEnd(n) => self.blocks.push((n, self.block_start, self.out.len())),
-            Event::Start(k @ (Kind::Paragraph | Kind::Table | Kind::Row | Kind::Cell), n) => {
-                self.containers.push(k);
-                match k {
-                    Kind::Paragraph => self.mark_removed = false,
-                    Kind::Table => self.tables += 1,
-                    Kind::Row => {
-                        let before = int_val(tree, tree.child(n, Some(W), "trPr")?, "gridBefore")?;
-                        self.first_cell.push(before == 0);
-                        self.hidden_rows.push(false);
-                        if self.suppress == 0 {
-                            for _ in 0..before.min(64) {
-                                let s = self.sep().to_string();
-                                self.out.push_str(&s);
-                            }
-                        }
-                    }
-                    _ => {
-                        self.pending = None;
-                        let first = self
-                            .first_cell
-                            .last_mut()
-                            .map(|b| std::mem::replace(b, false));
-                        if self.suppress == 0 && first == Some(false) {
-                            let s = self.sep().to_string();
-                            self.out.push_str(&s);
-                        }
-                        let span = int_val(tree, tree.child(n, Some(W), "tcPr")?, "gridSpan")?;
-                        self.spans.push(span.clamp(1, 64));
-                    }
-                }
+            Event::BlockStart(n) if self.at.story == StoryKind::Main => {
+                self.at.block = self.ids.get(&n).copied();
             }
-            Event::End(k @ (Kind::Paragraph | Kind::Table | Kind::Row | Kind::Cell), _) => {
-                self.containers.pop();
-                match k {
-                    Kind::Paragraph => {
-                        if self.suppress == 0 && !self.mark_removed {
-                            if self.tables > 0 {
-                                self.pending = Some(' ');
-                            } else {
-                                self.out.push('\n');
-                            }
-                        }
-                    }
-                    Kind::Table => self.tables = self.tables.saturating_sub(1),
-                    Kind::Row => {
-                        self.first_cell.pop();
-                        if self.hidden_rows.pop() == Some(true) {
-                            self.suppress -= 1;
-                        } else if self.suppress == 0 {
-                            self.pending = None;
-                            self.out.push(if self.tables > 1 { ' ' } else { '\n' });
-                        }
-                    }
-                    _ => {
-                        self.pending = None;
-                        let span = self.spans.pop().unwrap_or(1);
-                        if self.suppress == 0 && self.tables == 1 {
-                            for _ in 1..span {
-                                self.out.push('\t');
-                            }
-                        }
-                    }
-                }
-            }
-            Event::Object(Kind::MarkChange, m) => match self.containers.last() {
-                Some(Kind::Paragraph) => self.mark_removed = !mark_shown(tree, m, self.view)?,
-                Some(Kind::Row) if !mark_shown(tree, m, self.view)? => {
-                    if let Some(h) = self.hidden_rows.last_mut()
-                        && !*h
-                    {
-                        *h = true;
-                        self.suppress += 1;
-                    }
-                }
-                _ => {}
-            },
-            Event::Text(t) if self.suppress == 0 && st.visible(self.view) => self.push(t),
-            Event::Object(Kind::Math, n)
-                if self.suppress == 0 && st.shown(self.view) && !st.in_code() =>
-            {
-                let t = math_text(tree, n)?;
-                self.push(&t);
-            }
-            Event::Object(Kind::NoteReference, n)
-                if self.note_marks && self.suppress == 0 && st.visible(self.view) =>
-            {
-                if let Some(num) = self.c.note_number {
-                    let endnote = tree.is(n, Some(W), "endnoteReference")?;
-                    let mark = if endnote {
-                        format!("[{}]", roman(num))
-                    } else {
-                        format!("[{num}]")
-                    };
-                    self.push(&mark);
-                }
+            Event::Start(Kind::Paragraph, p) if self.at.story == StoryKind::Comment => {
+                self.last_para_id = props::para_id(tree, p)?.or(self.last_para_id);
             }
             _ => {}
         }
+        // A drawing's properties are read once for every view.
+        let drawing = match ev {
+            Event::Object(Kind::Drawing, n) => {
+                let p = props::drawing_props(tree, n)?;
+                for b in &p.text_boxes {
+                    self.boxes.push((*b, self.at.block));
+                }
+                if p.kind == DrawingKind::Picture {
+                    self.pictures += 1;
+                }
+                Some(p)
+            }
+            _ => None,
+        };
+        if self.at.story == StoryKind::Main {
+            self.blocks(st, ev, drawing.as_ref())?;
+        }
+        self.table(st, ev)?;
+        self.field(st, ev);
+        self.revision(st, ev)?;
+        self.mark(st, ev, drawing)?;
         Ok(())
     }
 }
 
-/// Lower-case roman numerals, as Word numbers endnotes.
-pub(crate) fn roman(mut n: usize) -> String {
-    const R: [(usize, &str); 13] = [
-        (1000, "m"),
-        (900, "cm"),
-        (500, "d"),
-        (400, "cd"),
-        (100, "c"),
-        (90, "xc"),
-        (50, "l"),
-        (40, "xl"),
-        (10, "x"),
-        (9, "ix"),
-        (5, "v"),
-        (4, "iv"),
-        (1, "i"),
-    ];
-    if n == 0 || n > 100_000 {
-        return n.to_string();
-    }
-    let mut s = String::new();
-    for (v, r) in R {
-        while n >= v {
-            s.push_str(r);
-            n -= v;
-        }
-    }
-    s
-}
+impl Collector<'_> {
+    // ---- blocks --------------------------------------------------------------
 
-// ---- blocks ------------------------------------------------------------------
-
-/// The content of top-level paragraphs, with the text of every block.
-pub(crate) struct BlocksSink<'r> {
-    pub text: TextSink<'r>,
-    pub content: HashMap<NodeId, Vec<Inline>>,
-    current: Option<(NodeId, Vec<Inline>)>,
-    /// The run the last text item came from.
-    last_run: Option<NodeId>,
-    run_format: Format,
-    bookmarks: HashMap<String, String>,
-    started: HashSet<usize>,
-    pictures: usize,
-    /// Gives the text of a text box.
-    box_text: &'r dyn Fn(NodeId) -> Result<String, Error>,
-}
-
-impl<'r> BlocksSink<'r> {
-    pub fn new(
-        c: Common<'r>,
-        box_text: &'r dyn Fn(NodeId) -> Result<String, Error>,
-    ) -> BlocksSink<'r> {
-        BlocksSink {
-            text: TextSink::new(c, Revisions::Accepted, false),
-            content: HashMap::new(),
-            current: None,
-            last_run: None,
-            run_format: Format::default(),
-            bookmarks: HashMap::new(),
-            started: HashSet::new(),
-            pictures: 0,
-            box_text,
-        }
-    }
-}
-
-impl<'r> Collect<'r> for BlocksSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.text.c
-    }
-}
-
-impl Sink for BlocksSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.text.event(st, ev)?;
-        let tree = self.text.c.tree;
-        if let Event::Object(Kind::Drawing, n) = ev
-            && props::drawing_props(tree, n)?.kind == DrawingKind::Picture
-        {
-            self.pictures += 1;
-        }
+    fn blocks(
+        &mut self,
+        st: &State<'_>,
+        ev: Event<'_>,
+        drawing: Option<&DrawingProps>,
+    ) -> Result<(), Error> {
+        let tree = self.at.tree;
         match ev {
-            Event::BlockStart(n) if tree.is(n, Some(W), "p")? => {
-                self.current = Some((n, vec![]));
+            Event::BlockStart(n) => {
+                self.block_start = Some((n, st.at()));
+                if tree.is(n, Some(W), "p")? {
+                    self.current = Some((n, Content::default()));
+                }
                 return Ok(());
             }
             Event::BlockEnd(n) => {
+                if let Some((b, start)) = self.block_start.take()
+                    && b == n
+                {
+                    self.block_spans.insert(n, span(start, st.at(), 0, 0));
+                }
                 if let Some((p, c)) = self.current.take()
                     && p == n
                 {
@@ -484,10 +403,11 @@ impl Sink for BlocksSink<'_> {
             }
             _ => {}
         }
-        let Some((_, items)) = self.current.as_mut() else {
+        let Some((_, content)) = self.current.as_mut() else {
             return Ok(());
         };
-        let rels = self.text.c.rels;
+        let items = &mut content.items;
+        let rels = self.at.rels;
         let item = match ev {
             // Text inside a field code, such as the result of a field nested
             // in the code, is not content.
@@ -504,8 +424,8 @@ impl Sink for BlocksSink<'_> {
                 Inline::Text {
                     text: t.to_string(),
                     format: self.run_format.clone(),
+                    toggles: st.toggles(),
                     revision: change_info(tree, st)?,
-                    hidden: st.hidden(),
                 }
             }
             Event::FieldSeparate if !st.in_code() => {
@@ -558,28 +478,19 @@ impl Sink for BlocksSink<'_> {
             }
             Event::End(Kind::ContentControl, _) => Inline::ContentControlEnd,
             Event::Object(Kind::BookmarkStart, n) => {
-                let name = tree
-                    .attribute(n, Some(W), "name")?
-                    .unwrap_or_default()
-                    .into_owned();
-                if let Some(id) = tree.attribute(n, Some(W), "id")? {
-                    self.bookmarks.insert(id.into_owned(), name.clone());
-                }
+                let name = attr(tree, n, "name")?;
+                self.bookmark_names
+                    .insert(attr(tree, n, "id")?, name.clone());
                 Inline::BookmarkStart { name }
             }
             Event::Object(Kind::BookmarkEnd, n) => Inline::BookmarkEnd {
-                name: tree
-                    .attribute(n, Some(W), "id")?
-                    .and_then(|id| self.bookmarks.get(&*id).cloned()),
+                name: self.bookmark_names.get(&attr(tree, n, "id")?).cloned(),
             },
             Event::Object(
                 k @ (Kind::CommentStart | Kind::CommentEnd | Kind::CommentReference),
                 n,
             ) => {
-                let comment = tree
-                    .attribute(n, Some(W), "id")?
-                    .unwrap_or_default()
-                    .into_owned();
+                let comment = attr(tree, n, "id")?;
                 match k {
                     Kind::CommentStart => Inline::CommentStart { comment },
                     Kind::CommentEnd => Inline::CommentEnd { comment },
@@ -592,39 +503,27 @@ impl Sink for BlocksSink<'_> {
                 } else {
                     NoteKind::Footnote
                 },
-                id: tree
-                    .attribute(n, Some(W), "id")?
-                    .unwrap_or_default()
-                    .into_owned(),
-                number: self.text.c.note_number,
+                id: attr(tree, n, "id")?,
+                number: st.note_number(),
             },
-            Event::Object(Kind::Drawing, n) => {
-                let p = props::drawing_props(tree, n)?;
-                let text = if p.text_boxes.is_empty() {
-                    None
-                } else {
-                    let mut all = String::new();
-                    for b in &p.text_boxes {
-                        all.push_str(&(self.box_text)(*b)?);
-                    }
-                    Some(all.trim_end_matches('\n').to_string())
-                };
+            Event::Object(Kind::Drawing, _) => {
+                let Some(p) = drawing else { return Ok(()) };
+                if !p.text_boxes.is_empty() {
+                    content.boxes.push((items.len(), p.text_boxes.clone()));
+                }
                 Inline::Drawing {
                     kind: p.kind,
                     placement: p.placement,
                     image: (p.kind == DrawingKind::Picture).then(|| self.pictures - 1),
-                    alt: p.alt,
-                    text,
+                    alt: p.alt.clone(),
+                    text: None,
                 }
             }
-            Event::Object(Kind::Math, n) => Inline::Math {
-                text: math_text(tree, n)?,
+            Event::Math(text) => Inline::Math {
+                text: text.to_string(),
             },
             Event::Object(Kind::Break, n) => Inline::Break {
-                kind: tree
-                    .attribute(n, Some(W), "type")?
-                    .unwrap_or_default()
-                    .into_owned(),
+                kind: attr(tree, n, "type")?,
             },
             Event::Object(Kind::Opaque, n) => Inline::Opaque {
                 element: qualified(tree, n)?,
@@ -634,147 +533,23 @@ impl Sink for BlocksSink<'_> {
         items.push(item);
         Ok(())
     }
-}
 
-/// An element's name as written.
-pub(crate) fn qualified(tree: &Tree, n: NodeId) -> Result<String, Error> {
-    Ok(match tree.name(n)? {
-        Some(m) if m.prefix.is_empty() => m.local.to_string(),
-        Some(m) => format!("{}:{}", m.prefix, m.local),
-        None => String::new(),
-    })
-}
+    // ---- tables --------------------------------------------------------------
 
-// ---- tables ------------------------------------------------------------------
-
-struct TableBuild {
-    table: Table,
-    skip: bool,
-    row: usize,
-    row_hidden: bool,
-    column: usize,
-    width: usize,
-    /// The cell that holds each grid column while a vertical merge goes on.
-    vertical: HashMap<usize, usize>,
-    current: Option<usize>,
-}
-
-/// More grid positions per cell than this is not a table a person made.
-const MAX_SPAN: usize = 1024;
-
-/// Tables on their grid.
-pub(crate) struct TablesSink<'r> {
-    pub c: Common<'r>,
-    stack: Vec<TableBuild>,
-    containers: Vec<(Kind, NodeId)>,
-    pub tables: Vec<Option<Table>>,
-}
-
-impl<'r> TablesSink<'r> {
-    pub fn new(c: Common<'r>) -> TablesSink<'r> {
-        TablesSink {
-            c,
-            stack: vec![],
-            containers: vec![],
-            tables: vec![],
-        }
-    }
-
-    fn top_cell(&mut self) -> Option<&mut Cell> {
-        let t = self.stack.last_mut()?;
-        if t.skip || t.row_hidden {
-            return None;
-        }
-        let i = t.current?;
-        t.table.cells.get_mut(i)
-    }
-}
-
-impl<'r> Collect<'r> for TablesSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.c
-    }
-}
-
-impl Sink for TablesSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.c.track(st, &ev)?;
-        let tree = self.c.tree;
+    fn table(&mut self, st: &State<'_>, ev: Event<'_>) -> Result<(), Error> {
+        let tree = self.at.tree;
         match ev {
-            Event::Start(k, n) if matches!(k, Kind::Paragraph | Kind::Row | Kind::Cell) => {
+            Event::Start(k @ (Kind::Paragraph | Kind::Row | Kind::Cell), n) => {
                 self.containers.push((k, n));
                 if k == Kind::Row
                     && let Some(t) = self.stack.last_mut()
                 {
                     t.row_hidden = false;
-                    t.column =
-                        int_val(tree, tree.child(n, Some(W), "trPr")?, "gridBefore")?.min(MAX_SPAN);
+                    t.column = int_val(tree, tree.child(n, Some(W), "trPr")?, "gridBefore")?
+                        .min(walk::MAX_SPAN);
                 }
                 if k == Kind::Cell {
-                    let pr = tree.child(n, Some(W), "tcPr")?;
-                    let span = int_val(tree, pr, "gridSpan")?.clamp(1, MAX_SPAN);
-                    let vmerge = match pr {
-                        Some(p) => match tree.child(p, Some(W), "vMerge")? {
-                            Some(v) => Some(
-                                tree.attribute(v, Some(W), "val")?.as_deref() == Some("restart"),
-                            ),
-                            None => None,
-                        },
-                        None => None,
-                    };
-                    let hmerge_continue = match pr {
-                        Some(p) => match tree.child(p, Some(W), "hMerge")? {
-                            Some(v) => {
-                                tree.attribute(v, Some(W), "val")?.as_deref() != Some("restart")
-                            }
-                            None => false,
-                        },
-                        None => false,
-                    };
-                    let Some(t) = self.stack.last_mut() else {
-                        return Ok(());
-                    };
-                    if t.skip || t.row_hidden {
-                        return Ok(());
-                    }
-                    let col = t.column;
-                    t.column = t.column.saturating_add(span);
-                    t.width = t.width.max(t.column);
-                    let cells = &mut t.table.cells;
-                    if vmerge == Some(false)
-                        && let Some(&i) = t.vertical.get(&col)
-                        && cells[i].row + cells[i].row_span == t.row
-                    {
-                        cells[i].row_span += 1;
-                        t.current = Some(i);
-                        return Ok(());
-                    }
-                    if hmerge_continue
-                        && let Some(last) = cells.last_mut()
-                        && last.row == t.row
-                        && last.column + last.column_span == col
-                    {
-                        last.column_span += span;
-                        t.current = Some(cells.len() - 1);
-                        return Ok(());
-                    }
-                    cells.push(Cell {
-                        row: t.row,
-                        column: col,
-                        row_span: 1,
-                        column_span: span,
-                        text: String::new(),
-                        tables: vec![],
-                    });
-                    let i = cells.len() - 1;
-                    for c in col..col + span {
-                        if vmerge == Some(true) {
-                            t.vertical.insert(c, i);
-                        } else {
-                            t.vertical.remove(&c);
-                        }
-                    }
-                    t.current = Some(i);
+                    self.start_cell(st, n)?;
                 }
             }
             Event::Start(Kind::Table, n) => {
@@ -789,7 +564,7 @@ impl Sink for TablesSink<'_> {
                     let cell = &mut t.table.cells[i];
                     cell.tables.push(index);
                     parent = Some(CellRef {
-                        table: t.table.index,
+                        table: t.index,
                         row: cell.row,
                         column: cell.column,
                     });
@@ -803,16 +578,17 @@ impl Sink for TablesSink<'_> {
                 if let Some(g) = tree.child(n, Some(W), "tblGrid")? {
                     grid = tree.elements(g)?.count();
                 }
-                let id = if self.stack.is_empty() && self.c.story == StoryKind::Main {
-                    self.c.ids.get(&n).cloned()
+                let id = if self.stack.is_empty() && self.at.story == StoryKind::Main {
+                    self.ids.get(&n).copied()
                 } else {
                     None
                 };
                 self.stack.push(TableBuild {
+                    index,
                     table: Table {
                         index,
                         id,
-                        location: self.c.location(),
+                        location: self.at.location(),
                         parent,
                         style,
                         row_count: 0,
@@ -820,13 +596,15 @@ impl Sink for TablesSink<'_> {
                         cells: vec![],
                         rows: vec![],
                     },
+                    spans: vec![],
                     skip,
                     row: 0,
                     row_hidden: false,
                     column: 0,
-                    width: grid.min(MAX_SPAN),
+                    width: grid.min(walk::MAX_SPAN),
                     vertical: HashMap::new(),
                     current: None,
+                    cell_start: (0, 0),
                 });
             }
             Event::Object(Kind::MarkChange, m) => {
@@ -837,46 +615,28 @@ impl Sink for TablesSink<'_> {
                     t.row_hidden = true;
                 }
             }
-            Event::Text(text) if st.visible(Revisions::Accepted) => {
-                if let Some(c) = self.top_cell() {
-                    c.text.push_str(text);
-                }
-            }
-            Event::Object(Kind::Math, n) if st.shown(Revisions::Accepted) && !st.in_code() => {
-                let text = math_text(tree, n)?;
-                if let Some(c) = self.top_cell() {
-                    c.text.push_str(&text);
-                }
-            }
             Event::End(Kind::Paragraph, _) => {
                 self.containers.pop();
-                if st.shown(Revisions::Accepted)
-                    && !st.in_code()
-                    && let Some(c) = self.top_cell()
-                {
-                    c.text.push('\n');
-                }
             }
             Event::End(Kind::Cell, _) => {
                 self.containers.pop();
-                if let Some(c) = self.top_cell()
-                    && c.text.ends_with('\n')
+                if let Some(t) = self.stack.last_mut()
+                    && let Some(i) = t.current.take()
+                    && !t.skip
+                    && !t.row_hidden
                 {
-                    c.text.pop();
-                }
-                if let Some(t) = self.stack.last_mut() {
-                    t.current = None;
+                    let (start, depth) = t.cell_start;
+                    let mut s = span(start, st.at(), depth, 0);
+                    s.own_level = true;
+                    t.spans[i].push(s);
                 }
             }
             Event::End(Kind::Row, _) => {
                 self.containers.pop();
-                if let Some(t) = self.stack.last_mut()
-                    && !t.row_hidden
-                    && !t.skip
-                {
-                    t.row += 1;
-                }
                 if let Some(t) = self.stack.last_mut() {
+                    if !t.row_hidden && !t.skip {
+                        t.row += 1;
+                    }
                     t.row_hidden = false;
                 }
             }
@@ -903,92 +663,125 @@ impl Sink for TablesSink<'_> {
                         table.cells.len()
                     )));
                 }
-                let mut rows = vec![vec![Some(String::new()); table.column_count]; table.row_count];
-                for c in &table.cells {
-                    for (r, row) in rows.iter_mut().enumerate().skip(c.row).take(c.row_span) {
-                        for (k, slot) in row
-                            .iter_mut()
-                            .enumerate()
-                            .skip(c.column)
-                            .take(c.column_span)
-                        {
-                            *slot = (r == c.row && k == c.column).then(|| c.text.clone());
-                        }
-                    }
-                }
-                table.rows = rows;
-                let i = table.index;
-                self.tables[i] = Some(table);
+                self.tables[b.index] = Some(TableSpans {
+                    table,
+                    cells: b.spans,
+                });
             }
             _ => {}
         }
         Ok(())
     }
-}
 
-// ---- fields ------------------------------------------------------------------
-
-/// Fields with code and result.
-pub(crate) struct FieldsSink<'r> {
-    pub c: Common<'r>,
-    pub fields: Vec<Option<Field>>,
-    /// Where each open field's result starts in `spans`.
-    open: HashMap<usize, usize>,
-    spans: Spans,
-}
-
-impl<'r> FieldsSink<'r> {
-    pub fn new(c: Common<'r>, budget: u64) -> FieldsSink<'r> {
-        FieldsSink {
-            c,
-            fields: vec![],
-            open: HashMap::new(),
-            spans: Spans::new(budget),
+    fn start_cell(&mut self, st: &State<'_>, n: NodeId) -> Result<(), Error> {
+        let tree = self.at.tree;
+        let pr = tree.child(n, Some(W), "tcPr")?;
+        let span_of = int_val(tree, pr, "gridSpan")?.clamp(1, walk::MAX_SPAN);
+        let vmerge = match pr {
+            Some(p) => match tree.child(p, Some(W), "vMerge")? {
+                Some(v) => Some(tree.attribute(v, Some(W), "val")?.as_deref() == Some("restart")),
+                None => None,
+            },
+            None => None,
+        };
+        let hmerge_continue = match pr {
+            Some(p) => match tree.child(p, Some(W), "hMerge")? {
+                Some(v) => tree.attribute(v, Some(W), "val")?.as_deref() != Some("restart"),
+                None => false,
+            },
+            None => false,
+        };
+        let Some(t) = self.stack.last_mut() else {
+            return Ok(());
+        };
+        if t.skip || t.row_hidden {
+            return Ok(());
         }
+        t.cell_start = (st.at(), st.depth());
+        let col = t.column;
+        t.column = t.column.saturating_add(span_of);
+        t.width = t.width.max(t.column);
+        let cells = &mut t.table.cells;
+        if vmerge == Some(false)
+            && let Some(&i) = t.vertical.get(&col)
+            && cells[i].row + cells[i].row_span == t.row
+        {
+            cells[i].row_span += 1;
+            t.current = Some(i);
+            return Ok(());
+        }
+        if hmerge_continue
+            && let Some(last) = cells.last_mut()
+            && last.row == t.row
+            && last.column + last.column_span == col
+        {
+            last.column_span += span_of;
+            t.current = Some(cells.len() - 1);
+            return Ok(());
+        }
+        cells.push(Cell {
+            row: t.row,
+            column: col,
+            row_span: 1,
+            column_span: span_of,
+            text: String::new(),
+            tables: vec![],
+        });
+        t.spans.push(vec![]);
+        let i = cells.len() - 1;
+        for c in col..col + span_of {
+            if vmerge == Some(true) {
+                t.vertical.insert(c, i);
+            } else {
+                t.vertical.remove(&c);
+            }
+        }
+        t.current = Some(i);
+        Ok(())
     }
 
-    fn begin(&mut self, st: &State, simple: bool) {
+    // ---- fields --------------------------------------------------------------
+
+    fn begin_field(&mut self, st: &State<'_>, simple: bool) {
         let Some(index) = st.field() else { return };
         if self.fields.len() <= index {
-            self.fields.resize(index + 1, None);
+            self.fields.resize_with(index + 1, || None);
         }
-        self.fields[index] = Some(Field {
-            index,
-            kind: String::new(),
-            code: String::new(),
-            result: String::new(),
-            simple,
-            parent: st.parent_field(),
-            location: self.c.location(),
-        });
-        self.open.insert(index, self.spans.pos());
+        self.fields[index] = Some((
+            Field {
+                index,
+                kind: String::new(),
+                code: String::new(),
+                result: String::new(),
+                simple,
+                parent: st.parent_field(),
+                location: self.at.location(),
+            },
+            None,
+        ));
+        if simple {
+            self.results
+                .insert(index, (st.at(), st.depth(), st.code_depth()));
+        }
     }
-}
 
-impl<'r> Collect<'r> for FieldsSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.c
-    }
-}
-
-impl Sink for FieldsSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.c.track(st, &ev)?;
+    fn field(&mut self, st: &State<'_>, ev: Event<'_>) {
         match ev {
-            Event::FieldBegin => self.begin(st, false),
+            Event::FieldBegin => self.begin_field(st, false),
+            Event::Start(Kind::SimpleField, _) => self.begin_field(st, true),
             Event::FieldSeparate => {
                 if let Some(i) = st.field() {
-                    self.open.insert(i, self.spans.pos());
+                    self.results
+                        .insert(i, (st.at(), st.depth(), st.code_depth()));
                 }
             }
-            Event::Start(Kind::SimpleField, _) => self.begin(st, true),
             Event::FieldEnd { index, code } => {
-                let result = match self.open.remove(&index) {
-                    Some(start) => self.spans.cut(start)?,
-                    None => String::new(),
-                };
-                if let Some(Some(f)) = self.fields.get_mut(index) {
-                    f.result = result;
+                let result = self
+                    .results
+                    .remove(&index)
+                    .map(|(start, depth, code)| span(start, st.at(), depth, code));
+                if let Some(Some((f, r))) = self.fields.get_mut(index) {
+                    *r = result;
                     f.code = code.trim().to_string();
                     f.kind = f
                         .code
@@ -998,172 +791,100 @@ impl Sink for FieldsSink<'_> {
                         .to_uppercase();
                 }
             }
-            Event::Text(t) if result_text(st) => self.spans.push(t),
-            Event::Object(Kind::Math, n) if result_text(st) => {
-                let t = math_text(self.c.tree, n)?;
-                self.spans.push(&t);
-            }
-            Event::End(Kind::Paragraph, _) if result_text(st) && !st.in_code() => {
-                self.spans.push("\n")
-            }
             _ => {}
         }
-        Ok(())
-    }
-}
-
-/// Text that belongs to a field result: not hidden and not deleted. A
-/// result inside the code of an outer field still belongs to its own field.
-fn result_text(st: &State) -> bool {
-    !st.hidden() && st.shown(Revisions::Accepted)
-}
-
-// ---- revisions ----------------------------------------------------------------
-
-struct OpenRevision {
-    seq: usize,
-    until: NodeId,
-    absorbed: bool,
-    record: Option<(Revision, usize)>,
-    /// A change of table properties covers the rows whose properties
-    /// changed with it, as Word reports it; this is the whole table's text
-    /// for a change that no row shares.
-    whole: Option<String>,
-}
-
-/// Tracked changes with the text they affect.
-pub(crate) struct RevisionsSink<'r> {
-    pub c: Common<'r>,
-    containers: Vec<(Kind, NodeId)>,
-    open: Vec<OpenRevision>,
-    /// Finished records: sequence, record, content marks at start and end.
-    pub done: Vec<(usize, Revision, usize, usize)>,
-    seq: usize,
-    marks: usize,
-    /// The current row has a property change.
-    row_changed: bool,
-}
-
-impl<'r> RevisionsSink<'r> {
-    pub fn new(c: Common<'r>) -> RevisionsSink<'r> {
-        RevisionsSink {
-            c,
-            containers: vec![],
-            open: vec![],
-            done: vec![],
-            seq: 0,
-            marks: 0,
-            row_changed: false,
-        }
     }
 
-    fn open(
+    // ---- revisions -----------------------------------------------------------
+
+    fn open_revision(
         &mut self,
+        st: &State<'_>,
         node: NodeId,
         kind: RevisionKind,
         target: RevisionTarget,
         until: NodeId,
     ) -> Result<(), Error> {
-        let (author, date) = props::author_date(self.c.tree, node)?;
+        let (author, date) = props::author_date(self.at.tree, node)?;
         // Content inside a row or cell that is inserted or deleted as a
-        // whole belongs to that revision, as Word reports it.
-        // Property changes of rows and cells belong to the change of their
-        // table's properties.
-        let absorbed = self.open.iter().any(|o| {
-            o.record.as_ref().is_some_and(|(r, _)| {
-                r.kind == kind
-                    && r.author == author
-                    && if kind == RevisionKind::Formatting {
-                        r.target == RevisionTarget::Table
-                            && matches!(target, RevisionTarget::Row | RevisionTarget::Cell)
-                    } else {
-                        matches!(r.target, RevisionTarget::Row | RevisionTarget::Cell)
-                    }
-            })
-        });
+        // whole belongs to that revision, as Word reports it. Property
+        // changes of rows and cells belong to the change of their table's
+        // properties.
+        let absorbed = if kind == RevisionKind::Formatting {
+            matches!(target, RevisionTarget::Row | RevisionTarget::Cell)
+                && self.table_records.contains(&author)
+        } else {
+            self.row_records
+                .iter()
+                .any(|(k, a)| *k == kind && *a == author)
+        };
+        let row_record = !absorbed
+            && kind != RevisionKind::Formatting
+            && matches!(target, RevisionTarget::Row | RevisionTarget::Cell);
+        if row_record {
+            self.row_records.push((kind, author.clone()));
+        }
+        let table =
+            !absorbed && kind == RevisionKind::Formatting && target == RevisionTarget::Table;
+        if table {
+            self.table_records.push(author.clone());
+        }
         let seq = self.seq;
         self.seq += 1;
-        let record = (!absorbed).then(|| {
-            (
-                Revision {
-                    index: 0,
-                    kind,
-                    target,
-                    author,
-                    date,
-                    text: String::new(),
-                    location: self.c.location(),
-                },
-                self.marks,
-            )
-        });
-        let whole =
-            (kind == RevisionKind::Formatting && target == RevisionTarget::Table).then(String::new);
         self.open.push(OpenRevision {
             seq,
             until,
-            absorbed,
-            record,
-            whole,
+            start: st.at(),
+            depth: st.depth(),
+            record: (!absorbed).then(|| Revision {
+                index: 0,
+                kind,
+                target,
+                author,
+                date,
+                text: String::new(),
+                location: self.at.location(),
+            }),
+            table,
+            parts: vec![],
+            row_record,
+            mark_start: self.marks,
         });
         Ok(())
     }
 
-    fn close(&mut self, node: NodeId) {
-        while let Some(i) = self.open.iter().rposition(|o| o.until == node) {
-            let o = self.open.remove(i);
-            if let (false, Some((mut r, start))) = (o.absorbed, o.record) {
-                if let Some(whole) = o.whole
-                    && r.text.is_empty()
-                {
-                    r.text = whole;
-                }
-                self.done.push((o.seq, r, start, self.marks));
+    /// Ends the revisions that last until `node`. They were opened in the
+    /// order of the elements they last until, so they are the last ones.
+    fn close_revisions(&mut self, st: &State<'_>, node: NodeId) {
+        while self.open.last().is_some_and(|o| o.until == node) {
+            let Some(mut o) = self.open.pop() else { break };
+            if o.row_record {
+                self.row_records.pop();
             }
+            if o.table {
+                self.table_records.pop();
+            }
+            let Some(revision) = o.record else { continue };
+            if !o.table || o.parts.is_empty() {
+                o.parts = vec![Part::Span(span(o.start, st.at(), o.depth, 0))];
+            }
+            self.revisions.push(RevisionSpans {
+                seq: o.seq,
+                revision,
+                parts: o.parts,
+                start: o.mark_start,
+                end: self.marks,
+            });
         }
     }
 
-    fn add(&mut self, text: &str) {
-        for o in &mut self.open {
-            if let Some(w) = o.whole.as_mut() {
-                w.push_str(text);
-                if !self.row_changed {
-                    continue;
-                }
-            }
-            if let Some((r, _)) = o.record.as_mut() {
-                r.text.push_str(text);
-            }
-        }
-    }
-
-    fn container(&self, kind: Kind) -> Option<NodeId> {
-        self.containers
-            .iter()
-            .rev()
-            .find(|(k, _)| *k == kind)
-            .map(|&(_, n)| n)
-    }
-}
-
-impl<'r> Collect<'r> for RevisionsSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.c
-    }
-}
-
-impl Sink for RevisionsSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.c.track(st, &ev)?;
-        let tree = self.c.tree;
+    fn revision(&mut self, st: &State<'_>, ev: Event<'_>) -> Result<(), Error> {
+        let tree = self.at.tree;
         match ev {
             Event::Start(k, n) => {
-                if matches!(
-                    k,
-                    Kind::Paragraph | Kind::Row | Kind::Cell | Kind::Table | Kind::Run
-                ) {
-                    self.containers.push((k, n));
-                }
+                // A property change follows the start of the element it
+                // belongs to.
+                self.last_start = Some(n);
                 if k == Kind::Row {
                     self.row_changed = tree
                         .child(n, Some(W), "tblPrEx")?
@@ -1171,27 +892,29 @@ impl Sink for RevisionsSink<'_> {
                         .transpose()?
                         .flatten()
                         .is_some();
+                    self.row_start = st.at();
                 }
                 if k == Kind::Change
                     && let Some(kind) = walk::change_kind(tree, n)?
                 {
-                    self.open(n, kind, RevisionTarget::Text, n)?;
+                    self.open_revision(st, n, kind, RevisionTarget::Text, n)?;
                 }
             }
             Event::End(k, n) => {
-                if k == Kind::Paragraph && !st.in_code() {
-                    self.add("\n");
+                if k == Kind::Row && self.row_changed {
+                    // The row belongs to the open changes of its table.
+                    let row = span(self.row_start, st.at(), st.depth(), 0);
+                    for o in self
+                        .open
+                        .iter_mut()
+                        .filter(|o| o.table && o.record.is_some())
+                    {
+                        crate::cost::tick(1);
+                        o.parts.push(Part::Span(row));
+                    }
+                    self.row_changed = false;
                 }
-                if k == Kind::Cell {
-                    self.add("\t");
-                }
-                self.close(n);
-                if matches!(
-                    k,
-                    Kind::Paragraph | Kind::Row | Kind::Cell | Kind::Table | Kind::Run
-                ) {
-                    self.containers.pop();
-                }
+                self.close_revisions(st, n);
             }
             Event::Object(Kind::MarkChange, m) => {
                 let Some(kind) = walk::change_kind(tree, m)? else {
@@ -1200,245 +923,144 @@ impl Sink for RevisionsSink<'_> {
                 match self.containers.last().copied() {
                     Some((Kind::Paragraph, _)) => {
                         let (author, _) = props::author_date(tree, m)?;
-                        // The mark joins an open revision of the same kind
-                        // and author, as Word reports it.
-                        let joined = self.open.iter().any(|o| {
-                            o.record.as_ref().is_some_and(|(r, _)| {
-                                matches!(r.target, RevisionTarget::Row | RevisionTarget::Cell)
-                                    && r.kind == kind
-                                    && r.author == author
-                            })
-                        });
+                        // The mark joins an open revision of its row or cell
+                        // of the same kind and author, as Word reports it.
+                        let joined = self
+                            .row_records
+                            .iter()
+                            .any(|(k, a)| *k == kind && *a == author);
                         if !joined {
-                            self.open(m, kind, RevisionTarget::ParagraphMark, m)?;
-                            if let Some(o) = self.open.last_mut()
-                                && let Some((r, _)) = o.record.as_mut()
-                            {
-                                r.text.push('\n');
+                            self.open_revision(st, m, kind, RevisionTarget::ParagraphMark, m)?;
+                            if let Some(o) = self.open.last_mut() {
+                                o.parts.push(Part::Mark);
+                                o.table = false;
                             }
-                            self.close(m);
+                            if let Some(o) = self.open.pop()
+                                && let Some(revision) = o.record
+                            {
+                                self.revisions.push(RevisionSpans {
+                                    seq: o.seq,
+                                    revision,
+                                    parts: o.parts,
+                                    start: self.marks,
+                                    end: self.marks,
+                                });
+                            }
                         }
                     }
-                    Some((Kind::Row, row)) => self.open(m, kind, RevisionTarget::Row, row)?,
-                    Some((Kind::Cell, cell)) => self.open(m, kind, RevisionTarget::Cell, cell)?,
+                    Some((Kind::Row, row)) => {
+                        self.open_revision(st, m, kind, RevisionTarget::Row, row)?
+                    }
+                    Some((Kind::Cell, cell)) => {
+                        self.open_revision(st, m, kind, RevisionTarget::Cell, cell)?
+                    }
                     _ => {}
                 }
             }
             Event::Object(Kind::PropertyChange, c) => {
                 let local = tree.name(c)?.map(|m| m.local).unwrap_or_default();
                 let (target, until) = match local {
-                    "rPrChange" => (RevisionTarget::Run, self.container(Kind::Run)),
-                    "pPrChange" => (RevisionTarget::Paragraph, self.container(Kind::Paragraph)),
-                    "tblPrChange" => (RevisionTarget::Table, self.container(Kind::Table)),
-                    "trPrChange" => (RevisionTarget::Row, self.container(Kind::Row)),
-                    "tcPrChange" => (RevisionTarget::Cell, self.container(Kind::Cell)),
+                    "rPrChange" => (RevisionTarget::Run, self.last_start),
+                    "pPrChange" => (RevisionTarget::Paragraph, self.last_start),
+                    "tblPrChange" => (RevisionTarget::Table, self.last_start),
+                    "trPrChange" => (RevisionTarget::Row, self.last_start),
+                    "tcPrChange" => (RevisionTarget::Cell, self.last_start),
                     _ => (RevisionTarget::Text, None),
                 };
                 if matches!(target, RevisionTarget::Row | RevisionTarget::Cell) {
                     self.row_changed = true;
                 }
                 if let Some(until) = until {
-                    self.open(c, RevisionKind::Formatting, target, until)?;
+                    self.open_revision(st, c, RevisionKind::Formatting, target, until)?;
                 }
             }
             Event::Object(Kind::Section, s) => {
                 if let Some(c) = tree.child(s, Some(W), "sectPrChange")? {
-                    self.open(c, RevisionKind::Formatting, RevisionTarget::Section, c)?;
-                    self.close(c);
+                    self.open_revision(
+                        st,
+                        c,
+                        RevisionKind::Formatting,
+                        RevisionTarget::Section,
+                        c,
+                    )?;
+                    self.close_revisions(st, c);
                 }
             }
-            Event::Text(t) if !st.in_code() && !st.hidden() => {
+            Event::Text(_) if !st.in_code() && !st.toggles().has(super::Toggle::Hidden) => {
                 self.marks += 1;
-                self.add(t);
             }
             _ => {}
         }
         Ok(())
     }
-}
 
-/// Joins revisions that Word reports as one: neighbours of the same kind,
-/// author and date with no content between them.
-pub(crate) fn merge_revisions(mut done: Vec<(usize, Revision, usize, usize)>) -> Vec<Revision> {
-    done.sort_by_key(|d| d.0);
-    let mut out: Vec<(Revision, usize)> = vec![];
-    for (_, r, start, end) in done {
-        if let Some((last, last_end)) = out.last_mut()
-            && matches!(
-                last.target,
-                RevisionTarget::Text | RevisionTarget::ParagraphMark
-            )
-            && matches!(
-                r.target,
-                RevisionTarget::Text | RevisionTarget::ParagraphMark
-            )
-            && last.kind == r.kind
-            && last.author == r.author
-            && last.date == r.date
-            && last.location == r.location
-            && start == *last_end
-        {
-            last.text.push_str(&r.text);
-            if r.target == RevisionTarget::Text {
-                last.target = RevisionTarget::Text;
-            }
-            *last_end = end;
-            continue;
-        }
-        out.push((r, end));
-    }
-    out.into_iter()
-        .enumerate()
-        .map(|(i, (mut r, _))| {
-            r.index = i;
-            r
-        })
-        .collect()
-}
+    // ---- bookmarks, comment anchors, references, pictures -------------------
 
-// ---- bookmarks, comment anchors, note references, images ---------------------
-
-/// A reference to a note.
-pub(crate) struct NoteRef {
-    pub kind: NoteKind,
-    pub id: String,
-    pub number: Option<usize>,
-    pub location: Location,
-    /// The mark of a note that has its own.
-    pub mark: Option<String>,
-}
-
-/// Bookmarks, the text comments are about, where comments and notes are
-/// referenced, and pictures.
-pub(crate) struct MarksSink<'r> {
-    pub c: Common<'r>,
-    pub bookmarks: Vec<Bookmark>,
-    /// Open bookmarks by id: index and where their text starts.
-    open_bookmarks: HashMap<String, (usize, usize)>,
-    pub anchors: HashMap<String, String>,
-    open_anchors: HashMap<String, usize>,
-    spans: Spans,
-    pub comment_places: HashMap<String, Location>,
-    /// Note references: kind, id, number, place.
-    pub note_refs: Vec<NoteRef>,
-    pub images: Vec<Image>,
-    pub controls: Vec<Control>,
-    /// Open content controls: index and where their text starts.
-    open_controls: Vec<(usize, usize)>,
-    /// Content types of parts, filled by the reader.
-    pub content_types: &'r HashMap<String, String>,
-}
-
-impl<'r> MarksSink<'r> {
-    pub fn new(
-        c: Common<'r>,
-        content_types: &'r HashMap<String, String>,
-        budget: u64,
-    ) -> MarksSink<'r> {
-        MarksSink {
-            c,
-            bookmarks: vec![],
-            open_bookmarks: HashMap::new(),
-            anchors: HashMap::new(),
-            open_anchors: HashMap::new(),
-            spans: Spans::new(budget),
-            controls: vec![],
-            open_controls: vec![],
-            comment_places: HashMap::new(),
-            note_refs: vec![],
-            images: vec![],
-            content_types,
-        }
-    }
-
-    /// Ends the bookmarks and comment ranges still open, at the end of a
-    /// story.
-    pub fn close_all(&mut self) -> Result<(), Error> {
-        for (_, (i, start)) in std::mem::take(&mut self.open_bookmarks) {
-            self.bookmarks[i].text = self.spans.cut(start)?;
-        }
-        for (id, start) in std::mem::take(&mut self.open_anchors) {
-            let t = self.spans.cut(start)?;
-            self.anchors.insert(id, t);
-        }
-        while let Some((i, start)) = self.open_controls.pop() {
-            self.controls[i].text = self.spans.cut(start)?;
-        }
-        Ok(())
-    }
-}
-
-impl<'r> Collect<'r> for MarksSink<'r> {
-    fn common(&mut self) -> &mut Common<'r> {
-        &mut self.c
-    }
-}
-
-impl Sink for MarksSink<'_> {
-    fn event(&mut self, st: &State, ev: Event<'_>) -> Result<(), Error> {
-        self.c.track(st, &ev)?;
-        let tree = self.c.tree;
-        let id = |n| -> Result<String, Error> {
-            Ok(tree
-                .attribute(n, Some(W), "id")?
-                .unwrap_or_default()
-                .into_owned())
-        };
+    fn mark(
+        &mut self,
+        st: &State<'_>,
+        ev: Event<'_>,
+        drawing: Option<DrawingProps>,
+    ) -> Result<(), Error> {
+        let tree = self.at.tree;
         match ev {
             Event::Object(Kind::BookmarkStart, n) => {
-                let name = tree
-                    .attribute(n, Some(W), "name")?
-                    .unwrap_or_default()
-                    .into_owned();
-                let bid = id(n)?;
+                let name = attr(tree, n, "name")?;
+                let id = attr(tree, n, "id")?;
                 self.open_bookmarks
-                    .insert(bid.clone(), (self.bookmarks.len(), self.spans.pos()));
-                self.bookmarks.push(Bookmark {
-                    hidden: name.starts_with('_'),
-                    name,
-                    id: bid,
-                    text: String::new(),
-                    location: self.c.location(),
-                });
+                    .insert(id.clone(), (self.bookmarks.len(), st.at(), st.depth()));
+                self.bookmarks.push((
+                    Bookmark {
+                        hidden: name.starts_with('_'),
+                        name,
+                        id,
+                        text: String::new(),
+                        location: self.at.location(),
+                    },
+                    None,
+                ));
             }
             Event::Object(Kind::BookmarkEnd, n) => {
-                if let Some((i, start)) = self.open_bookmarks.remove(&id(n)?) {
-                    self.bookmarks[i].text = self.spans.cut(start)?;
+                if let Some((i, start, depth)) = self.open_bookmarks.remove(&attr(tree, n, "id")?) {
+                    self.bookmarks[i].1 = Some(span(start, st.at(), depth, 0));
                 }
             }
             Event::Object(Kind::CommentStart, n) => {
-                self.open_anchors.insert(id(n)?, self.spans.pos());
+                self.open_anchors
+                    .insert(attr(tree, n, "id")?, (st.at(), st.depth()));
             }
             Event::Object(Kind::CommentEnd, n) => {
-                let cid = id(n)?;
-                if let Some(start) = self.open_anchors.remove(&cid) {
-                    let t = self.spans.cut(start)?;
-                    self.anchors.insert(cid, t);
+                let id = attr(tree, n, "id")?;
+                if let Some((start, depth)) = self.open_anchors.remove(&id) {
+                    self.anchors.insert(id, span(start, st.at(), depth, 0));
                 }
             }
             Event::Start(Kind::ContentControl, n) => {
                 let p = props::control_props(tree, n)?;
                 self.open_controls
-                    .push((self.controls.len(), self.spans.pos()));
-                self.controls.push(Control {
-                    control: ContentControl {
-                        kind: p.kind,
-                        tag: p.tag,
-                        title: p.title,
-                        placeholder: p.placeholder,
+                    .push((self.controls.len(), st.at(), st.depth()));
+                self.controls.push((
+                    Control {
+                        control: ContentControl {
+                            kind: p.kind,
+                            tag: p.tag,
+                            title: p.title,
+                            placeholder: p.placeholder,
+                        },
+                        text: String::new(),
+                        location: self.at.location(),
                     },
-                    text: String::new(),
-                    location: self.c.location(),
-                });
+                    None,
+                ));
             }
             Event::End(Kind::ContentControl, _) => {
-                if let Some((i, start)) = self.open_controls.pop() {
-                    let t = self.spans.cut(start)?;
-                    self.controls[i].text = t.strip_suffix('\n').unwrap_or(&t).to_string();
+                if let Some((i, start, depth)) = self.open_controls.pop() {
+                    self.controls[i].1 = Some(span(start, st.at(), depth, 0));
                 }
             }
             Event::Object(Kind::CommentReference, n) => {
-                self.comment_places.insert(id(n)?, self.c.location());
+                self.comment_places
+                    .insert(attr(tree, n, "id")?, self.at.location());
             }
             Event::Object(Kind::NoteReference, n) => {
                 let kind = if tree.is(n, Some(W), "endnoteReference")? {
@@ -1446,33 +1068,35 @@ impl Sink for MarksSink<'_> {
                 } else {
                     NoteKind::Footnote
                 };
+                let custom = tree
+                    .attribute(n, Some(W), "customMarkFollows")?
+                    .is_some_and(|v| matches!(&*v, "1" | "true" | "on"));
                 // A note with its own mark has the mark as text after the
                 // reference, in the same run.
-                let mut mark = None;
-                if self.c.note_number.is_none()
-                    && let Some(r) = st.run
-                {
-                    let mut m = String::new();
-                    for c in tree.elements(r)? {
-                        if tree.is(c, Some(W), "t")? {
-                            m.push_str(&tree.text_content(c)?);
-                        }
-                    }
-                    mark = Some(m).filter(|m| !m.is_empty());
-                }
+                self.mark_run = if custom { st.run } else { None };
                 self.note_refs.push(NoteRef {
                     kind,
-                    id: id(n)?,
-                    number: self.c.note_number,
-                    location: self.c.location(),
-                    mark,
+                    id: attr(tree, n, "id")?,
+                    number: st.note_number(),
+                    location: self.at.location(),
+                    mark: None,
                 });
             }
-            Event::Object(Kind::Drawing, n) => {
-                let p = props::drawing_props(tree, n)?;
+            Event::Text(t) if self.mark_run.is_some() => {
+                if st.run == self.mark_run
+                    && let Some(r) = self.note_refs.last_mut()
+                {
+                    r.mark.get_or_insert_with(String::new).push_str(t);
+                } else {
+                    self.mark_run = None;
+                }
+            }
+            Event::End(Kind::Run, _) => self.mark_run = None,
+            Event::Object(Kind::Drawing, _) => {
+                let Some(p) = drawing else { return Ok(()) };
                 if p.kind == DrawingKind::Picture {
                     let rel = p.embed.clone().or(p.link.clone());
-                    let r = rel.as_ref().and_then(|id| self.c.rels.get(id));
+                    let r = rel.as_ref().and_then(|id| self.at.rels.get(id));
                     let part = r.and_then(|r| r.part.clone());
                     let link = r.filter(|r| r.external).map(|r| r.target.clone());
                     let content_type = part
@@ -1490,17 +1114,9 @@ impl Sink for MarksSink<'_> {
                         name: p.name,
                         title: p.title,
                         alt: p.alt,
-                        location: self.c.location(),
+                        location: self.at.location(),
                     });
                 }
-            }
-            Event::Text(t) if st.visible(Revisions::Accepted) => self.spans.push(t),
-            Event::Object(Kind::Math, n) if st.visible(Revisions::Accepted) => {
-                let t = math_text(tree, n)?;
-                self.spans.push(&t);
-            }
-            Event::End(Kind::Paragraph, _) if st.visible(Revisions::Accepted) => {
-                self.spans.push("\n")
             }
             _ => {}
         }
@@ -1510,4 +1126,44 @@ impl Sink for MarksSink<'_> {
 
 fn round2(v: f64) -> f64 {
     (v * 100.0).round() / 100.0
+}
+
+/// Joins revisions that Word reports as one: neighbours of the same kind,
+/// author and date with no content between them.
+pub(crate) fn merge_revisions(mut done: Vec<RevisionSpans>) -> Vec<(Revision, Vec<Part>)> {
+    done.sort_by_key(|d| d.seq);
+    let mut out: Vec<(Revision, Vec<Part>, usize)> = vec![];
+    for d in done {
+        let r = d.revision;
+        if let Some((last, parts, last_end)) = out.last_mut()
+            && matches!(
+                last.target,
+                RevisionTarget::Text | RevisionTarget::ParagraphMark
+            )
+            && matches!(
+                r.target,
+                RevisionTarget::Text | RevisionTarget::ParagraphMark
+            )
+            && last.kind == r.kind
+            && last.author == r.author
+            && last.date == r.date
+            && last.location == r.location
+            && d.start == *last_end
+        {
+            parts.extend(d.parts);
+            if r.target == RevisionTarget::Text {
+                last.target = RevisionTarget::Text;
+            }
+            *last_end = d.end;
+            continue;
+        }
+        out.push((r, d.parts, d.end));
+    }
+    out.into_iter()
+        .enumerate()
+        .map(|(i, (mut r, parts, _))| {
+            r.index = i;
+            (r, parts)
+        })
+        .collect()
 }

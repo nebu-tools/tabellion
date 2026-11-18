@@ -61,30 +61,30 @@ fn document(data: &[u8]) -> Option<Document> {
 
 fuzz_target!(|data: &[u8]| {
     let Some(mut doc) = document(data) else { return };
-    let _ = doc.blocks();
-    let _ = doc.styles();
-    let _ = doc.tables();
-    let _ = doc.fields();
-    let _ = doc.revisions();
-    let _ = doc.comments();
-    let _ = doc.images();
-    let _ = doc.bookmarks();
-    let _ = doc.notes();
-    let _ = doc.sections();
-    let _ = doc.numbering();
-    let _ = doc.content_controls();
+    let Ok(views) = doc.views() else { return };
     for revisions in [Revisions::Accepted, Revisions::Rejected, Revisions::Current] {
-        let _ = doc.text(&TextOptions {
+        let text = views.text(&TextOptions {
             revisions,
             headers_footers: true,
             notes: true,
             comments: true,
             text_boxes: true,
         });
+        // The blocks and the text agree on what a reader sees.
+        if revisions == Revisions::Accepted {
+            let plain = views.text(&TextOptions {
+                text_boxes: false,
+                ..TextOptions::default()
+            });
+            let bare = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+            let joined: String = views.blocks().iter().map(|b| b.text.as_str()).collect();
+            assert_eq!(bare(&joined), bare(&plain));
+        }
+        drop(text);
     }
-    for l in ["heading:Results", "bookmark:summary", "placeholder:results", "text:the"] {
+    for l in ["heading:Results", "bookmark:summary", "placeholder:results", "text:the", "#0"] {
         if let Ok(l) = l.parse() {
-            let _ = doc.locate(&l);
+            let _ = views.locate(&l);
         }
     }
 });

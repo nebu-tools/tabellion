@@ -2,33 +2,42 @@
 //! revisions, comments, notes, bookmarks, images, styles, numbering and
 //! sections.
 //!
-//! The views are read from the parts' trees each time they are asked for.
-//! They hold no copy of the document: each item names where it is (a block
-//! id, a part) and gives what a reader needs (text, cells, codes, authors).
-//! One walk over the stories ([`walk`]) serves every view, so visible text
-//! has one definition: field results and not field codes, no hidden text,
-//! and revisions as the [`Revisions`] option says.
+//! [`Document::views`] reads every view in one walk over the stories
+//! ([`walk`]) and keeps them until an edit changes a tree. Each item names
+//! where it is (a block id, a part) and gives what a reader needs (text,
+//! cells, codes, authors). The walk records the text of every story as
+//! pieces ([`text`]), and every text a view gives is a range of them
+//! rendered by one function, so visible text has one definition: field
+//! results and not field codes, no hidden text, and revisions as the
+//! [`Revisions`] option says.
 //!
 //! Every view type serialises to the JSON shape that
 //! `crates/nebu-docx/schema/views.json` describes.
 
 mod collect;
+mod locate;
 mod names;
 mod numbering;
 mod props;
 mod reader;
 mod styles;
+mod text;
 mod walk;
+
+#[cfg(test)]
+mod linear;
 
 use serde::Serialize;
 
 use crate::xml::NodeId;
 use crate::{Document, Error};
 
+pub use locate::{BlockId, Locator};
 pub use numbering::{
     LevelOverride, Numbering, NumberingDefinition, NumberingInstance, NumberingLevel,
 };
-pub use styles::{LocalName, Style, StyleKind, Styles};
+pub use reader::Views;
+pub use styles::{LocalName, Style, StyleKind, Styles, Toggle, Toggles};
 
 /// Which text tracked changes leave in the document.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -125,7 +134,7 @@ pub struct Location {
     pub part: String,
     /// The id of the top-level block of the body that holds it, for the
     /// main story and its text boxes.
-    pub block: Option<String>,
+    pub block: Option<BlockId>,
 }
 
 /// What a top-level block of the body is.
@@ -161,7 +170,10 @@ pub struct Block {
     /// `p:<paraId>` for a paragraph with a `w14:paraId`, `t:<paraId>` for a
     /// table whose first paragraph has one, `#<index>` otherwise. A
     /// `#<index>` id holds only for the file it was read from.
-    pub id: String,
+    pub id: BlockId,
+    /// True for a paragraph or table whose `w14:paraId` another block of the
+    /// body shares, so that it has a `#<index>` id instead.
+    pub shared_para_id: bool,
     /// The position among the blocks, from 0.
     pub index: usize,
     /// What the block is.
@@ -175,7 +187,8 @@ pub struct Block {
     /// The list a paragraph belongs to.
     pub numbering: Option<NumberingRef>,
     /// The text a reader sees, with revisions accepted. A table gives its
-    /// rows as lines of tab-separated cells.
+    /// rows as lines of tab-separated cells; paragraphs in a cell are
+    /// joined by spaces.
     pub text: String,
     /// The element's name as written, for kinds `bookmark` and `other`.
     pub element: Option<String>,
@@ -361,17 +374,19 @@ pub enum NoteKind {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Inline {
-    /// Text of one run. Field codes are not text; deleted text is, marked
-    /// by its revision.
+    /// Text of one run. Field codes are not text; deleted and hidden text
+    /// is, marked by its revision and its toggles.
     Text {
         /// The text, with tabs and line breaks as `\t` and `\n`.
         text: String,
         /// The run's direct formatting.
         format: Format,
+        /// The toggle properties that are on after the style cascade:
+        /// `hidden` for text a reader does not see, `bold`, `italic` and
+        /// the others.
+        toggles: Toggles,
         /// The tracked change the text is in.
         revision: Option<Change>,
-        /// True for hidden text, which a reader does not see.
-        hidden: bool,
     },
     /// The result of a field begins. The field is
     /// `Document::fields()[field]`.
@@ -478,7 +493,7 @@ pub struct Table {
     /// The position in `Document::tables()`, from 0.
     pub index: usize,
     /// The block id, for a top-level table of the body.
-    pub id: Option<String>,
+    pub id: Option<BlockId>,
     /// Where the table is.
     pub location: Location,
     /// For a table inside a cell: that table's index, and the cell's row
@@ -519,7 +534,8 @@ pub struct Cell {
     pub row_span: usize,
     /// The grid columns it covers.
     pub column_span: usize,
-    /// Its text, paragraphs separated by `\n`, without nested tables.
+    /// Its text, paragraphs separated by `\n`, without the tables nested
+    /// in it.
     pub text: String,
     /// The indexes of the tables nested in it.
     pub tables: Vec<usize>,
@@ -557,7 +573,8 @@ pub struct Revision {
     pub author: String,
     /// When, as written in the file.
     pub date: Option<String>,
-    /// The text it affects. A paragraph mark is `\n`.
+    /// The text it affects, deleted text included. A paragraph mark is
+    /// `\n`.
     pub text: String,
     /// Where it is.
     pub location: Location,
@@ -611,8 +628,8 @@ pub struct Bookmark {
     pub id: String,
     /// True for a name that starts with `_`, which Word hides.
     pub hidden: bool,
-    /// The text it encloses, with revisions accepted; paragraphs end in
-    /// `\n`.
+    /// The text it encloses, with revisions accepted. Paragraphs are
+    /// separated by `\n` and table cells by tabs.
     pub text: String,
     /// Where it starts.
     pub location: Location,
@@ -679,9 +696,9 @@ pub struct Section {
     /// The position, from 0.
     pub index: usize,
     /// The id of its first block.
-    pub first_block: Option<String>,
+    pub first_block: Option<BlockId>,
     /// The id of its last block.
-    pub last_block: Option<String>,
+    pub last_block: Option<BlockId>,
     /// How it begins: `next_page`, `continuous`, `even_page`, `odd_page` or
     /// `next_column`.
     pub start: String,
@@ -732,168 +749,33 @@ impl Default for TextOptions {
     }
 }
 
-/// A place in the body, as a person names it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Locator {
-    /// A block id: `p:1A2B3C4D`, `t:1A2B3C4D`, `#12`.
-    Block(String),
-    /// The block where a bookmark starts.
-    Bookmark(String),
-    /// A heading by its text.
-    Heading(String),
-    /// The paragraph that holds `{{name}}`.
-    Placeholder(String),
-    /// The one block whose text contains this.
-    Text(String),
-}
-
-impl std::str::FromStr for Locator {
-    type Err = Error;
-    /// Reads `p:…`, `t:…`, `#…`, `bookmark:…`, `heading:…`,
-    /// `placeholder:…` or `text:…`.
-    fn from_str(s: &str) -> Result<Locator, Error> {
-        if s.starts_with("p:") || s.starts_with("t:") || s.starts_with('#') {
-            return Ok(Locator::Block(s.to_string()));
-        }
-        let Some((k, v)) = s.split_once(':') else {
-            return Err(Error::Invalid(format!(
-                "{s:?} names no place; write p:ID, t:ID, #INDEX, bookmark:NAME, heading:TEXT, placeholder:NAME or text:TEXT"
-            )));
-        };
-        let v = v.to_string();
-        match k {
-            "bookmark" => Ok(Locator::Bookmark(v)),
-            "heading" => Ok(Locator::Heading(v)),
-            "placeholder" => Ok(Locator::Placeholder(v)),
-            "text" => Ok(Locator::Text(v)),
-            "block" => Ok(Locator::Block(v)),
-            _ => Err(Error::Invalid(format!(
-                "{k:?} is not a kind of place; use bookmark, heading, placeholder or text"
-            ))),
-        }
-    }
-}
-
 /// The views of a document as read, with the stamp of the trees they were
 /// read from.
 pub(crate) struct Cache {
     stamp: Vec<(u64, u64)>,
-    reading: reader::Reading,
+    views: Views,
 }
 
 impl Document {
-    /// Every view, read in one walk on first use and kept until an edit
-    /// changes a tree or a part is added.
-    fn reading(&mut self) -> Result<&reader::Reading, Error> {
-        // The parts a reading needs were parsed when it was made, so an
+    /// Every view of the document.
+    ///
+    /// The first call reads them all in one walk over every story (the
+    /// body, headers and footers, notes, comments and text boxes), which
+    /// costs time in proportion to the size of those parts. Later calls
+    /// return the same views at no cost until an edit changes a tree or a
+    /// part is added; then the next call reads them again.
+    pub fn views(&mut self) -> Result<&Views, Error> {
+        // The parts the views need were parsed when they were read, so an
         // equal stamp means nothing changed since.
-        let stamp = self.stamp();
-        if self.views.as_ref().is_some_and(|c| c.stamp == stamp) {
-            return match &self.views {
-                Some(c) => Ok(&c.reading),
-                None => Err(Error::Invalid("the views could not be read".into())),
-            };
-        }
-        let r = reader::Reader::new(self)?;
-        let stamp = r.stamp();
-        let fresh = r.cache().is_some_and(|c| c.stamp == stamp);
+        let fresh = self.views.as_ref().is_some_and(|c| c.stamp == self.stamp());
         if !fresh {
-            let reading = r.read_all()?;
-            self.views = Some(Box::new(Cache { stamp, reading }));
+            let views = reader::Reader::new(self)?.read()?;
+            let stamp = self.stamp();
+            self.views = Some(Box::new(Cache { stamp, views }));
         }
         match &self.views {
-            Some(c) => Ok(&c.reading),
+            Some(c) => Ok(&c.views),
             None => Err(Error::Invalid("the views could not be read".into())),
         }
-    }
-
-    /// The top-level blocks of the body with ids, kinds, styles, levels,
-    /// text and the content of paragraphs.
-    pub fn blocks(&mut self) -> Result<Vec<Block>, Error> {
-        Ok(self.reading()?.blocks.clone())
-    }
-
-    /// The one block a locator names. A locator that matches no block or
-    /// several gives [`Error::Invalid`].
-    pub fn locate(&mut self, locator: &Locator) -> Result<Block, Error> {
-        self.reading()?.locate(locator)
-    }
-
-    /// The styles.
-    pub fn styles(&mut self) -> Result<Styles, Error> {
-        Ok(self.reading()?.styles.clone())
-    }
-
-    /// All tables of all stories, nested ones included, in reading order.
-    pub fn tables(&mut self) -> Result<Vec<Table>, Error> {
-        Ok(self.reading()?.tables.clone())
-    }
-
-    /// All fields of all stories, nested ones after the field that holds
-    /// them.
-    pub fn fields(&mut self) -> Result<Vec<Field>, Error> {
-        Ok(self.reading()?.fields.clone())
-    }
-
-    /// All tracked changes of all stories.
-    pub fn revisions(&mut self) -> Result<Vec<Revision>, Error> {
-        Ok(self.reading()?.revisions.clone())
-    }
-
-    /// The comments, replies after the comment they answer.
-    pub fn comments(&mut self) -> Result<Vec<Comment>, Error> {
-        Ok(self.reading()?.comments.clone())
-    }
-
-    /// The pictures of all stories.
-    pub fn images(&mut self) -> Result<Vec<Image>, Error> {
-        Ok(self.reading()?.images.clone())
-    }
-
-    /// The bookmarks of all stories.
-    pub fn bookmarks(&mut self) -> Result<Vec<Bookmark>, Error> {
-        Ok(self.reading()?.bookmarks.clone())
-    }
-
-    /// The content controls of all stories, an enclosing control before
-    /// those it holds.
-    pub fn content_controls(&mut self) -> Result<Vec<Control>, Error> {
-        Ok(self.reading()?.controls.clone())
-    }
-
-    /// The footnotes, then the endnotes, without separators, each in the
-    /// order of their references in the body.
-    pub fn notes(&mut self) -> Result<Vec<Note>, Error> {
-        Ok(self.reading()?.notes.clone())
-    }
-
-    /// The sections with their page setup, headers and footers.
-    pub fn sections(&mut self) -> Result<Vec<Section>, Error> {
-        Ok(self.reading()?.sections.clone())
-    }
-
-    /// The numbering definitions and instances.
-    pub fn numbering(&mut self) -> Result<Numbering, Error> {
-        Ok(self.reading()?.numbering.clone())
-    }
-
-    /// The text as a reader sees it: paragraphs as lines, tables as lines
-    /// of tab-separated cells.
-    pub fn text(&mut self, options: &TextOptions) -> Result<String, Error> {
-        // Headers, notes and comments come from the reading; the body alone
-        // needs only its own walk.
-        let o = options;
-        if o.headers_footers || o.notes || o.comments {
-            self.reading()?;
-            let r = reader::Reader::new(self)?;
-            return match r.cache() {
-                Some(c) => {
-                    let c = &c.reading;
-                    r.text(o, &c.sections, &c.notes, &c.comments)
-                }
-                None => Err(Error::Invalid("the views could not be read".into())),
-            };
-        }
-        reader::Reader::new(self)?.text(o, &[], &[], &[])
     }
 }

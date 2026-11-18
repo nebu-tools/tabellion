@@ -154,13 +154,11 @@ fn main_text_matches_word() {
             } else {
                 word
             };
-            let ours = doc
-                .text(&TextOptions {
-                    revisions: view,
-                    text_boxes: false,
-                    ..TextOptions::default()
-                })
-                .unwrap();
+            let ours = doc.views().unwrap().text(&TextOptions {
+                revisions: view,
+                text_boxes: false,
+                ..TextOptions::default()
+            });
             // Tabellion puts the cells of a nested table into the text of
             // the outer cell, separated by spaces, so that a row stays one
             // line. The comparison is therefore word by word.
@@ -246,7 +244,7 @@ fn compare_table(
 fn tables_match_word_with_revisions_accepted() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let tables = doc.tables().unwrap();
+        let tables = doc.views().unwrap().tables();
         let top: Vec<usize> = tables
             .iter()
             .filter(|t| t.location.story == StoryKind::Main && t.parent.is_none())
@@ -267,7 +265,7 @@ fn tables_match_word_with_revisions_accepted() {
             continue;
         }
         for (w, &i) in word.iter().zip(&top) {
-            compare_table(&name, w, &tables, i, &mut failures);
+            compare_table(&name, w, tables, i, &mut failures);
         }
     }
     check(failures);
@@ -286,7 +284,7 @@ fn word_code(s: &str) -> String {
 fn fields_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let fields = doc.fields().unwrap();
+        let fields = doc.views().unwrap().fields();
         for (story, kinds) in [
             (1, &[StoryKind::Main][..]),
             (2, &[StoryKind::Footnote]),
@@ -387,8 +385,9 @@ fn revisions_match_word() {
             })
             .collect();
         let ours: Vec<(i64, String, String)> = doc
-            .revisions()
+            .views()
             .unwrap()
+            .revisions()
             .iter()
             .filter(|v| v.location.story == StoryKind::Main)
             .map(|v| {
@@ -412,7 +411,7 @@ fn revisions_match_word() {
 fn comments_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let comments = doc.comments().unwrap();
+        let comments = doc.views().unwrap().comments();
         let word: Vec<(String, String, String, String, Option<usize>)> = r["comments"]
             .as_array()
             .unwrap()
@@ -466,8 +465,9 @@ fn bookmarks_match_word() {
             })
             .collect();
         let mut ours: Vec<(String, String)> = doc
-            .bookmarks()
+            .views()
             .unwrap()
+            .bookmarks()
             .iter()
             .map(|b| (b.name.clone(), words(&b.text)))
             .collect();
@@ -486,7 +486,7 @@ fn bookmarks_match_word() {
 fn notes_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let notes = doc.notes().unwrap();
+        let notes = doc.views().unwrap().notes();
         for (key, kind) in [
             ("footnotes", NoteKind::Footnote),
             ("endnotes", NoteKind::Endnote),
@@ -527,7 +527,7 @@ fn notes_match_word() {
 fn headers_and_footers_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let sections = doc.sections().unwrap();
+        let sections = doc.views().unwrap().sections();
         let word = r["sections"].as_array().cloned().unwrap_or_default();
         if word.len() != sections.len() {
             failures.push(format!(
@@ -537,7 +537,7 @@ fn headers_and_footers_match_word() {
             ));
             continue;
         }
-        for (w, s) in word.iter().zip(&sections) {
+        for (w, s) in word.iter().zip(sections.iter()) {
             for (key, list) in [("headers", &s.headers), ("footers", &s.footers)] {
                 for h in w[key].as_array().unwrap() {
                     let kind = match h["kind"].as_i64() {
@@ -582,8 +582,9 @@ fn text_boxes_match_word() {
             .map(|t| words(&plain(t)))
             .collect();
         let ours: Vec<String> = doc
-            .blocks()
+            .views()
             .unwrap()
+            .blocks()
             .iter()
             .flat_map(|b| b.content.clone())
             .filter_map(|i| match i {
@@ -604,7 +605,7 @@ fn text_boxes_match_word() {
 fn images_match_word() {
     let mut failures = vec![];
     for (name, mut doc, r) in documents() {
-        let images = doc.images().unwrap();
+        let images = doc.views().unwrap().images();
         let shape = |s: &Value| {
             (
                 s["alt"].as_str().unwrap_or("").to_string(),
@@ -692,8 +693,9 @@ fn content_controls_match_word() {
             })
             .collect();
         let mut ours: Vec<(i64, String, String, bool)> = doc
-            .content_controls()
+            .views()
             .unwrap()
+            .content_controls()
             .iter()
             .filter(|c| c.location.story == StoryKind::Main)
             .map(|c| {
@@ -729,7 +731,7 @@ fn built_in_style_names_match_word() {
             .filter(|s| s["builtin"].as_bool().unwrap_or(false))
             .map(|s| s["name"].as_str().unwrap().to_string())
             .collect();
-        let styles = doc.styles().unwrap();
+        let styles = doc.views().unwrap().styles().clone();
         // Word lists the styles in use. A built-in style it lists under a
         // name that differs only in case is a wrong display name.
         for s in styles.iter().filter(|s| s.built_in) {
@@ -745,7 +747,7 @@ fn built_in_style_names_match_word() {
             }
         }
         // Every style a paragraph uses is one Word lists, by the same name.
-        for b in doc.blocks().unwrap() {
+        for b in doc.views().unwrap().blocks() {
             if let Some(n) = &b.style_name
                 && styles.find(n).is_some_and(|s| s.built_in)
                 && !word.contains(n)
@@ -763,8 +765,8 @@ fn built_in_style_names_match_word() {
 #[test]
 fn every_block_has_an_id_and_text_matches_its_content() {
     for (name, mut doc, _) in documents() {
-        let blocks = doc.blocks().unwrap();
-        let mut ids: Vec<&str> = blocks.iter().map(|b| b.id.as_str()).collect();
+        let blocks = doc.views().unwrap().blocks();
+        let mut ids: Vec<nebu_docx::BlockId> = blocks.iter().map(|b| b.id).collect();
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), blocks.len(), "{name}: block ids repeat");
@@ -778,11 +780,12 @@ fn every_block_has_an_id_and_text_matches_its_content() {
                     Inline::Text {
                         text,
                         revision,
-                        hidden: false,
+                        toggles,
                         ..
-                    } if !revision.as_ref().is_some_and(|r| {
-                        matches!(r.kind, RevisionKind::Deletion | RevisionKind::MoveFrom)
-                    }) =>
+                    } if !toggles.has(nebu_docx::Toggle::Hidden)
+                        && !revision.as_ref().is_some_and(|r| {
+                            matches!(r.kind, RevisionKind::Deletion | RevisionKind::MoveFrom)
+                        }) =>
                     {
                         Some(text.as_str())
                     }

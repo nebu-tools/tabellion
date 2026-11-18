@@ -148,7 +148,10 @@ It prints `/tmp/copy.docx: identical to samples/report-template.docx, all 5611 b
 Every command exits with 0 on success, 1 when `roundtrip` finds that the
 copy differs, 2 for a wrong command line, 3 when a file cannot be read or
 written or is not a Word document tabellion can read, and 70 for an
-internal error. Errors are one line on standard error.
+internal error. A file that cannot be read gives one line on standard
+error. A wrong command line gives several lines on standard error: what is
+wrong, the usage of the command or the values an option takes, and a
+pointer to `--help`.
 
 ## Build and test
 

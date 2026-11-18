@@ -27,6 +27,7 @@
 //! memory a file can ask for, and no input makes the engine panic.
 
 mod archive;
+mod cost;
 mod document;
 mod package;
 mod sha256;

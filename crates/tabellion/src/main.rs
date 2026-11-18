@@ -114,8 +114,9 @@ fn open(path: &Path) -> Result<Document, String> {
 fn text(file: &Path, options: &TextOptions) -> Result<(), String> {
     let mut doc = open(file)?;
     let t = doc
-        .text(options)
-        .map_err(|e| format!("{}: {e}", file.display()))?;
+        .views()
+        .map_err(|e| format!("{}: {e}", file.display()))?
+        .text(options);
     layout::emit(&t);
     Ok(())
 }

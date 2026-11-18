@@ -37,12 +37,22 @@ pub(crate) fn paragraph_style(tree: &Tree, p: NodeId) -> Result<Option<String>, 
     }
 }
 
-/// The `w14:paraId` of a paragraph.
-pub(crate) fn para_id(tree: &Tree, p: NodeId) -> Result<Option<String>, Error> {
+/// The `w14:paraId` of a paragraph, read as Word reads it: eight
+/// hexadecimal digits at most, in either case, below `0x80000000`. Word
+/// replaces any other value when it saves, so such a value names nothing
+/// that lasts.
+pub(crate) fn para_id(tree: &Tree, p: NodeId) -> Result<Option<u32>, Error> {
     Ok(tree
         .attribute(p, Some(W14), "paraId")?
-        .map(|v| v.into_owned())
-        .filter(|v| !v.is_empty() && v.len() <= 8 && v.bytes().all(|b| b.is_ascii_hexdigit())))
+        .and_then(|v| parse_para_id(&v)))
+}
+
+/// A paragraph id from its hexadecimal digits.
+pub(crate) fn parse_para_id(v: &str) -> Option<u32> {
+    if v.is_empty() || v.len() > 8 || !v.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    u32::from_str_radix(v, 16).ok().filter(|&n| n < 0x8000_0000)
 }
 
 /// Direct paragraph properties that the views report.
@@ -210,18 +220,32 @@ pub(crate) fn drawing_props(tree: &Tree, d: NodeId) -> Result<DrawingProps, Erro
         text_boxes: vec![],
     };
     let legacy = !tree.is(d, Some(W), "drawing")?;
-    // Text boxes inside text boxes belong to the inner story.
-    let mut skip_below: Vec<NodeId> = vec![];
-    for n in tree.descendants(d)? {
+    // Depth first, in document order. The content of a text box is a story
+    // of its own, and of mc:AlternateContent only the branch Word takes
+    // counts, so neither is entered.
+    let mut stack: Vec<NodeId> = tree.elements(d)?.collect();
+    stack.reverse();
+    while let Some(n) = stack.pop() {
         let Some(name) = tree.name(n)? else { continue };
         let ns = name.namespace.unwrap_or("");
-        if !skip_below.is_empty() && tree.ancestors(n)?.any(|a| skip_below.contains(&a)) {
-            continue;
+        let enter = match (ns, name.local) {
+            (W, "txbxContent") => false,
+            (super::walk::MC, "AlternateContent") => {
+                if let Some(b) = super::walk::choose(tree, n)? {
+                    stack.push(b);
+                }
+                false
+            }
+            _ => true,
+        };
+        if enter {
+            let at = stack.len();
+            stack.extend(tree.elements(n)?);
+            stack[at..].reverse();
         }
         match (ns, name.local) {
             (W, "txbxContent") => {
                 out.text_boxes.push(n);
-                skip_below.push(n);
                 if matches!(out.kind, DrawingKind::Other | DrawingKind::Shape) {
                     out.kind = DrawingKind::TextBox;
                 }

@@ -158,48 +158,23 @@ fn views(doc: &mut Document) -> Vec<(&'static str, Value)> {
         m.insert(key.into(), v);
         out.push((key, Value::Object(m)));
     };
-    add(
-        "blocks",
-        serde_json::to_value(doc.blocks().unwrap()).unwrap(),
-    );
-    let styles: Vec<_> = doc.styles().unwrap().iter().cloned().collect();
-    add("styles", serde_json::to_value(styles).unwrap());
-    add(
-        "tables",
-        serde_json::to_value(doc.tables().unwrap()).unwrap(),
-    );
-    add(
-        "fields",
-        serde_json::to_value(doc.fields().unwrap()).unwrap(),
-    );
-    add(
-        "comments",
-        serde_json::to_value(doc.comments().unwrap()).unwrap(),
-    );
-    add(
-        "revisions",
-        serde_json::to_value(doc.revisions().unwrap()).unwrap(),
-    );
-    add(
-        "images",
-        serde_json::to_value(doc.images().unwrap()).unwrap(),
-    );
-    add(
-        "bookmarks",
-        serde_json::to_value(doc.bookmarks().unwrap()).unwrap(),
-    );
-    add("notes", serde_json::to_value(doc.notes().unwrap()).unwrap());
-    add(
-        "sections",
-        serde_json::to_value(doc.sections().unwrap()).unwrap(),
-    );
-    add(
-        "numbering",
-        serde_json::to_value(doc.numbering().unwrap()).unwrap(),
-    );
+    let v = doc.views().unwrap();
+    let j = |x: serde_json::Result<Value>| x.unwrap();
+    add("blocks", j(serde_json::to_value(v.blocks())));
+    let styles: Vec<_> = v.styles().iter().collect();
+    add("styles", j(serde_json::to_value(styles)));
+    add("tables", j(serde_json::to_value(v.tables())));
+    add("fields", j(serde_json::to_value(v.fields())));
+    add("comments", j(serde_json::to_value(v.comments())));
+    add("revisions", j(serde_json::to_value(v.revisions())));
+    add("images", j(serde_json::to_value(v.images())));
+    add("bookmarks", j(serde_json::to_value(v.bookmarks())));
+    add("notes", j(serde_json::to_value(v.notes())));
+    add("sections", j(serde_json::to_value(v.sections())));
+    add("numbering", j(serde_json::to_value(v.numbering())));
     add(
         "content_controls",
-        serde_json::to_value(doc.content_controls().unwrap()).unwrap(),
+        j(serde_json::to_value(v.content_controls())),
     );
     out
 }

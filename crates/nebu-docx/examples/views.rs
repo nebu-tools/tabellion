@@ -1,5 +1,5 @@
-//! Times opening a document and each of its views, as the median of five
-//! runs.
+//! Times opening a document, reading its views and rendering its text, as
+//! the median of five runs.
 //!
 //!   cargo run --release -p nebu-docx --example views -- FILE
 
@@ -22,23 +22,20 @@ fn main() {
         std::process::exit(1);
     });
     type Step = (&'static str, fn(&mut Document));
-    let steps: [Step; 13] = [
+    let steps: [Step; 4] = [
         ("parse the main part", |d| {
             let main = d.main_part().to_string();
             d.xml(&main).unwrap();
         }),
-        ("blocks", |d| drop(d.blocks().unwrap())),
-        ("styles", |d| drop(d.styles().unwrap())),
-        ("tables", |d| drop(d.tables().unwrap())),
-        ("fields", |d| drop(d.fields().unwrap())),
-        ("revisions", |d| drop(d.revisions().unwrap())),
-        ("comments", |d| drop(d.comments().unwrap())),
-        ("images", |d| drop(d.images().unwrap())),
-        ("bookmarks", |d| drop(d.bookmarks().unwrap())),
-        ("notes", |d| drop(d.notes().unwrap())),
-        ("sections", |d| drop(d.sections().unwrap())),
-        ("content controls", |d| drop(d.content_controls().unwrap())),
-        ("text", |d| drop(d.text(&TextOptions::default()).unwrap())),
+        ("every view", |d| {
+            d.views().unwrap();
+        }),
+        ("the views again", |d| {
+            d.views().unwrap();
+        }),
+        ("text", |d| {
+            drop(d.views().unwrap().text(&TextOptions::default()))
+        }),
     ];
     let mut times = vec![vec![]; steps.len()];
     for _ in 0..5 {

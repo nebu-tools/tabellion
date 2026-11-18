@@ -949,6 +949,7 @@ impl Tree {
 
     /// The node at an index that this tree handed out itself.
     fn n(&self, i: Ix) -> &Node {
+        crate::cost::tick(1);
         &self.nodes[i as usize]
     }
 
