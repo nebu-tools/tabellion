@@ -44,6 +44,25 @@ The numbering is read as the file stores it. Computing the number Word
 shows for a list paragraph ("2.1", "b)") comes later, with the field
 update.
 
+The engine also writes content into a document. Content is given in the
+content model: paragraphs, headings, bulleted and numbered lists, tables
+with merged cells, figures with captions, pictures, equations and page
+breaks, with text, footnotes, cross-references, links, fields and
+equations in the text. Its JSON form is given in
+[`crates/nebu-docx/schema/content.json`](crates/nebu-docx/schema/content.json).
+The writer puts the content before, after or in place of a block, or at
+the end, in the body, a table cell, a content control, a header or
+footer, a footnote or a text box. It uses the document's own styles and
+adds what is missing as Word defines it. Captions get `SEQ` fields and
+cross-references `REF` fields, with the numbers Word would show, and later
+captions are numbered again. Lists start at 1, footnotes go into the
+footnotes part, pictures into media parts, and tables get a table style
+the content defines or the document has. Every other part and every XML
+node outside the insertion keep their exact bytes. Each document the tests
+write is valid against the ECMA-376 schemas, and a set of them is checked
+in Word (see [`corpus/written/`](corpus/written)). Tracked insertion and
+the update of all fields come next.
+
 ### The command line
 
 `tabellion inspect` prints an outline of a document:
@@ -80,9 +99,12 @@ heading 1  p:3351007F  Methods
 2 tables, 2 images, 13 fields, 0 revisions, 0 comments, 1 footnote, 1 endnote, 5 bookmarks
 ```
 
-With a view it prints that view: `blocks`, `styles`, `tables`, `fields`,
-`comments`, `revisions`, `images`, `bookmarks`, `notes`, `sections`,
-`numbering` or `content-controls`. Add `--json` for the documented shape.
+With a view it prints that view: `blocks`, `paragraphs`, `styles`,
+`tables`, `fields`, `comments`, `revisions`, `images`, `bookmarks`,
+`notes`, `sections`, `numbering` or `content-controls`. Add `--json` for
+the documented shape. `paragraphs` lists every paragraph of every story,
+in table cells, content controls, headers, notes and text boxes too, with
+its content.
 
 ```console
 $ tabellion inspect samples/report-template.docx blocks
@@ -136,19 +158,57 @@ Describe the survey sites, the counting method and the data here.
 Page 1
 ```
 
+`tabellion insert IN OUT --content FILE` writes content from the content
+model's JSON form into a copy of a document. `--at NAME` puts it in place
+of the paragraph that holds `{{NAME}}`; `--before`, `--after` and
+`--replace` take a block as `inspect` names it (`p:1A2B3C4D`, `#7`) or by
+`heading:TEXT`, `bookmark:NAME` or `text:TEXT`; without one the content goes
+at the end. Pictures given as files are read relative to the JSON file.
+[`samples/survey.json`](samples/survey.json) has a heading, a paragraph
+with cross-references and a footnote, a table in a table style it
+defines, a nested list and a figure:
+
+```console
+$ tabellion insert samples/report-template.docx survey.docx --content samples/survey.json --at results
+survey.docx: inserted 6 blocks from samples/survey.json; added the styles Field Green; labels fig-wren, sec-counts, tab-sites
+$ tabellion text survey.docx --notes
+Breeding bird survey
+By {{author}}, {{date}}.
+Summary
+The summary goes here.
+Results
+Counts by site
+The north site held the most breeding pairs (Table 1); Figure 1 shows a wren there.[1]
+Table 1: Breeding pairs by site
+Site	Visits	Pairs
+North	12	41.5
+East	9	33.0
+South and west		80.5
+Walk the transect at dawn
+slowly
+stopping every 100 m
+Count singing males as pairs
+
+Figure 1: A wren at the north site
+The method follows the survey guide; the counts are above.
+Methods
+Describe the survey sites, the counting method and the data here.
+
+[1] Counted from song between 05:00 and 08:00.
+```
+
 `tabellion roundtrip IN OUT` opens a document, saves it unchanged and checks
 that the copy is the same file, byte for byte:
 
-```sh
-cargo run -p tabellion -- roundtrip samples/report-template.docx /tmp/copy.docx
+```console
+$ tabellion roundtrip samples/report-template.docx copy.docx
+copy.docx: identical to samples/report-template.docx, all 5611 bytes
 ```
-
-It prints `/tmp/copy.docx: identical to samples/report-template.docx, all 5611 bytes`.
 
 Every command exits with 0 on success, 1 when `roundtrip` finds that the
 copy differs, 2 for a wrong command line, 3 when a file cannot be read or
-written or is not a Word document tabellion can read, and 70 for an
-internal error. A file that cannot be read gives one line on standard
+written, is not a Word document tabellion can read, or holds content that
+cannot be written where it is asked to go, and 70 for an internal error. A file that cannot be read gives one line on standard
 error. A wrong command line gives several lines on standard error: what is
 wrong, the usage of the command or the values an option takes, and a
 pointer to `--help`.
@@ -175,7 +235,12 @@ the parser over it.
 On a Windows machine with Word, `tools/word/check.sh` opens files in a Word
 instance of its own and reports what Word makes of them. See DESIGN.md,
 "With Word, where it is available". `corpus/build.sh` makes the test
-corpus and Word's readings of it with that script.
+corpus and Word's readings of it with that script, and
+`tools/word/written.sh` has Word read the documents the writer's tests
+make (`corpus/written/`).
+
+`cargo run --release -p nebu-docx --example chapters -- samples/report-template.docx 300`
+times inserting 300 chapters.
 
 `cargo run --release -p nebu-docx --example views -- FILE` times opening a
 document and each view.

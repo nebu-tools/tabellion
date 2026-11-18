@@ -473,7 +473,7 @@ impl Nfa {
         self.eps.len() - 1
     }
 
-    fn closure(&self, set: &mut Vec<bool>) {
+    fn closure(&self, set: &mut [bool]) {
         let mut stack: Vec<usize> = (0..set.len()).filter(|&i| set[i]).collect();
         while let Some(s) = stack.pop() {
             for &t in &self.eps[s] {
@@ -880,7 +880,7 @@ fn builtin(b: &str, v: &str) -> Result<(), String> {
             }
         }
         "hexBinary" => {
-            if t.len() % 2 == 0 && t.bytes().all(|c| c.is_ascii_hexdigit()) {
+            if t.len().is_multiple_of(2) && t.bytes().all(|c| c.is_ascii_hexdigit()) {
                 Ok(())
             } else {
                 Err(format!("{v:?} is not hexBinary"))
@@ -925,10 +925,8 @@ fn children<'a, 'i>(
                             chosen = Some(b);
                         }
                     }
-                    "Fallback" => {
-                        if chosen.is_none() {
-                            chosen = Some(b);
-                        }
+                    "Fallback" if chosen.is_none() => {
+                        chosen = Some(b);
                     }
                     _ => {}
                 }

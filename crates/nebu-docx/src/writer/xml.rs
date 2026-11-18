@@ -237,14 +237,6 @@ pub(crate) const SETTINGS_ORDER: &[&str] = &[
     "listSeparator",
 ];
 
-/// The order of the children of `w:numbering` (17.9.17): picture bullets,
-/// then abstract definitions, then instances.
-pub(crate) const NUMBERING_ORDER: &[&str] =
-    &["numPicBullet", "abstractNum", "num", "numIdMacAtCleanup"];
-
-/// The order of the children of `w:styles` (17.7.4.18).
-pub(crate) const STYLES_ORDER: &[&str] = &["docDefaults", "latentStyles", "style"];
-
 #[cfg(test)]
 mod tests {
     use super::*;

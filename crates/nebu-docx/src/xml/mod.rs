@@ -905,7 +905,7 @@ impl Tree {
             if *remove {
                 self.check_editable(a)?;
             }
-            let mut put = |list: &Vec<NodeId>| -> Result<Vec<Ix>, Error> {
+            let put = |list: &Vec<NodeId>| -> Result<Vec<Ix>, Error> {
                 let mut out = vec![];
                 for n in list {
                     let (_, c) = self.check_insert(parent, *n)?;

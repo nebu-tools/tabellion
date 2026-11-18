@@ -45,7 +45,6 @@ pub(crate) struct Ctx {
     pub story: StoryKind,
     pub in_cell: bool,
     pub in_box: bool,
-    pub in_note: bool,
     /// The width available, in points.
     pub width: f64,
     /// Whether paragraphs get a `w14:paraId`.
@@ -132,16 +131,8 @@ fn content_labels(blocks: &[Block], out: &mut Vec<(String, LabelKind)>) {
                     }
                 }
             }
-            Block::Figure { label, .. } => {
-                if let Some(l) = label {
-                    out.push((l.clone(), LabelKind::Caption));
-                }
-            }
-            Block::Equation { label, .. } => {
-                if let Some(l) = label {
-                    out.push((l.clone(), LabelKind::Equation));
-                }
-            }
+            Block::Figure { label: Some(l), .. } => out.push((l.clone(), LabelKind::Caption)),
+            Block::Equation { label: Some(l), .. } => out.push((l.clone(), LabelKind::Equation)),
             Block::Paragraph { content, .. } => inl.extend(content.iter()),
             _ => {}
         }
@@ -299,7 +290,6 @@ pub(crate) fn run(
             story: t.story,
             in_cell: t.in_cell,
             in_box: t.in_box,
-            in_note: matches!(t.story, StoryKind::Footnote | StoryKind::Endnote),
             width,
             para_ids,
             text: if t.in_cell {
@@ -350,7 +340,8 @@ fn put(
     ids: &mut Ids,
 ) -> Result<(), Error> {
     type Edits = HashMap<NodeId, (Vec<NodeId>, Vec<NodeId>, bool)>;
-    let mut groups: Vec<((String, NodeId), Edits, Vec<NodeId>, bool)> = vec![];
+    type Group = ((String, NodeId), Edits, Vec<NodeId>, bool);
+    let mut groups: Vec<Group> = vec![];
     let mut index: HashMap<(String, NodeId), usize> = HashMap::new();
     for (t, nodes, para_ids) in pending {
         let key = (t.part.clone(), t.container);

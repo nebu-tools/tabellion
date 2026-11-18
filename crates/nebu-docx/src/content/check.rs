@@ -285,8 +285,7 @@ pub(crate) fn grid(t: &Table) -> Result<Grid, String> {
             while cover[r].get(col).copied().flatten().is_some() {
                 col += 1;
             }
-            for rr in r..r + c.row_span {
-                let line = &mut cover[rr];
+            for (rr, line) in cover.iter_mut().enumerate().skip(r).take(c.row_span) {
                 if line.len() < col + c.column_span {
                     line.resize(col + c.column_span, None);
                 }
@@ -366,7 +365,7 @@ pub(crate) fn check_math(m: &Math) -> Result<(), String> {
         } else {
             return Err(format!(
                 "{} is not an element of Office Math",
-                qualified(&name.prefix, &local)
+                qualified(name.prefix, &local)
             ));
         };
         for c in t.elements(n).map_err(|e| e.to_string())? {
@@ -425,7 +424,7 @@ pub(crate) fn check_raw(xml: &str, block: bool) -> Result<(), String> {
             let local = name.local.to_string();
             return Err(format!(
                 "{} cannot stand where {} goes; use {}",
-                qualified(&name.prefix, &local),
+                qualified(name.prefix, &local),
                 if block { "a block" } else { "an inline" },
                 if block {
                     "w:p, w:tbl, w:sdt or another block-level element"

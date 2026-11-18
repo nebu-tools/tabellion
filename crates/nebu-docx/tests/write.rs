@@ -213,8 +213,10 @@ fn errors_name_the_json_path() {
         e.to_string().contains("max_depth") || e.to_string().contains("128"),
         "{e}"
     );
-    let mut small = nebu_docx::ContentLimits::default();
-    small.max_items = 3;
+    let mut small = nebu_docx::ContentLimits {
+        max_items: 3,
+        ..Default::default()
+    };
     let e = Content::from_json_with_limits(
         json!(
             ["a", "b", "c", "d"]
@@ -589,7 +591,7 @@ fn table_styles_resolve_in_order_and_are_never_overwritten() {
     // replace it.
     let mut doc = Document::from_bytes(support::sample()).unwrap();
     let id = doc
-        .ensure_table_style(&TableStyle::Defined(def.clone()))
+        .ensure_table_style(&TableStyle::Defined(Box::new(def.clone())))
         .unwrap();
     assert_eq!(doc.to_bytes().unwrap(), support::sample());
     let v = doc.views().unwrap();
@@ -599,7 +601,9 @@ fn table_styles_resolve_in_order_and_are_never_overwritten() {
         name: "Field Green".into(),
         ..def
     };
-    let id = doc.ensure_table_style(&TableStyle::Defined(fresh)).unwrap();
+    let id = doc
+        .ensure_table_style(&TableStyle::Defined(Box::new(fresh)))
+        .unwrap();
     let out = doc.to_bytes().unwrap();
     valid(&out);
     let styles = String::from_utf8(support::entry(&out, "word/styles.xml")).unwrap();

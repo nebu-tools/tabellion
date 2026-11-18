@@ -215,11 +215,6 @@ impl Document {
         self.views = None;
     }
 
-    /// The source part's name as the package spells it, for the writer.
-    pub(crate) fn source_part(&self, source: &str) -> Result<String, Error> {
-        self.source_name(source)
-    }
-
     /// The stamp of the parsed trees and the list of parts.
     pub(crate) fn stamp(&self) -> Vec<(u64, u64)> {
         self.package.stamp()

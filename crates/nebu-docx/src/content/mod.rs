@@ -627,4 +627,4 @@ fn is_one(n: &usize) -> bool {
     *n == 1
 }
 
-pub(crate) use check::{RAW_PREFIXES, check_label, check_raw, grid, parse_raw};
+pub(crate) use check::{RAW_PREFIXES, check_label, grid};

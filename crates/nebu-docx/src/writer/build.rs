@@ -87,20 +87,6 @@ pub(crate) fn field(code: &str, result: &str, result_rpr: &str) -> String {
     )
 }
 
-/// Plain text of inlines, for a heading's text in a cross-reference.
-pub(crate) fn plain(list: &[Inline]) -> String {
-    let mut out = String::new();
-    for i in list {
-        match i {
-            Inline::Text { text, .. } => out.push_str(text),
-            Inline::Link { content, .. } => out.push_str(&plain(content)),
-            Inline::Field { result, .. } => out.push_str(result),
-            _ => {}
-        }
-    }
-    out
-}
-
 impl Session<'_> {
     pub(crate) fn para_id(&mut self, ctx: &Ctx) -> String {
         if ctx.para_ids {

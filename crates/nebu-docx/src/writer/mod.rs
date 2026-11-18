@@ -200,5 +200,5 @@ pub enum TableStyle {
     Named(String),
     /// A definition, used by name if the document has a style of that
     /// name and added otherwise.
-    Defined(TableStyleDef),
+    Defined(Box<TableStyleDef>),
 }

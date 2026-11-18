@@ -487,7 +487,7 @@ impl StyleBook {
         name: &str,
     ) -> Result<String, Error> {
         if let Some(def) = defs.iter().find(|d| d.name.eq_ignore_ascii_case(name)) {
-            return self.ensure(doc, &TableStyle::Defined(def.clone()));
+            return self.ensure(doc, &TableStyle::Defined(Box::new(def.clone())));
         }
         self.ensure(doc, &TableStyle::Named(name.to_string()))
     }

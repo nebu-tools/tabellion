@@ -115,7 +115,6 @@ impl Session<'_> {
             story: StoryKind::Footnote,
             in_cell: false,
             in_box: false,
-            in_note: true,
             width: ctx.width,
             para_ids,
             text: Role::FootnoteText,

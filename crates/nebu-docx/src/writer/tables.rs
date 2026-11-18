@@ -89,7 +89,7 @@ impl Session<'_> {
             x.push_str(&format!("<w:gridCol w:w=\"{c}\"/>"));
         }
         x.push_str("</w:tblGrid>");
-        for (r, row) in t.rows.iter().enumerate() {
+        for r in 0..t.rows.len() {
             crate::cost::tick(1);
             let id = self.para_id(ctx);
             x.push_str(&format!("<w:tr{id}>"));
