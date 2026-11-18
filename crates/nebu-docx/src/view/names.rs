@@ -70,3 +70,39 @@ fn rows() -> &'static HashMap<String, Row> {
 pub(crate) fn built_in(stored: &str) -> Option<&'static Row> {
     rows().get(&stored.to_lowercase())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The table the engine uses is the file the script wrote, line for
+    /// line: every line gives the names of one built-in style.
+    #[test]
+    fn the_table_is_the_generated_file() {
+        for (language, table) in TABLES {
+            assert!(
+                table.starts_with(
+                    "# The names Word shows for its built-in styles in display language "
+                ),
+                "{language}: not written by tools/word/style-names.ps1"
+            );
+            let mut stored = std::collections::HashSet::new();
+            let mut count = 0;
+            for line in table.lines().filter(|l| !l.starts_with('#')) {
+                let (s, shown) = line.split_once('\t').expect("a tab on every line");
+                assert!(
+                    !s.is_empty() && !shown.is_empty() && !shown.contains('\t'),
+                    "{line:?}"
+                );
+                assert!(stored.insert(s.to_lowercase()), "{s} twice");
+                if *language == "en" {
+                    assert_eq!(built_in(s).map(|r| r.display), Some(shown), "{s}");
+                }
+                count += 1;
+            }
+            assert_eq!(lines(table).count(), count);
+            // Word 2021 has 376 built-in styles.
+            assert!(count >= 370, "{language}: only {count} styles");
+        }
+    }
+}

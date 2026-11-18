@@ -20,6 +20,215 @@
    "\u0004\r"
   ]
  },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 19,
+   "text": "Recettes du verger\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 19,
+   "end": 36,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 81,
+   "text": "Une tarte simple avec des pommes du jardin.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 81,
+   "end": 88,
+   "text": "Farine\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 88,
+   "end": 93,
+   "text": "Œufs\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 93,
+   "end": 100,
+   "text": "Beurre\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 100,
+   "end": 118,
+   "text": "Préparer la pâte.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 118,
+   "end": 137,
+   "text": "Couper les pommes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 154,
+   "text": "Cuire une heure.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 154,
+   "end": 201,
+   "text": "Une tarte est prête quand la cuisine sent bon.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 201,
+   "end": 265,
+   "text": "Tableau 1: Ingrédients pour une tarte\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 265,
+   "end": 272,
+   "text": "Farine\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 272,
+   "end": 278,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 278,
+   "end": 279,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 284,
+   "text": "Œufs\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 284,
+   "end": 286,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 286,
+   "end": 287,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 287,
+   "end": 294,
+   "text": "Beurre\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 294,
+   "end": 300,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 300,
+   "end": 301,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 301,
+   "end": 302,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 319,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 320,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
  "sections": [
   {
    "index": 1,
@@ -28,19 +237,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ],
    "footers": [
@@ -48,19 +260,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ]
   }
@@ -70,40 +285,54 @@
    "rows": 3,
    "columns": 2,
    "nesting": 1,
+   "start": 265,
+   "end": 301,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 265,
+     "end": 272,
      "text": "Farine\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 272,
+     "end": 278,
      "text": "200 g\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 279,
+     "end": 284,
      "text": "Œufs\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 284,
+     "end": 286,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 287,
+     "end": 294,
      "text": "Beurre\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 294,
+     "end": 300,
      "text": "100 g\r\u0007",
      "tables": []
     }
@@ -311,45 +540,326 @@
    "\u0004\r"
   ]
  },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 19,
+   "text": "Recettes du verger\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 19,
+   "end": 36,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 81,
+   "text": "Une tarte simple avec des pommes du jardin.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 81,
+   "end": 88,
+   "text": "Farine\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 88,
+   "end": 93,
+   "text": "Œufs\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 93,
+   "end": 100,
+   "text": "Beurre\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 100,
+   "end": 118,
+   "text": "Préparer la pâte.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 118,
+   "end": 137,
+   "text": "Couper les pommes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 154,
+   "text": "Cuire une heure.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 154,
+   "end": 201,
+   "text": "Une tarte est prête quand la cuisine sent bon.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 201,
+   "end": 265,
+   "text": "Tableau 1: Ingrédients pour une tarte\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 265,
+   "end": 272,
+   "text": "Farine\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 272,
+   "end": 278,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 278,
+   "end": 279,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 284,
+   "text": "Œufs\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 284,
+   "end": 286,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 286,
+   "end": 287,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 287,
+   "end": 294,
+   "text": "Beurre\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 294,
+   "end": 300,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 300,
+   "end": 301,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 301,
+   "end": 302,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 319,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 320,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [
+  {
+   "index": 1,
+   "text": "Les variétés acidulées conviennent le mieux."
+  }
+ ],
+ "accepted_endnotes": [],
  "accepted_tables": [
   {
    "rows": 3,
    "columns": 2,
    "nesting": 1,
+   "start": 265,
+   "end": 301,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 265,
+     "end": 272,
      "text": "Farine\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 272,
+     "end": 278,
      "text": "200 g\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 279,
+     "end": 284,
      "text": "Œufs\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 284,
+     "end": 286,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 287,
+     "end": 294,
      "text": "Beurre\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 294,
+     "end": 300,
      "text": "100 g\r\u0007",
      "tables": []
     }
@@ -375,5 +885,273 @@
   "16": [
    "\u0004\r"
   ]
- }
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 19,
+   "text": "Recettes du verger\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 19,
+   "end": 36,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 81,
+   "text": "Une tarte simple avec des pommes du jardin.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 81,
+   "end": 88,
+   "text": "Farine\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 88,
+   "end": 93,
+   "text": "Œufs\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 93,
+   "end": 100,
+   "text": "Beurre\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 100,
+   "end": 118,
+   "text": "Préparer la pâte.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 118,
+   "end": 137,
+   "text": "Couper les pommes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 154,
+   "text": "Cuire une heure.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 154,
+   "end": 201,
+   "text": "Une tarte est prête quand la cuisine sent bon.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 201,
+   "end": 265,
+   "text": "Tableau 1: Ingrédients pour une tarte\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 265,
+   "end": 272,
+   "text": "Farine\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 272,
+   "end": 278,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 278,
+   "end": 279,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 284,
+   "text": "Œufs\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 284,
+   "end": 286,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 286,
+   "end": 287,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 287,
+   "end": 294,
+   "text": "Beurre\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 294,
+   "end": 300,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 300,
+   "end": 301,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 301,
+   "end": 302,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 319,
+   "text": "Tarte aux pommes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 320,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 3,
+   "columns": 2,
+   "nesting": 1,
+   "start": 265,
+   "end": 301,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 265,
+     "end": 272,
+     "text": "Farine\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 272,
+     "end": 278,
+     "text": "200 g\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 279,
+     "end": 284,
+     "text": "Œufs\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 284,
+     "end": 286,
+     "text": "3\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 287,
+     "end": 294,
+     "text": "Beurre\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 294,
+     "end": 300,
+     "text": "100 g\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
 }

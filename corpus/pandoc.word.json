@@ -20,6 +20,242 @@
    "\u0004\r"
   ]
  },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Soups from the allotment\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 37,
+   "text": "Pip Tanager\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 58,
+   "text": "Leek and potato soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 58,
+   "end": 123,
+   "text": "A soup for cold evenings, from the second bed of the allotment.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 123,
+   "end": 150,
+   "text": "Ingredients for four bowls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 150,
+   "end": 161,
+   "text": "Ingredient\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 161,
+   "end": 168,
+   "text": "Amount\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 168,
+   "end": 169,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 169,
+   "end": 175,
+   "text": "Leeks\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 175,
+   "end": 177,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 177,
+   "end": 178,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 178,
+   "end": 187,
+   "text": "Potatoes\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 187,
+   "end": 193,
+   "text": "500 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 193,
+   "end": 194,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 194,
+   "end": 200,
+   "text": "Stock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 200,
+   "end": 204,
+   "text": "1 l\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 204,
+   "end": 205,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 205,
+   "end": 222,
+   "text": "Slice the leeks.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 222,
+   "end": 241,
+   "text": "Dice the potatoes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 241,
+   "end": 268,
+   "text": "Simmer for twenty minutes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 268,
+   "end": 270,
+   "text": "/\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 270,
+   "end": 311,
+   "text": "A dark bird shape on a pale green ground\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 311,
+   "end": 392,
+   "text": "See the seed list for the varieties.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 392,
+   "end": 404,
+   "text": "Nettle soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 404,
+   "end": 435,
+   "text": "Pick the young tops in spring.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 435,
+   "end": 482,
+   "text": "Nettles lose their sting when they are cooked.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
  "sections": [
   {
    "index": 1,
@@ -28,19 +264,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ],
    "footers": [
@@ -48,19 +287,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ]
   }
@@ -70,52 +312,70 @@
    "rows": 4,
    "columns": 2,
    "nesting": 1,
+   "start": 150,
+   "end": 205,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 150,
+     "end": 161,
      "text": "Ingredient\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 161,
+     "end": 168,
      "text": "Amount\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 169,
+     "end": 175,
      "text": "Leeks\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 175,
+     "end": 177,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 178,
+     "end": 187,
      "text": "Potatoes\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 187,
+     "end": 193,
      "text": "500 g\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 1,
+     "start": 194,
+     "end": 200,
      "text": "Stock\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 2,
+     "start": 200,
+     "end": 204,
      "text": "1 l\r\u0007",
      "tables": []
     }
@@ -562,57 +822,369 @@
    "\u0004\r"
   ]
  },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Soups from the allotment\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 37,
+   "text": "Pip Tanager\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 58,
+   "text": "Leek and potato soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 58,
+   "end": 123,
+   "text": "A soup for cold evenings, from the second bed of the allotment.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 123,
+   "end": 150,
+   "text": "Ingredients for four bowls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 150,
+   "end": 161,
+   "text": "Ingredient\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 161,
+   "end": 168,
+   "text": "Amount\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 168,
+   "end": 169,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 169,
+   "end": 175,
+   "text": "Leeks\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 175,
+   "end": 177,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 177,
+   "end": 178,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 178,
+   "end": 187,
+   "text": "Potatoes\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 187,
+   "end": 193,
+   "text": "500 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 193,
+   "end": 194,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 194,
+   "end": 200,
+   "text": "Stock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 200,
+   "end": 204,
+   "text": "1 l\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 204,
+   "end": 205,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 205,
+   "end": 222,
+   "text": "Slice the leeks.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 222,
+   "end": 241,
+   "text": "Dice the potatoes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 241,
+   "end": 268,
+   "text": "Simmer for twenty minutes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 268,
+   "end": 270,
+   "text": "/\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 270,
+   "end": 311,
+   "text": "A dark bird shape on a pale green ground\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 311,
+   "end": 392,
+   "text": "See the seed list for the varieties.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 392,
+   "end": 404,
+   "text": "Nettle soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 404,
+   "end": 435,
+   "text": "Pick the young tops in spring.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 435,
+   "end": 482,
+   "text": "Nettles lose their sting when they are cooked.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [
+  {
+   "index": 1,
+   "text": "The second bed gets the most sun."
+  }
+ ],
+ "accepted_endnotes": [],
  "accepted_tables": [
   {
    "rows": 4,
    "columns": 2,
    "nesting": 1,
+   "start": 150,
+   "end": 205,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 150,
+     "end": 161,
      "text": "Ingredient\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 161,
+     "end": 168,
      "text": "Amount\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 169,
+     "end": 175,
      "text": "Leeks\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 175,
+     "end": 177,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 178,
+     "end": 187,
      "text": "Potatoes\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 187,
+     "end": 193,
      "text": "500 g\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 1,
+     "start": 194,
+     "end": 200,
      "text": "Stock\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 2,
+     "start": 200,
+     "end": 204,
      "text": "1 l\r\u0007",
      "tables": []
     }
@@ -638,5 +1210,316 @@
   "16": [
    "\u0004\r"
   ]
- }
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Soups from the allotment\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 37,
+   "text": "Pip Tanager\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 58,
+   "text": "Leek and potato soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 58,
+   "end": 123,
+   "text": "A soup for cold evenings, from the second bed of the allotment.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 123,
+   "end": 150,
+   "text": "Ingredients for four bowls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 150,
+   "end": 161,
+   "text": "Ingredient\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 161,
+   "end": 168,
+   "text": "Amount\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 168,
+   "end": 169,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 169,
+   "end": 175,
+   "text": "Leeks\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 175,
+   "end": 177,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 177,
+   "end": 178,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 178,
+   "end": 187,
+   "text": "Potatoes\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 187,
+   "end": 193,
+   "text": "500 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 193,
+   "end": 194,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 194,
+   "end": 200,
+   "text": "Stock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 200,
+   "end": 204,
+   "text": "1 l\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 204,
+   "end": 205,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 205,
+   "end": 222,
+   "text": "Slice the leeks.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 222,
+   "end": 241,
+   "text": "Dice the potatoes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 241,
+   "end": 268,
+   "text": "Simmer for twenty minutes.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 268,
+   "end": 270,
+   "text": "/\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 270,
+   "end": 311,
+   "text": "A dark bird shape on a pale green ground\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 311,
+   "end": 392,
+   "text": "See the seed list for the varieties.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 392,
+   "end": 404,
+   "text": "Nettle soup\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 404,
+   "end": 435,
+   "text": "Pick the young tops in spring.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 435,
+   "end": 482,
+   "text": "Nettles lose their sting when they are cooked.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 4,
+   "columns": 2,
+   "nesting": 1,
+   "start": 150,
+   "end": 205,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 150,
+     "end": 161,
+     "text": "Ingredient\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 161,
+     "end": 168,
+     "text": "Amount\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 169,
+     "end": 175,
+     "text": "Leeks\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 175,
+     "end": 177,
+     "text": "3\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 178,
+     "end": 187,
+     "text": "Potatoes\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 187,
+     "end": 193,
+     "text": "500 g\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 1,
+     "start": 194,
+     "end": 200,
+     "text": "Stock\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 2,
+     "start": 200,
+     "end": 204,
+     "text": "1 l\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
 }

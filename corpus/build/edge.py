@@ -8,8 +8,12 @@ breaks, joined paragraphs, mc:AlternateContent whose choice Word does not
 understand, an ignorable element of an unknown namespace, custom XML and
 smart tags, a table row with grid columns before and after, an equation, a
 group content control and one that shows its placeholder, a note with its
-own mark, a bookmark over two paragraphs, a legacy VML picture and two
-paragraphs that share a paraId.
+own mark, a bookmark over two paragraphs, a legacy VML picture, two
+paragraphs that share a paraId, a vertical merge that continues in a row
+with grid columns before it, a text box in both branches of
+mc:AlternateContent, content controls around a row and around a cell, and
+toggle properties through a chain of character styles, a table style and
+a character style that sets bold off.
 """
 import sys
 import zipfile
@@ -25,6 +29,9 @@ NS = (
     'xmlns:o="urn:schemas-microsoft-com:office:office" '
     'xmlns:x="urn:example:field-notes" '
     'xmlns:future="urn:example:future-word" '
+    'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" '
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" '
+    'xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" '
     'mc:Ignorable="w14 x"'
 )
 DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
@@ -109,6 +116,52 @@ body = "".join([
     + r("Click to enter the day.", '<w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr>')
     + "</w:sdtContent></w:sdt>", "1000001A") + p(r("Second line of the visit."), "1000001B")
     + "</w:sdtContent></w:sdt>",
+    p(r("More tables, controls and styles"), "10000020", style("Heading1")),
+    # Column 1 merges down into a row whose first grid column is skipped.
+    '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>'
+    '<w:tr><w:tc>' + p(r("Site"), "10000021") + '</w:tc><w:tc><w:tcPr><w:vMerge w:val="restart"/></w:tcPr>'
+    + p(r("Reed beds"), "10000022") + '</w:tc><w:tc>' + p(r("12"), "10000023") + '</w:tc></w:tr>'
+    '<w:tr><w:trPr><w:gridBefore w:val="1"/></w:trPr><w:tc><w:tcPr><w:vMerge/></w:tcPr>'
+    + p("", "10000024") + '</w:tc><w:tc>' + p(r("9"), "10000025") + '</w:tc></w:tr></w:tbl>',
+    p("", "10000026"),
+    # A text box in both branches of mc:AlternateContent: Word reads one.
+    p(r("Beside a box. ") + '<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>'
+      '<wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" '
+      'behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>'
+      '<wp:positionH relativeFrom="column"><wp:posOffset>3000000</wp:posOffset></wp:positionH>'
+      '<wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV>'
+      '<wp:extent cx="1270000" cy="508000"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:wrapSquare wrapText="bothSides"/>'
+      '<wp:docPr id="7" name="Box"/><wp:cNvGraphicFramePr/><a:graphic><a:graphicData '
+      'uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/>'
+      '<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="508000"/></a:xfrm>'
+      '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx><w:txbxContent>'
+      + p(r("Box text, read once."), "10000027") + '</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>'
+      '</a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict>'
+      '<v:shape id="box" style="position:absolute;width:100pt;height:40pt" type="#_x0000_t202">'
+      '<v:textbox><w:txbxContent>' + p(r("Box text, read once."), "10000028")
+      + '</w:txbxContent></v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r>',
+      "10000029"),
+    # Content controls around a row and around a cell.
+    '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    '<w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>'
+    '<w:tr><w:tc>' + p(r("Wren"), "1000002A") + '</w:tc><w:tc>' + p(r("4"), "1000002B") + '</w:tc></w:tr>'
+    '<w:sdt><w:sdtPr><w:alias w:val="Row"/><w:tag w:val="visit:row"/></w:sdtPr><w:sdtContent>'
+    '<w:tr><w:tc>' + p(r("Robin"), "1000002C") + '</w:tc>'
+    '<w:sdt><w:sdtPr><w:alias w:val="Cell"/><w:tag w:val="visit:cell"/><w:text/></w:sdtPr><w:sdtContent>'
+    '<w:tc>' + p(r("2"), "1000002D") + '</w:tc></w:sdtContent></w:sdt></w:tr></w:sdtContent></w:sdt></w:tbl>',
+    p("", "1000002E"),
+    # Bold through a chain of character styles that both set it.
+    p('<w:r><w:rPr><w:rStyle w:val="BoldChild"/></w:rPr><w:t>Bold through a chain.</w:t></w:r>', "1000002F"),
+    # A character style that sets bold off, in a bold heading.
+    p('<w:r><w:rPr><w:rStyle w:val="NotBold"/></w:rPr><w:t>Bold off in a heading.</w:t></w:r>', "10000030",
+      style("Heading1")),
+    # Bold from a table style and from a paragraph style.
+    '<w:tbl><w:tblPr><w:tblStyle w:val="BoldTable"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    '<w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr><w:tc>'
+    + p(r("Bold table, bold paragraph."), "10000031", style("BoldPara")) + '</w:tc></w:tr><w:tr><w:tc>'
+    + p(r("Bold table, plain paragraph."), "10000032") + '</w:tc></w:tr></w:tbl>',
+    p("", "10000033"),
     p(r("A legacy picture: ") + '<w:r><w:pict><v:shape id="bird" type="#_x0000_t75" '
       'style="width:48pt;height:32pt" alt="A bird shape drawn the old way">'
       '<v:imagedata r:id="rId4" o:title="Legacy bird"/></v:shape></w:pict></w:r>', "1000001C"),
@@ -127,6 +180,11 @@ styles = f"""{DECL}<w:styles xmlns:w="{W}">
 <w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/></w:style>
 <w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>
 <w:style w:type="character" w:styleId="PlaceholderText"><w:name w:val="Placeholder Text"/><w:rPr><w:color w:val="808080"/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="BoldBase"><w:name w:val="Bold Base"/><w:rPr><w:b/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="BoldChild"><w:name w:val="Bold Child"/><w:basedOn w:val="BoldBase"/><w:rPr><w:b/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="NotBold"><w:name w:val="Not Bold"/><w:rPr><w:b w:val="0"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="BoldPara"><w:name w:val="Bold Para"/><w:basedOn w:val="Normal"/><w:rPr><w:b/></w:rPr></w:style>
+<w:style w:type="table" w:styleId="BoldTable"><w:name w:val="Bold Table"/><w:basedOn w:val="TableNormal"/><w:rPr><w:b/></w:rPr></w:style>
 <w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/></w:style>
 <w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>
 </w:styles>"""

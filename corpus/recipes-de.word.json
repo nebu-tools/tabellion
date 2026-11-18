@@ -20,6 +20,215 @@
    "\u0004\r"
   ]
  },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 27,
+   "text": "Rezepte aus dem Obstgarten\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 27,
+   "end": 39,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 96,
+   "text": "Ein einfacher Kuchen mit Äpfeln aus dem eigenen Garten.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 96,
+   "end": 101,
+   "text": "Mehl\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 101,
+   "end": 106,
+   "text": "Eier\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 106,
+   "end": 113,
+   "text": "Butter\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 113,
+   "end": 130,
+   "text": "Den Teig rühren.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 130,
+   "end": 151,
+   "text": "Die Äpfel schneiden.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 151,
+   "end": 171,
+   "text": "Eine Stunde backen.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 171,
+   "end": 229,
+   "text": "Ein Kuchen ist erst fertig, wenn die Küche danach duftet.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 229,
+   "end": 291,
+   "text": "Tabelle 1: Zutaten für einen Kuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 291,
+   "end": 296,
+   "text": "Mehl\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 296,
+   "end": 302,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 303,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 303,
+   "end": 308,
+   "text": "Eier\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 308,
+   "end": 310,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 310,
+   "end": 311,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 311,
+   "end": 318,
+   "text": "Butter\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 318,
+   "end": 324,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 324,
+   "end": 325,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 325,
+   "end": 326,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 326,
+   "end": 338,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 338,
+   "end": 339,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
  "sections": [
   {
    "index": 1,
@@ -28,19 +237,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ],
    "footers": [
@@ -48,19 +260,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ]
   }
@@ -70,40 +285,54 @@
    "rows": 3,
    "columns": 2,
    "nesting": 1,
+   "start": 291,
+   "end": 325,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 291,
+     "end": 296,
      "text": "Mehl\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 296,
+     "end": 302,
      "text": "200 g\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 303,
+     "end": 308,
      "text": "Eier\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 308,
+     "end": 310,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 311,
+     "end": 318,
      "text": "Butter\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 318,
+     "end": 324,
      "text": "100 g\r\u0007",
      "tables": []
     }
@@ -311,45 +540,326 @@
    "\u0004\r"
   ]
  },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 27,
+   "text": "Rezepte aus dem Obstgarten\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 27,
+   "end": 39,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 96,
+   "text": "Ein einfacher Kuchen mit Äpfeln aus dem eigenen Garten.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 96,
+   "end": 101,
+   "text": "Mehl\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 101,
+   "end": 106,
+   "text": "Eier\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 106,
+   "end": 113,
+   "text": "Butter\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 113,
+   "end": 130,
+   "text": "Den Teig rühren.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 130,
+   "end": 151,
+   "text": "Die Äpfel schneiden.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 151,
+   "end": 171,
+   "text": "Eine Stunde backen.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 171,
+   "end": 229,
+   "text": "Ein Kuchen ist erst fertig, wenn die Küche danach duftet.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 229,
+   "end": 291,
+   "text": "Tabelle 1: Zutaten für einen Kuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 291,
+   "end": 296,
+   "text": "Mehl\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 296,
+   "end": 302,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 303,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 303,
+   "end": 308,
+   "text": "Eier\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 308,
+   "end": 310,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 310,
+   "end": 311,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 311,
+   "end": 318,
+   "text": "Butter\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 318,
+   "end": 324,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 324,
+   "end": 325,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 325,
+   "end": 326,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 326,
+   "end": 338,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 338,
+   "end": 339,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [
+  {
+   "index": 1,
+   "text": "Säuerliche Sorten eignen sich am besten."
+  }
+ ],
+ "accepted_endnotes": [],
  "accepted_tables": [
   {
    "rows": 3,
    "columns": 2,
    "nesting": 1,
+   "start": 291,
+   "end": 325,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 291,
+     "end": 296,
      "text": "Mehl\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 296,
+     "end": 302,
      "text": "200 g\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 303,
+     "end": 308,
      "text": "Eier\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 308,
+     "end": 310,
      "text": "3\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 311,
+     "end": 318,
      "text": "Butter\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 318,
+     "end": 324,
      "text": "100 g\r\u0007",
      "tables": []
     }
@@ -375,5 +885,273 @@
   "16": [
    "\u0004\r"
   ]
- }
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 27,
+   "text": "Rezepte aus dem Obstgarten\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 27,
+   "end": 39,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 96,
+   "text": "Ein einfacher Kuchen mit Äpfeln aus dem eigenen Garten.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 96,
+   "end": 101,
+   "text": "Mehl\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 101,
+   "end": 106,
+   "text": "Eier\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 106,
+   "end": 113,
+   "text": "Butter\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 113,
+   "end": 130,
+   "text": "Den Teig rühren.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 130,
+   "end": 151,
+   "text": "Die Äpfel schneiden.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 151,
+   "end": 171,
+   "text": "Eine Stunde backen.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 171,
+   "end": 229,
+   "text": "Ein Kuchen ist erst fertig, wenn die Küche danach duftet.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 229,
+   "end": 291,
+   "text": "Tabelle 1: Zutaten für einen Kuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 291,
+   "end": 296,
+   "text": "Mehl\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 296,
+   "end": 302,
+   "text": "200 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 303,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 303,
+   "end": 308,
+   "text": "Eier\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 308,
+   "end": 310,
+   "text": "3\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 310,
+   "end": 311,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 311,
+   "end": 318,
+   "text": "Butter\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 318,
+   "end": 324,
+   "text": "100 g\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 324,
+   "end": 325,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 325,
+   "end": 326,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 326,
+   "end": 338,
+   "text": "Apfelkuchen\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 338,
+   "end": 339,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 3,
+   "columns": 2,
+   "nesting": 1,
+   "start": 291,
+   "end": 325,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 291,
+     "end": 296,
+     "text": "Mehl\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 296,
+     "end": 302,
+     "text": "200 g\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 303,
+     "end": 308,
+     "text": "Eier\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 308,
+     "end": 310,
+     "text": "3\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 311,
+     "end": 318,
+     "text": "Butter\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 318,
+     "end": 324,
+     "text": "100 g\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
 }

@@ -12,6 +12,9 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
 limit=${TABELLION_WORD_TIMEOUT:-600}
+# TABELLION_WORD_FAIL makes the PowerShell scripts fail half-way, to show
+# that they put Word's options back on every way out.
+[ -n "${TABELLION_WORD_FAIL:-}" ] && export WSLENV="${WSLENV:+$WSLENV:}TABELLION_WORD_FAIL"
 
 word() {
   local wintemp dir
@@ -20,6 +23,7 @@ word() {
   mkdir -p "$dir"
   # Windows PowerShell reads a script without a byte order mark as ANSI.
   { printf '\xEF\xBB\xBF'; cat "$here/build/word.ps1"; } > "$dir/word.ps1"
+  cp "$here/../tools/word/Word.psm1" "$dir/"
   python3 "$here/build/png.py" "$dir/bird.png" 120 80 200 225 190
   python3 "$here/build/png.py" "$dir/heron.png" 96 64 190 210 235
   local status=0
@@ -31,7 +35,7 @@ word() {
     "$PS" -NoProfile -Command "Stop-Process -Id $pid -Force" >/dev/null 2>&1 || true
     echo "corpus/build.sh: Word took longer than ${limit}s; stopped its process $pid" >&2
   fi
-  for f in birds parts recipes-de recettes-fr; do
+  for f in birds parts recipes-de recettes-fr cascade changes; do
     [ -f "$dir/$f.docx" ] && cp "$dir/$f.docx" "$here/$f.docx"
   done
   rm -rf "$dir"

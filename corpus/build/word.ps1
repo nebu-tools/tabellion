@@ -5,42 +5,22 @@
 #
 # DIR holds the pictures (bird.png, heron.png) and receives the documents.
 #
-# Safety: the script starts a new, invisible Word.Application and checks by
-# process id that it is new; if not, it stops without touching Word. It sets
-# the user name and initials to invented values for the documents, and puts
-# back every option it changed before it quits its own instance.
+# Safety: the script starts its Word through tools/word/Word.psm1, which
+# learns the process id of that instance from the instance itself and
+# refuses one that was already running. It sets the user name and initials
+# to invented values for the documents; Word.psm1 records each option before
+# the first change and puts every one back when the script ends, however
+# it ends.
 param([Parameter(Mandatory)][string]$Dir)
 $ErrorActionPreference = 'Stop'
-
-function Get-WordIds { @(Get-Process WINWORD -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) }
-
-$before = Get-WordIds
-$word = New-Object -ComObject Word.Application
-Start-Sleep -Milliseconds 500
-$mine = @(Get-WordIds | Where-Object { $before -notcontains $_ })
-if ($mine.Count -ne 1) {
-  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  throw "Could not identify a Word process of our own (new: $($mine -join ',')); not touching Word."
-}
-$wordPid = $mine[0]
-Set-Content -Path (Join-Path $Dir 'word.pid') -Value $wordPid
-
-# Options that Word keeps in the registry. They are read now and put back in
-# the finally block.
-$saved = [ordered]@{
-  UserName = $word.UserName
-  UserInitials = $word.UserInitials
-  UseLocalUserInfo = $word.Options.UseLocalUserInfo
-  CheckSpellingAsYouType = $word.Options.CheckSpellingAsYouType
-  CheckGrammarAsYouType = $word.Options.CheckGrammarAsYouType
-}
+Import-Module (Join-Path $PSScriptRoot 'Word.psm1') -Force
 
 $AUTHOR_A = 'Wren Ashby'
 $AUTHOR_B = 'Pip Tanager'
 
 function As-Author($name, $initials) {
-  $word.UserName = $name
-  $word.UserInitials = $initials
+  Set-WordOption $session 'UserName' $name
+  Set-WordOption $session 'UserInitials' $initials
 }
 
 # Appends a paragraph with text and a built-in style; returns the range of
@@ -335,15 +315,119 @@ function Recipes($name, $lang, $heading, $dish, $intro, $items, $steps, $saying,
   Save $doc $name
 }
 
+function Cascade {
+  $doc = $word.Documents.Add()
+  # Toggle properties through the styles (ECMA-376 part 1, 17.7.3): one
+  # paragraph for each case, its whole text in one formatting.
+  $s = $doc.Styles.Add('Hidden Note', 1); $s.Font.Hidden = $true
+  $s = $doc.Styles.Add('Bold Note', 1); $s.Font.Bold = $true
+  $s = $doc.Styles.Add('Bird Name', 2); $s.Font.Color = 2263842
+  $s = $doc.Styles.Add('Secret', 2); $s.Font.Hidden = $true
+  $s = $doc.Styles.Add('Strong Note', 2); $s.Font.Bold = $true
+  $s = $doc.Styles.Add('Slanted', 2); $s.Font.Italic = $true
+  Para $doc 'Toggle properties through the styles' $TITLE | Out-Null
+  $cases = @(
+    @('A wren sang in the reeds.', 'Hidden Note', 'Bird Name', $null, $null),
+    @('A robin sang on the fence.', 'Hidden Note', 'Secret', $null, $null),
+    @('A dunnock fed under the hedge.', 'Bold Note', 'Strong Note', $null, $null),
+    @('A teal rested on the pool.', 'Bold Note', 'Slanted', $null, $null),
+    @('A heron stood in the shallows.', 'Hidden Note', $null, 'Hidden', $false),
+    @('A swift flew over the marsh.', $NORMAL, 'Secret', 'Hidden', $false),
+    @('A coot dived by the reeds.', 'Bold Note', 'Strong Note', 'Bold', $true),
+    @('A moorhen crossed the path.', 'Bold Note', $null, 'Bold', $false),
+    @('A kingfisher flashed past.', $NORMAL, 'Strong Note', 'Bold', $false),
+    @('A snipe rose from the grass.', $NORMAL, 'Strong Note', $null, $null),
+    @('The survey ends here.', $NORMAL, $null, $null, $null)
+  )
+  # The text first, then the formatting, by character positions taken
+  # before any text is hidden: hidden text moves the place where Para
+  # appends and the paragraphs Word counts.
+  $at = @()
+  foreach ($c in $cases) {
+    $r = Para $doc $c[0] $NORMAL
+    $at += ,@($r.Start, $r.End)
+  }
+  for ($i = $cases.Count - 1; $i -ge 0; $i--) {
+    $c = $cases[$i]
+    $r = $doc.Range($at[$i][0], $at[$i][1])
+    $r.Paragraphs.Item(1).Style = $doc.Styles.Item($c[1])
+    $r = $doc.Range($at[$i][0], $at[$i][1])
+    if ($c[2]) { $r.Style = $doc.Styles.Item($c[2]) }
+    if ($c[3]) { $r.Font.($c[3]) = $c[4] }
+  }
+  Scrub $doc 'Toggle properties'
+  Save $doc 'cascade.docx'
+}
+
+function Changes {
+  $doc = $word.Documents.Add()
+  Para $doc 'Field notes with changes' $TITLE | Out-Null
+  Para $doc 'The heron fed at the east pool.' $NORMAL | Out-Null
+  Para $doc 'Sightings' $H1 | Out-Null
+  $tp = Para $doc 'x' $NORMAL
+  $t = $doc.Tables.Add($tp, 3, 3)
+  $t.Borders.Enable = $true
+  $rows = @(@('Bird', 'Site', 'Count'), @('Heron', 'East pool', '2'), @('Coot', 'Reed beds', '5'))
+  for ($i = 0; $i -lt 3; $i++) { for ($j = 0; $j -lt 3; $j++) { $t.Cell($i + 1, $j + 1).Range.Text = $rows[$i][$j] } }
+  # Content controls around a paragraph, around a row and around words.
+  $p = Para $doc 'The weir was in flood on the first visit.' $NORMAL
+  $cc = $doc.ContentControls.Add(0, $p.Paragraphs.Item(1).Range)
+  $cc.Tag = 'note:block'; $cc.Title = 'Paragraph note'
+  $rep = $doc.ContentControls.Add(9, $t.Rows.Item(3).Range)
+  $rep.Tag = 'note:row'; $rep.Title = 'Sighting row'
+  $p = Para $doc 'Observer: Wren Ashby.' $NORMAL
+  $cc = $doc.ContentControls.Add(1, $doc.Range($p.Start + 10, $p.Start + 20))
+  $cc.Tag = 'note:words'; $cc.Title = 'Observer'
+  $last = Para $doc 'Counts are pairs.' $NORMAL
+  $doc.Footnotes.Add((At-End $doc $last), [Type]::Missing, 'Seen from the hide.') | Out-Null
+  $s1 = $doc.Sections.Item(1)
+  $s1.Headers.Item(1).Range.Text = 'Field notes, spring'
+  $s1.Footers.Item(1).Range.Text = 'Draft for the group'
+
+  # A comment on two cells of a row.
+  As-Author $AUTHOR_B 'PT'
+  $doc.Comments.Add($doc.Range($t.Cell(2, 1).Range.Start, $t.Cell(2, 2).Range.End - 1), 'Both from the dawn visit.') | Out-Null
+
+  $doc.TrackRevisions = $true
+  As-Author $AUTHOR_A 'WA'
+  $a = $doc.Paragraphs.Item(2).Range
+  # Inserted by one author, then deleted in part by the other: a deletion
+  # over an insertion.
+  $doc.Range($a.End - 2, $a.End - 2).InsertBefore(' and the reed beds')
+  $h = $s1.Headers.Item(1).Range
+  $x = $h.Duplicate
+  $x.SetRange($h.Start + 13, $h.Start + 19)
+  $x.Text = 'summer'
+  $f = $s1.Footers.Item(1).Range
+  $y = $f.Duplicate
+  $y.SetRange($f.Start + 6, $f.Start + 6)
+  $y.InsertAfter('copy ')
+  $n = $doc.Footnotes.Item(1).Range
+  $z = $n.Duplicate
+  $z.SetRange($n.End - 1, $n.End - 1)
+  $z.InsertAfter(' at dawn')
+  As-Author $AUTHOR_B 'PT'
+  $a = $doc.Paragraphs.Item(2).Range
+  $doc.Range($a.Start + 21, $a.Start + 39).Delete() | Out-Null
+  $n = $doc.Footnotes.Item(1).Range
+  $w = $n.Duplicate
+  $w.SetRange($n.Start, $n.Start + 5)
+  $w.Delete() | Out-Null
+  $doc.TrackRevisions = $false
+  As-Author $AUTHOR_A 'WA'
+  Scrub $doc 'Field notes with changes'
+  Save $doc 'changes.docx'
+}
+
+$session = Start-OwnWord -PidFile (Join-Path $Dir 'word.pid')
+$word = $session.Word
 try {
   $word.Visible = $false
   $word.DisplayAlerts = 0
-  $word.Options.CheckGrammarAsYouType = $false
-  $word.Options.CheckSpellingAsYouType = $false
-  $word.Options.SaveNormalPrompt = $false
-  $word.Options.UseLocalUserInfo = $true
+  Set-WordOption $session 'Options.UseLocalUserInfo' $true
   As-Author $AUTHOR_A 'WA'
   Birds
+  Test-ForcedFailure 'word.ps1, after the first document'
   Parts
   Recipes 'recipes-de.docx' 1031 'Rezepte aus dem Obstgarten' 'Apfelkuchen' `
     'Ein einfacher Kuchen mit Äpfeln aus dem eigenen Garten.' `
@@ -355,20 +439,11 @@ try {
     @('Farine', 'Œufs', 'Beurre') @('Préparer la pâte.', 'Couper les pommes.', 'Cuire une heure.') `
     'Une tarte est prête quand la cuisine sent bon.' 'Tableau' 'Ingrédients pour une tarte' `
     'Les variétés acidulées conviennent le mieux.'
+  Cascade
+  Changes
 } catch {
   [Console]::Error.WriteLine("word.ps1, line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)")
   throw
 } finally {
-  foreach ($k in 'UseLocalUserInfo', 'CheckSpellingAsYouType', 'CheckGrammarAsYouType') {
-    try { $word.Options.$k = $saved[$k] } catch {}
-  }
-  try { $word.UserName = $saved.UserName; $word.UserInitials = $saved.UserInitials } catch {}
-  try { $word.Quit([ref]0) } catch {}
-  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  [GC]::Collect()
-  foreach ($i in 1..20) {
-    if (-not (Get-Process -Id $wordPid -ErrorAction SilentlyContinue)) { break }
-    Start-Sleep -Milliseconds 500
-  }
-  if (Get-Process -Id $wordPid -ErrorAction SilentlyContinue) { Stop-Process -Id $wordPid -Force -ErrorAction SilentlyContinue }
+  Stop-OwnWord $session
 }

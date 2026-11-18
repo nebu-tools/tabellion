@@ -1,0 +1,582 @@
+{
+ "word_version": "16.0",
+ "stories": {
+  "1": [
+   "Toggle properties through the styles\rA robin sang on the fence.A dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.A swift flew over the marsh.\rA coot dived by the reeds.\rA moorhen crossed the path.\rA kingfisher flashed past.\rA snipe rose from the grass.\rThe survey ends here.\r\r"
+  ]
+ },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 37,
+   "text": "Toggle properties through the styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 121,
+   "text": "A robin sang on the fence.A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 121,
+   "end": 148,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 148,
+   "end": 208,
+   "text": "A heron stood in the shallows.A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 208,
+   "end": 235,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 235,
+   "end": 263,
+   "text": "A moorhen crossed the path.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 263,
+   "end": 290,
+   "text": "A kingfisher flashed past.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 290,
+   "end": 319,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 341,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 341,
+   "end": 342,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "tables": [],
+ "fields": [],
+ "revisions": [],
+ "comments": [],
+ "bookmarks": [],
+ "footnotes": [],
+ "endnotes": [],
+ "inline_shapes": [],
+ "shapes": [],
+ "content_controls": [],
+ "styles": [
+  {
+   "name": "Bird Name",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Bold Note",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Default Paragraph Font",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footer",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Header",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 1",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 2",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 3",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 4",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 5",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 6",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 7",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 8",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 9",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Hidden Note",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Intense Emphasis",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Intense Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "List Paragraph",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "No List",
+   "builtin": true,
+   "type": 4
+  },
+  {
+   "name": "Normal",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Secret",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Slanted",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Strong Note",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Subtitle",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Table Normal",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Title",
+   "builtin": true,
+   "type": 1
+  }
+ ],
+ "accepted": {
+  "1": [
+   "Toggle properties through the styles\rA robin sang on the fence.A dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.A swift flew over the marsh.\rA coot dived by the reeds.\rA moorhen crossed the path.\rA kingfisher flashed past.\rA snipe rose from the grass.\rThe survey ends here.\r\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 37,
+   "text": "Toggle properties through the styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 121,
+   "text": "A robin sang on the fence.A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 121,
+   "end": 148,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 148,
+   "end": 208,
+   "text": "A heron stood in the shallows.A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 208,
+   "end": 235,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 235,
+   "end": 263,
+   "text": "A moorhen crossed the path.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 263,
+   "end": 290,
+   "text": "A kingfisher flashed past.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 290,
+   "end": 319,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 341,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 341,
+   "end": 342,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [],
+ "accepted_endnotes": [],
+ "accepted_tables": [],
+ "rejected": {
+  "1": [
+   "Toggle properties through the styles\rA robin sang on the fence.A dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.A swift flew over the marsh.\rA coot dived by the reeds.\rA moorhen crossed the path.\rA kingfisher flashed past.\rA snipe rose from the grass.\rThe survey ends here.\r\r"
+  ]
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 37,
+   "text": "Toggle properties through the styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 37,
+   "end": 121,
+   "text": "A robin sang on the fence.A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 121,
+   "end": 148,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 148,
+   "end": 208,
+   "text": "A heron stood in the shallows.A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 208,
+   "end": 235,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 235,
+   "end": 263,
+   "text": "A moorhen crossed the path.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 263,
+   "end": 290,
+   "text": "A kingfisher flashed past.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 290,
+   "end": 319,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 319,
+   "end": 341,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 341,
+   "end": 342,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": []
+}

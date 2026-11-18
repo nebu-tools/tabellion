@@ -14,6 +14,9 @@
 set -uo pipefail
 PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
 limit=${TABELLION_WORD_TIMEOUT:-180}
+# TABELLION_WORD_FAIL makes check.ps1 fail after the first file, to show
+# that it puts Word's options back on every way out.
+[ -n "${TABELLION_WORD_FAIL:-}" ] && export WSLENV="${WSLENV:+$WSLENV:}TABELLION_WORD_FAIL"
 out=$1; shift
 mkdir -p "$out"
 wintemp=$("$PS" -NoProfile -Command '[IO.Path]::GetTempPath()' | tr -d '\r')
@@ -22,7 +25,7 @@ for f in "$@"; do
   id="tabellion-check-$(date +%s%N)"
   dir="$(wslpath -u "$wintemp")$id"
   mkdir -p "$dir"
-  cp "$(dirname "$0")/check.ps1" "$dir/"
+  cp "$(dirname "$0")/check.ps1" "$(dirname "$0")/Word.psm1" "$dir/"
   cp "$f" "$dir/"
   w() { wslpath -w "$dir/$1"; }
   timeout "$limit" "$PS" -NoProfile -ExecutionPolicy Bypass -File "$(w check.ps1)" \

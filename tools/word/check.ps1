@@ -16,10 +16,11 @@
 # off, and the script then hangs. The process id goes to -PidFile first, so a
 # caller with a timeout (check.sh) can stop exactly this Word and no other.
 #
-# Safety: the script starts a new, invisible Word.Application and checks by
-# process id that it is new. If COM hands back a Word that was already
-# running, it stops without touching it. It only opens the files it is given,
-# saves only into a directory next to them, and quits only its own instance.
+# Safety: the script starts its Word through Word.psm1, which learns the
+# process id of that instance from the instance itself and refuses one that
+# was already running. It changes no option of Word. It only opens the
+# files it is given, saves only into a directory next to them, and quits
+# only its own instance.
 param(
   [Parameter(Mandatory)][string]$Out,
   [string]$PidFile,
@@ -31,18 +32,9 @@ $ErrorActionPreference = 'Stop'
 
 function Step($m) { Add-Content -Path "$Out.log" -Value ("{0:HH:mm:ss.fff} {1}" -f (Get-Date), $m) }
 
-function Get-WordIds { @(Get-Process WINWORD -ErrorAction SilentlyContinue | ForEach-Object { $_.Id }) }
-
-$before = Get-WordIds
-$word = New-Object -ComObject Word.Application
-Start-Sleep -Milliseconds 500
-$mine = @(Get-WordIds | Where-Object { $before -notcontains $_ })
-if ($mine.Count -ne 1) {
-  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  throw "Could not identify a Word process of our own (new: $($mine -join ',')); not touching Word."
-}
-$wordPid = $mine[0]
-if ($PidFile) { Set-Content -Path $PidFile -Value $wordPid }
+Import-Module (Join-Path $PSScriptRoot 'Word.psm1') -Force
+$session = Start-OwnWord -PidFile $PidFile
+$word = $session.Word
 
 function Field-Info($range) {
   $list = @()
@@ -86,9 +78,48 @@ function Table-Reading($t, $depth) {
     if ($c.NestingLevel -ne $t.NestingLevel) { continue }
     $nested = @()
     if ($depth -lt 8) { foreach ($n in $c.Tables) { $nested += ,(Table-Reading $n ($depth + 1)) } }
-    $cells += [ordered]@{ row = $c.RowIndex; column = $c.ColumnIndex; text = (Text-Of $c.Range); tables = $nested }
+    $cells += [ordered]@{ row = $c.RowIndex; column = $c.ColumnIndex; start = $c.Range.Start; end = $c.Range.End; text = (Text-Of $c.Range); tables = $nested }
   }
-  [ordered]@{ rows = $t.Rows.Count; columns = $t.Columns.Count; nesting = $t.NestingLevel; cells = $cells }
+  [ordered]@{ rows = $t.Rows.Count; columns = $t.Columns.Count; nesting = $t.NestingLevel; start = $t.Range.Start; end = $t.Range.End; cells = $cells }
+}
+
+# The paragraphs of the main story: the text a reader sees, where it
+# starts, whether it is in a table, and the toggles of its text without
+# the mark (-1 on, 0 off, 9999999 mixed).
+function Paragraph-Reading($doc) {
+  $list = @()
+  foreach ($p in $doc.Paragraphs) {
+    $r = $p.Range
+    $inTable = [bool]$r.Information(12)
+    $body = $doc.Range($r.Start, [Math]::Max($r.Start, $r.End - 1))
+    $list += [ordered]@{
+      start = $r.Start; end = $r.End; text = (Text-Of $r); table = $inTable
+      hidden = [int]$body.Font.Hidden; bold = [int]$body.Font.Bold; italic = [int]$body.Font.Italic
+    }
+  }
+  ,$list
+}
+
+# Each section's headers and footers by kind, with text and fields.
+function Section-Reading($doc) {
+  $list = @()
+  foreach ($sec in $doc.Sections) {
+    $hf = [ordered]@{ index = $sec.Index; headers = @(); footers = @() }
+    foreach ($k in 1, 2, 3) {
+      $h = $sec.Headers.Item($k)
+      $hf.headers += [ordered]@{ kind = $k; exists = $h.Exists; linked = $h.LinkToPrevious; text = (Text-Of $h.Range); fields = (Field-Info $h.Range) }
+      $f = $sec.Footers.Item($k)
+      $hf.footers += [ordered]@{ kind = $k; exists = $f.Exists; linked = $f.LinkToPrevious; text = (Text-Of $f.Range); fields = (Field-Info $f.Range) }
+    }
+    $list += $hf
+  }
+  ,$list
+}
+
+function Note-Reading($notes) {
+  $list = @()
+  foreach ($n in $notes) { $list += [ordered]@{ index = $n.Index; text = (Text-Of $n.Range) } }
+  ,$list
 }
 
 function Reading($doc) {
@@ -100,17 +131,8 @@ function Reading($doc) {
   $view.ShowRevisionsAndComments = $true
   $x = [ordered]@{}
   $x.stories = Story-Texts $doc
-  $x.sections = @()
-  foreach ($sec in $doc.Sections) {
-    $hf = [ordered]@{ index = $sec.Index; headers = @(); footers = @() }
-    foreach ($k in 1, 2, 3) {
-      $h = $sec.Headers.Item($k)
-      $hf.headers += [ordered]@{ kind = $k; exists = $h.Exists; linked = $h.LinkToPrevious; text = (Text-Of $h.Range) }
-      $f = $sec.Footers.Item($k)
-      $hf.footers += [ordered]@{ kind = $k; exists = $f.Exists; linked = $f.LinkToPrevious; text = (Text-Of $f.Range) }
-    }
-    $x.sections += $hf
-  }
+  $x.paragraphs = Paragraph-Reading $doc
+  $x.sections = Section-Reading $doc
   $x.tables = @()
   foreach ($t in $doc.Tables) { $x.tables += ,(Table-Reading $t 0) }
   $x.fields = @()
@@ -137,10 +159,8 @@ function Reading($doc) {
   }
   $x.bookmarks = @()
   foreach ($b in $doc.Bookmarks) { $x.bookmarks += [ordered]@{ name = $b.Name; story = [int]$b.StoryType; text = (Text-Of $b.Range) } }
-  $x.footnotes = @()
-  foreach ($fn in $doc.Footnotes) { $x.footnotes += [ordered]@{ index = $fn.Index; text = (Text-Of $fn.Range) } }
-  $x.endnotes = @()
-  foreach ($en in $doc.Endnotes) { $x.endnotes += [ordered]@{ index = $en.Index; text = (Text-Of $en.Range) } }
+  $x.footnotes = Note-Reading $doc.Footnotes
+  $x.endnotes = Note-Reading $doc.Endnotes
   $x.inline_shapes = @()
   foreach ($s in $doc.InlineShapes) { $x.inline_shapes += [ordered]@{ type = [int]$s.Type; alt = $s.AlternativeText; title = $s.Title; width = $s.Width; height = $s.Height } }
   $x.shapes = @()
@@ -160,15 +180,10 @@ function Reading($doc) {
   $x
 }
 
-$report = [ordered]@{ word_version = $null; word_pid = $wordPid; files = @() }
-# Word keeps these options in the registry; they are put back at the end.
-$savedOptions = [ordered]@{ CheckGrammarAsYouType = $word.Options.CheckGrammarAsYouType; CheckSpellingAsYouType = $word.Options.CheckSpellingAsYouType }
+$report = [ordered]@{ word_version = $null; word_pid = $session.Pid; files = @() }
 try {
   $word.Visible = $false
   $word.DisplayAlerts = 0
-  $word.Options.CheckGrammarAsYouType = $false
-  $word.Options.CheckSpellingAsYouType = $false
-  $word.Options.SaveNormalPrompt = $false
   $report.word_version = $word.Version + ' build ' + $word.Build
   foreach ($file in $Files) {
     $path = (Resolve-Path $file).Path
@@ -192,12 +207,19 @@ try {
         $r.reading = Reading $doc
         $doc.AcceptAllRevisions()
         $r.reading.accepted = Story-Texts $doc
+        $r.reading.accepted_paragraphs = Paragraph-Reading $doc
+        $r.reading.accepted_sections = Section-Reading $doc
+        $r.reading.accepted_footnotes = Note-Reading $doc.Footnotes
+        $r.reading.accepted_endnotes = Note-Reading $doc.Endnotes
         $r.reading.accepted_tables = @()
         foreach ($t in $doc.Tables) { $r.reading.accepted_tables += ,(Table-Reading $t 0) }
         $doc.Close([ref]0)
         $doc = $word.Documents.Open($path, $false, $false, $false)
         $doc.RejectAllRevisions()
         $r.reading.rejected = Story-Texts $doc
+        $r.reading.rejected_paragraphs = Paragraph-Reading $doc
+        $r.reading.rejected_tables = @()
+        foreach ($t in $doc.Tables) { $r.reading.rejected_tables += ,(Table-Reading $t 0) }
         $doc.Close([ref]0)
         $doc = $word.Documents.Open($path, $false, $false, $false)
         Step 'read'
@@ -256,20 +278,10 @@ try {
       if ($doc) { try { $doc.Close([ref]0) } catch {} }
     }
     $report.files += $r
+    Test-ForcedFailure 'check.ps1, after the first file'
   }
 } finally {
-  foreach ($k in $savedOptions.Keys) { try { $word.Options.$k = $savedOptions[$k] } catch {} }
-  try { $word.Quit([ref]0) } catch {}
-  [void][Runtime.InteropServices.Marshal]::ReleaseComObject($word)
-  [GC]::Collect()
-  foreach ($i in 1..20) {
-    if (-not (Get-Process -Id $wordPid -ErrorAction SilentlyContinue)) { break }
-    Start-Sleep -Milliseconds 500
-  }
-  if (Get-Process -Id $wordPid -ErrorAction SilentlyContinue) {
-    Stop-Process -Id $wordPid -Force -ErrorAction SilentlyContinue
-    $report.killed_own_word = $true
-  }
+  Stop-OwnWord $session
 }
 Step 'writing report'
 $report | ConvertTo-Json -Depth 30 | Out-File -Encoding utf8 $Out

@@ -8,6 +8,395 @@
    "Is the P-100 still sold?\rYes, until the end of the year.\rCheck the seal sizes.\r"
   ]
  },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 30,
+   "text": "Parts catalogue: garden pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 30,
+   "end": 36,
+   "text": "Pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 65,
+   "text": "All prices include delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 65,
+   "end": 114,
+   "text": "The P-100 pump quietly moves 40 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 9999999,
+   "italic": 0
+  },
+  {
+   "start": 114,
+   "end": 155,
+   "text": "The P-200 pump moves 65 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 155,
+   "end": 183,
+   "text": "Spare seals fit both pumps.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 183,
+   "end": 210,
+   "text": "Hoses come in two lengths.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 210,
+   "end": 236,
+   "text": "Clamps are sold in pairs.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 236,
+   "end": 263,
+   "text": "Hoses come in two lengths.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 263,
+   "end": 268,
+   "text": "Part\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 268,
+   "end": 273,
+   "text": "Name\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 273,
+   "end": 279,
+   "text": "Price\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 280,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 280,
+   "end": 286,
+   "text": "P-100\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 286,
+   "end": 297,
+   "text": "Small pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 297,
+   "end": 304,
+   "text": "120.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 304,
+   "end": 305,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 305,
+   "end": 311,
+   "text": "P-200\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 311,
+   "end": 322,
+   "text": "Large pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 322,
+   "end": 329,
+   "text": "180.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 329,
+   "end": 330,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 330,
+   "end": 334,
+   "text": "S-1\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 334,
+   "end": 343,
+   "text": "Seal kit\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 343,
+   "end": 348,
+   "text": "9.50\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 348,
+   "end": 349,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 349,
+   "end": 353,
+   "text": "H-1\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 353,
+   "end": 358,
+   "text": "Hose\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 358,
+   "end": 364,
+   "text": "14.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 364,
+   "end": 365,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 365,
+   "end": 366,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 366,
+   "end": 377,
+   "text": "Order form\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 377,
+   "end": 410,
+   "text": "Rich text: Notes for the order\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 410,
+   "end": 437,
+   "text": "Plain text: Order number\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 437,
+   "end": 456,
+   "text": "Date: 2026-05-03\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 456,
+   "end": 478,
+   "text": "Combo box: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 478,
+   "end": 505,
+   "text": "Drop-down list: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 505,
+   "end": 520,
+   "text": "Check box: ☒\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 520,
+   "end": 533,
+   "text": "Picture: /\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 533,
+   "end": 584,
+   "text": "Building block gallery: Choose a building block.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 584,
+   "end": 612,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 612,
+   "end": 633,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 633,
+   "end": 658,
+   "text": "Line item: one pump.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 658,
+   "end": 659,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
  "sections": [
   {
    "index": 1,
@@ -16,19 +405,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ],
    "footers": [
@@ -36,19 +428,22 @@
      "kind": 1,
      "exists": true,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 2,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     },
     {
      "kind": 3,
      "exists": false,
      "linked": false,
-     "text": "\r"
+     "text": "\r",
+     "fields": []
     }
    ]
   }
@@ -58,94 +453,126 @@
    "rows": 5,
    "columns": 3,
    "nesting": 1,
+   "start": 263,
+   "end": 365,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 263,
+     "end": 268,
      "text": "Part\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 268,
+     "end": 273,
      "text": "Name\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 3,
+     "start": 273,
+     "end": 279,
      "text": "Price\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 280,
+     "end": 286,
      "text": "P-100\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 286,
+     "end": 297,
      "text": "Small pump\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 3,
+     "start": 297,
+     "end": 304,
      "text": "120.00\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 305,
+     "end": 311,
      "text": "P-200\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 311,
+     "end": 322,
      "text": "Large pump\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 3,
+     "start": 322,
+     "end": 329,
      "text": "180.00\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 1,
+     "start": 330,
+     "end": 334,
      "text": "S-1\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 2,
+     "start": 334,
+     "end": 343,
      "text": "Seal kit\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 3,
+     "start": 343,
+     "end": 348,
      "text": "9.50\r\u0007",
      "tables": []
     },
     {
      "row": 5,
      "column": 1,
+     "start": 349,
+     "end": 353,
      "text": "H-1\r\u0007",
      "tables": []
     },
     {
      "row": 5,
      "column": 2,
+     "start": 353,
+     "end": 358,
      "text": "Hose\r\u0007",
      "tables": []
     },
     {
      "row": 5,
      "column": 3,
+     "start": 358,
+     "end": 364,
      "text": "14.00\r\u0007",
      "tables": []
     }
@@ -502,81 +929,504 @@
    "\u0004\r"
   ]
  },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 30,
+   "text": "Parts catalogue: garden pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 30,
+   "end": 36,
+   "text": "Pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 65,
+   "text": "All prices include delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 65,
+   "end": 114,
+   "text": "The P-100 pump quietly moves 40 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 9999999,
+   "italic": 0
+  },
+  {
+   "start": 114,
+   "end": 150,
+   "text": "The P-200 moves 65 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 150,
+   "end": 178,
+   "text": "Spare seals fit both pumps.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 178,
+   "end": 205,
+   "text": "Hoses come in two lengths.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 205,
+   "end": 231,
+   "text": "Clamps are sold in pairs.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 231,
+   "end": 236,
+   "text": "Part\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 236,
+   "end": 241,
+   "text": "Name\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 241,
+   "end": 247,
+   "text": "Price\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 247,
+   "end": 248,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 248,
+   "end": 254,
+   "text": "P-100\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 254,
+   "end": 265,
+   "text": "Small pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 265,
+   "end": 272,
+   "text": "120.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 272,
+   "end": 273,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 273,
+   "end": 279,
+   "text": "P-200\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 290,
+   "text": "Large pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 290,
+   "end": 297,
+   "text": "180.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 297,
+   "end": 298,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 298,
+   "end": 302,
+   "text": "H-1\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 302,
+   "end": 307,
+   "text": "Hose\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 307,
+   "end": 313,
+   "text": "14.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 313,
+   "end": 314,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 314,
+   "end": 315,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 315,
+   "end": 326,
+   "text": "Order form\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 326,
+   "end": 359,
+   "text": "Rich text: Notes for the order\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 359,
+   "end": 386,
+   "text": "Plain text: Order number\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 386,
+   "end": 405,
+   "text": "Date: 2026-05-03\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 405,
+   "end": 427,
+   "text": "Combo box: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 427,
+   "end": 454,
+   "text": "Drop-down list: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 454,
+   "end": 469,
+   "text": "Check box: ☒\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 469,
+   "end": 482,
+   "text": "Picture: /\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 482,
+   "end": 533,
+   "text": "Building block gallery: Choose a building block.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 533,
+   "end": 561,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 561,
+   "end": 582,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 582,
+   "end": 607,
+   "text": "Line item: one pump.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 607,
+   "end": 608,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [],
+ "accepted_endnotes": [],
  "accepted_tables": [
   {
    "rows": 4,
    "columns": 3,
    "nesting": 1,
+   "start": 231,
+   "end": 314,
    "cells": [
     {
      "row": 1,
      "column": 1,
+     "start": 231,
+     "end": 236,
      "text": "Part\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 2,
+     "start": 236,
+     "end": 241,
      "text": "Name\r\u0007",
      "tables": []
     },
     {
      "row": 1,
      "column": 3,
+     "start": 241,
+     "end": 247,
      "text": "Price\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 1,
+     "start": 248,
+     "end": 254,
      "text": "P-100\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 2,
+     "start": 254,
+     "end": 265,
      "text": "Small pump\r\u0007",
      "tables": []
     },
     {
      "row": 2,
      "column": 3,
+     "start": 265,
+     "end": 272,
      "text": "120.00\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 1,
+     "start": 273,
+     "end": 279,
      "text": "P-200\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 2,
+     "start": 279,
+     "end": 290,
      "text": "Large pump\r\u0007",
      "tables": []
     },
     {
      "row": 3,
      "column": 3,
+     "start": 290,
+     "end": 297,
      "text": "180.00\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 1,
+     "start": 298,
+     "end": 302,
      "text": "H-1\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 2,
+     "start": 302,
+     "end": 307,
      "text": "Hose\r\u0007",
      "tables": []
     },
     {
      "row": 4,
      "column": 3,
+     "start": 307,
+     "end": 313,
      "text": "14.00\r\u0007",
      "tables": []
     }
@@ -590,5 +1440,447 @@
   "4": [
    "Is the P-100 still sold?\rYes, until the end of the year.\rCheck the seal sizes.\r"
   ]
- }
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 30,
+   "text": "Parts catalogue: garden pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 30,
+   "end": 36,
+   "text": "Pumps\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 36,
+   "end": 77,
+   "text": "The P-100 pump moves 40 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 77,
+   "end": 118,
+   "text": "The P-200 pump moves 65 litres a minute.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 118,
+   "end": 146,
+   "text": "Spare seals fit both pumps.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 146,
+   "end": 172,
+   "text": "Clamps are sold in pairs.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 172,
+   "end": 199,
+   "text": "Hoses come in two lengths.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 199,
+   "end": 204,
+   "text": "Part\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 204,
+   "end": 209,
+   "text": "Name\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 209,
+   "end": 215,
+   "text": "Price\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 215,
+   "end": 216,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 216,
+   "end": 222,
+   "text": "P-100\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 222,
+   "end": 233,
+   "text": "Small pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 233,
+   "end": 240,
+   "text": "120.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 240,
+   "end": 241,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 241,
+   "end": 247,
+   "text": "P-200\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 247,
+   "end": 258,
+   "text": "Large pump\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 258,
+   "end": 265,
+   "text": "180.00\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 265,
+   "end": 266,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 266,
+   "end": 270,
+   "text": "S-1\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 270,
+   "end": 279,
+   "text": "Seal kit\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 279,
+   "end": 284,
+   "text": "9.50\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 284,
+   "end": 285,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 285,
+   "end": 286,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 286,
+   "end": 297,
+   "text": "Order form\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 297,
+   "end": 330,
+   "text": "Rich text: Notes for the order\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 330,
+   "end": 357,
+   "text": "Plain text: Order number\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 357,
+   "end": 376,
+   "text": "Date: 2026-05-03\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 376,
+   "end": 398,
+   "text": "Combo box: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 398,
+   "end": 425,
+   "text": "Drop-down list: Seal kit\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 425,
+   "end": 440,
+   "text": "Check box: ☒\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 440,
+   "end": 453,
+   "text": "Picture: /\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 453,
+   "end": 504,
+   "text": "Building block gallery: Choose a building block.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 504,
+   "end": 532,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 532,
+   "end": 553,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 553,
+   "end": 578,
+   "text": "Line item: one pump.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 578,
+   "end": 579,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 4,
+   "columns": 3,
+   "nesting": 1,
+   "start": 199,
+   "end": 285,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 199,
+     "end": 204,
+     "text": "Part\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 204,
+     "end": 209,
+     "text": "Name\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 209,
+     "end": 215,
+     "text": "Price\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 216,
+     "end": 222,
+     "text": "P-100\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 222,
+     "end": 233,
+     "text": "Small pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "start": 233,
+     "end": 240,
+     "text": "120.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 241,
+     "end": 247,
+     "text": "P-200\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 247,
+     "end": 258,
+     "text": "Large pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "start": 258,
+     "end": 265,
+     "text": "180.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 1,
+     "start": 266,
+     "end": 270,
+     "text": "S-1\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 2,
+     "start": 270,
+     "end": 279,
+     "text": "Seal kit\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 3,
+     "start": 279,
+     "end": 284,
+     "text": "9.50\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
 }

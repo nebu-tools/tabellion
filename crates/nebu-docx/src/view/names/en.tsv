@@ -1,4 +1,6 @@
-# provisional
+# The names Word shows for its built-in styles in display language en-US,
+# written by tools/word/style-names.ps1 from Word 16.0. Each line is
+# the name Word stores, a tab, and the name it shows.
 Normal	Normal
 heading 1	Heading 1
 heading 2	Heading 2
@@ -9,20 +11,15 @@ heading 6	Heading 6
 heading 7	Heading 7
 heading 8	Heading 8
 heading 9	Heading 9
-Title	Title
-Subtitle	Subtitle
-caption	Caption
-footnote text	Footnote Text
-footnote reference	Footnote Reference
-endnote text	Endnote Text
-endnote reference	Endnote Reference
-annotation text	Comment Text
-annotation reference	Comment Reference
-annotation subject	Comment Subject
-header	Header
-footer	Footer
-page number	Page Number
-line number	Line Number
+index 1	Index 1
+index 2	Index 2
+index 3	Index 3
+index 4	Index 4
+index 5	Index 5
+index 6	Index 6
+index 7	Index 7
+index 8	Index 8
+index 9	Index 9
 toc 1	TOC 1
 toc 2	TOC 2
 toc 3	TOC 3
@@ -32,40 +29,351 @@ toc 6	TOC 6
 toc 7	TOC 7
 toc 8	TOC 8
 toc 9	TOC 9
-TOC Heading	TOC Heading
+Normal Indent	Normal Indent
+footnote text	Footnote Text
+annotation text	Comment Text
+header	Header
+footer	Footer
+index heading	Index Heading
+caption	Caption
 table of figures	Table of Figures
+envelope address	Envelope Address
+envelope return	Envelope Return
+footnote reference	Footnote Reference
+annotation reference	Comment Reference
+line number	Line Number
+page number	Page Number
+endnote reference	Endnote Reference
+endnote text	Endnote Text
+table of authorities	Table of Authorities
+macro	Macro Text
+toa heading	TOA Heading
 List	List
 List Bullet	List Bullet
+List Number	List Number
+List 2	List 2
+List 3	List 3
+List 4	List 4
+List 5	List 5
 List Bullet 2	List Bullet 2
 List Bullet 3	List Bullet 3
-List Number	List Number
+List Bullet 4	List Bullet 4
+List Bullet 5	List Bullet 5
 List Number 2	List Number 2
 List Number 3	List Number 3
-List Paragraph	List Paragraph
-Quote	Quote
-Intense Quote	Intense Quote
+List Number 4	List Number 4
+List Number 5	List Number 5
+Title	Title
+Closing	Closing
+Signature	Signature
+Default Paragraph Font	Default Paragraph Font
 Body Text	Body Text
+Body Text Indent	Body Text Indent
+List Continue	List Continue
+List Continue 2	List Continue 2
+List Continue 3	List Continue 3
+List Continue 4	List Continue 4
+List Continue 5	List Continue 5
+Message Header	Message Header
+Subtitle	Subtitle
+Salutation	Salutation
+Date	Date
+Body Text First Indent	Body Text First Indent
+Body Text First Indent 2	Body Text First Indent 2
+Note Heading	Note Heading
 Body Text 2	Body Text 2
 Body Text 3	Body Text 3
-No Spacing	No Spacing
+Body Text Indent 2	Body Text Indent 2
+Body Text Indent 3	Body Text Indent 3
+Block Text	Block Text
 Hyperlink	Hyperlink
 FollowedHyperlink	FollowedHyperlink
 Strong	Strong
 Emphasis	Emphasis
+Document Map	Document Map
+Plain Text	Plain Text
+E-mail Signature	E-mail Signature
+HTML Top of Form	z-Top of Form
+HTML Bottom of Form	z-Bottom of Form
+Normal (Web)	Normal (Web)
+HTML Acronym	HTML Acronym
+HTML Address	HTML Address
+HTML Cite	HTML Cite
+HTML Code	HTML Code
+HTML Definition	HTML Definition
+HTML Keyboard	HTML Keyboard
+HTML Preformatted	HTML Preformatted
+HTML Sample	HTML Sample
+HTML Typewriter	HTML Typewriter
+HTML Variable	HTML Variable
+Normal Table	Table Normal
+annotation subject	Comment Subject
+No List	No List
+Outline List 1	1 / a / i
+Outline List 2	1 / 1.1 / 1.1.1
+Outline List 3	Article / Section
+Table Simple 1	Table Simple 1
+Table Simple 2	Table Simple 2
+Table Simple 3	Table Simple 3
+Table Classic 1	Table Classic 1
+Table Classic 2	Table Classic 2
+Table Classic 3	Table Classic 3
+Table Classic 4	Table Classic 4
+Table Colorful 1	Table Colorful 1
+Table Colorful 2	Table Colorful 2
+Table Colorful 3	Table Colorful 3
+Table Columns 1	Table Columns 1
+Table Columns 2	Table Columns 2
+Table Columns 3	Table Columns 3
+Table Columns 4	Table Columns 4
+Table Columns 5	Table Columns 5
+Table Grid 1	Table Grid 1
+Table Grid 2	Table Grid 2
+Table Grid 3	Table Grid 3
+Table Grid 4	Table Grid 4
+Table Grid 5	Table Grid 5
+Table Grid 6	Table Grid 6
+Table Grid 7	Table Grid 7
+Table Grid 8	Table Grid 8
+Table List 1	Table List 1
+Table List 2	Table List 2
+Table List 3	Table List 3
+Table List 4	Table List 4
+Table List 5	Table List 5
+Table List 6	Table List 6
+Table List 7	Table List 7
+Table List 8	Table List 8
+Table 3D effects 1	Table 3D effects 1
+Table 3D effects 2	Table 3D effects 2
+Table 3D effects 3	Table 3D effects 3
+Table Contemporary	Table Contemporary
+Table Elegant	Table Elegant
+Table Professional	Table Professional
+Table Subtle 1	Table Subtle 1
+Table Subtle 2	Table Subtle 2
+Table Web 1	Table Web 1
+Table Web 2	Table Web 2
+Table Web 3	Table Web 3
+Balloon Text	Balloon Text
+Table Grid	Table Grid
+Table Theme	Table Theme
+Placeholder Text	Placeholder Text
+No Spacing	No Spacing
+Light Shading	Light Shading
+Light List	Light List
+Light Grid	Light Grid
+Medium Shading 1	Medium Shading 1
+Medium Shading 2	Medium Shading 2
+Medium List 1	Medium List 1
+Medium List 2	Medium List 2
+Medium Grid 1	Medium Grid 1
+Medium Grid 2	Medium Grid 2
+Medium Grid 3	Medium Grid 3
+Dark List	Dark List
+Colorful Shading	Colorful Shading
+Colorful List	Colorful List
+Colorful Grid	Colorful Grid
+Light Shading Accent 1	Light Shading - Accent 1
+Light List Accent 1	Light List - Accent 1
+Light Grid Accent 1	Light Grid - Accent 1
+Medium Shading 1 Accent 1	Medium Shading 1 - Accent 1
+Medium Shading 2 Accent 1	Medium Shading 2 - Accent 1
+Medium List 1 Accent 1	Medium List 1 - Accent 1
+Revision	Revision
+List Paragraph	List Paragraph
+Quote	Quote
+Intense Quote	Intense Quote
+Medium List 2 Accent 1	Medium List 2 - Accent 1
+Medium Grid 1 Accent 1	Medium Grid 1 - Accent 1
+Medium Grid 2 Accent 1	Medium Grid 2 - Accent 1
+Medium Grid 3 Accent 1	Medium Grid 3 - Accent 1
+Dark List Accent 1	Dark List - Accent 1
+Colorful Shading Accent 1	Colorful Shading - Accent 1
+Colorful List Accent 1	Colorful List - Accent 1
+Colorful Grid Accent 1	Colorful Grid - Accent 1
+Light Shading Accent 2	Light Shading - Accent 2
+Light List Accent 2	Light List - Accent 2
+Light Grid Accent 2	Light Grid - Accent 2
+Medium Shading 1 Accent 2	Medium Shading 1 - Accent 2
+Medium Shading 2 Accent 2	Medium Shading 2 - Accent 2
+Medium List 1 Accent 2	Medium List 1 - Accent 2
+Medium List 2 Accent 2	Medium List 2 - Accent 2
+Medium Grid 1 Accent 2	Medium Grid 1 - Accent 2
+Medium Grid 2 Accent 2	Medium Grid 2 - Accent 2
+Medium Grid 3 Accent 2	Medium Grid 3 - Accent 2
+Dark List Accent 2	Dark List - Accent 2
+Colorful Shading Accent 2	Colorful Shading - Accent 2
+Colorful List Accent 2	Colorful List - Accent 2
+Colorful Grid Accent 2	Colorful Grid - Accent 2
+Light Shading Accent 3	Light Shading - Accent 3
+Light List Accent 3	Light List - Accent 3
+Light Grid Accent 3	Light Grid - Accent 3
+Medium Shading 1 Accent 3	Medium Shading 1 - Accent 3
+Medium Shading 2 Accent 3	Medium Shading 2 - Accent 3
+Medium List 1 Accent 3	Medium List 1 - Accent 3
+Medium List 2 Accent 3	Medium List 2 - Accent 3
+Medium Grid 1 Accent 3	Medium Grid 1 - Accent 3
+Medium Grid 2 Accent 3	Medium Grid 2 - Accent 3
+Medium Grid 3 Accent 3	Medium Grid 3 - Accent 3
+Dark List Accent 3	Dark List - Accent 3
+Colorful Shading Accent 3	Colorful Shading - Accent 3
+Colorful List Accent 3	Colorful List - Accent 3
+Colorful Grid Accent 3	Colorful Grid - Accent 3
+Light Shading Accent 4	Light Shading - Accent 4
+Light List Accent 4	Light List - Accent 4
+Light Grid Accent 4	Light Grid - Accent 4
+Medium Shading 1 Accent 4	Medium Shading 1 - Accent 4
+Medium Shading 2 Accent 4	Medium Shading 2 - Accent 4
+Medium List 1 Accent 4	Medium List 1 - Accent 4
+Medium List 2 Accent 4	Medium List 2 - Accent 4
+Medium Grid 1 Accent 4	Medium Grid 1 - Accent 4
+Medium Grid 2 Accent 4	Medium Grid 2 - Accent 4
+Medium Grid 3 Accent 4	Medium Grid 3 - Accent 4
+Dark List Accent 4	Dark List - Accent 4
+Colorful Shading Accent 4	Colorful Shading - Accent 4
+Colorful List Accent 4	Colorful List - Accent 4
+Colorful Grid Accent 4	Colorful Grid - Accent 4
+Light Shading Accent 5	Light Shading - Accent 5
+Light List Accent 5	Light List - Accent 5
+Light Grid Accent 5	Light Grid - Accent 5
+Medium Shading 1 Accent 5	Medium Shading 1 - Accent 5
+Medium Shading 2 Accent 5	Medium Shading 2 - Accent 5
+Medium List 1 Accent 5	Medium List 1 - Accent 5
+Medium List 2 Accent 5	Medium List 2 - Accent 5
+Medium Grid 1 Accent 5	Medium Grid 1 - Accent 5
+Medium Grid 2 Accent 5	Medium Grid 2 - Accent 5
+Medium Grid 3 Accent 5	Medium Grid 3 - Accent 5
+Dark List Accent 5	Dark List - Accent 5
+Colorful Shading Accent 5	Colorful Shading - Accent 5
+Colorful List Accent 5	Colorful List - Accent 5
+Colorful Grid Accent 5	Colorful Grid - Accent 5
+Light Shading Accent 6	Light Shading - Accent 6
+Light List Accent 6	Light List - Accent 6
+Light Grid Accent 6	Light Grid - Accent 6
+Medium Shading 1 Accent 6	Medium Shading 1 - Accent 6
+Medium Shading 2 Accent 6	Medium Shading 2 - Accent 6
+Medium List 1 Accent 6	Medium List 1 - Accent 6
+Medium List 2 Accent 6	Medium List 2 - Accent 6
+Medium Grid 1 Accent 6	Medium Grid 1 - Accent 6
+Medium Grid 2 Accent 6	Medium Grid 2 - Accent 6
+Medium Grid 3 Accent 6	Medium Grid 3 - Accent 6
+Dark List Accent 6	Dark List - Accent 6
+Colorful Shading Accent 6	Colorful Shading - Accent 6
+Colorful List Accent 6	Colorful List - Accent 6
+Colorful Grid Accent 6	Colorful Grid - Accent 6
 Subtle Emphasis	Subtle Emphasis
 Intense Emphasis	Intense Emphasis
 Subtle Reference	Subtle Reference
 Intense Reference	Intense Reference
 Book Title	Book Title
-Default Paragraph Font	Default Paragraph Font
-Normal Table	Normal Table
-Table Grid	Table Grid
-No List	No List
-Balloon Text	Balloon Text
-Plain Text	Plain Text
-Placeholder Text	Placeholder Text
 Bibliography	Bibliography
-Revision	Revision
-Normal (Web)	Normal (Web)
-Date	Date
-Signature	Signature
+TOC Heading	TOC Heading
+Plain Table 1	Plain Table 1
+Plain Table 2	Plain Table 2
+Plain Table 3	Plain Table 3
+Plain Table 4	Plain Table 4
+Plain Table 5	Plain Table 5
+Grid Table Light	Table Grid Light
+Grid Table 1 Light	Grid Table 1 Light
+Grid Table 2	Grid Table 2
+Grid Table 3	Grid Table 3
+Grid Table 4	Grid Table 4
+Grid Table 5 Dark	Grid Table 5 Dark
+Grid Table 6 Colorful	Grid Table 6 Colorful
+Grid Table 7 Colorful	Grid Table 7 Colorful
+Grid Table 1 Light Accent 1	Grid Table 1 Light - Accent 1
+Grid Table 2 Accent 1	Grid Table 2 - Accent 1
+Grid Table 3 Accent 1	Grid Table 3 - Accent 1
+Grid Table 4 Accent 1	Grid Table 4 - Accent 1
+Grid Table 5 Dark Accent 1	Grid Table 5 Dark - Accent 1
+Grid Table 6 Colorful Accent 1	Grid Table 6 Colorful - Accent 1
+Grid Table 7 Colorful Accent 1	Grid Table 7 Colorful - Accent 1
+Grid Table 1 Light Accent 2	Grid Table 1 Light - Accent 2
+Grid Table 2 Accent 2	Grid Table 2 - Accent 2
+Grid Table 3 Accent 2	Grid Table 3 - Accent 2
+Grid Table 4 Accent 2	Grid Table 4 - Accent 2
+Grid Table 5 Dark Accent 2	Grid Table 5 Dark - Accent 2
+Grid Table 6 Colorful Accent 2	Grid Table 6 Colorful - Accent 2
+Grid Table 7 Colorful Accent 2	Grid Table 7 Colorful - Accent 2
+Grid Table 1 Light Accent 3	Grid Table 1 Light - Accent 3
+Grid Table 2 Accent 3	Grid Table 2 - Accent 3
+Grid Table 3 Accent 3	Grid Table 3 - Accent 3
+Grid Table 4 Accent 3	Grid Table 4 - Accent 3
+Grid Table 5 Dark Accent 3	Grid Table 5 Dark - Accent 3
+Grid Table 6 Colorful Accent 3	Grid Table 6 Colorful - Accent 3
+Grid Table 7 Colorful Accent 3	Grid Table 7 Colorful - Accent 3
+Grid Table 1 Light Accent 4	Grid Table 1 Light - Accent 4
+Grid Table 2 Accent 4	Grid Table 2 - Accent 4
+Grid Table 3 Accent 4	Grid Table 3 - Accent 4
+Grid Table 4 Accent 4	Grid Table 4 - Accent 4
+Grid Table 5 Dark Accent 4	Grid Table 5 Dark - Accent 4
+Grid Table 6 Colorful Accent 4	Grid Table 6 Colorful - Accent 4
+Grid Table 7 Colorful Accent 4	Grid Table 7 Colorful - Accent 4
+Grid Table 1 Light Accent 5	Grid Table 1 Light - Accent 5
+Grid Table 2 Accent 5	Grid Table 2 - Accent 5
+Grid Table 3 Accent 5	Grid Table 3 - Accent 5
+Grid Table 4 Accent 5	Grid Table 4 - Accent 5
+Grid Table 5 Dark Accent 5	Grid Table 5 Dark - Accent 5
+Grid Table 6 Colorful Accent 5	Grid Table 6 Colorful - Accent 5
+Grid Table 7 Colorful Accent 5	Grid Table 7 Colorful - Accent 5
+Grid Table 1 Light Accent 6	Grid Table 1 Light - Accent 6
+Grid Table 2 Accent 6	Grid Table 2 - Accent 6
+Grid Table 3 Accent 6	Grid Table 3 - Accent 6
+Grid Table 4 Accent 6	Grid Table 4 - Accent 6
+Grid Table 5 Dark Accent 6	Grid Table 5 Dark - Accent 6
+Grid Table 6 Colorful Accent 6	Grid Table 6 Colorful - Accent 6
+Grid Table 7 Colorful Accent 6	Grid Table 7 Colorful - Accent 6
+List Table 1 Light	List Table 1 Light
+List Table 2	List Table 2
+List Table 3	List Table 3
+List Table 4	List Table 4
+List Table 5 Dark	List Table 5 Dark
+List Table 6 Colorful	List Table 6 Colorful
+List Table 7 Colorful	List Table 7 Colorful
+List Table 1 Light Accent 1	List Table 1 Light - Accent 1
+List Table 2 Accent 1	List Table 2 - Accent 1
+List Table 3 Accent 1	List Table 3 - Accent 1
+List Table 4 Accent 1	List Table 4 - Accent 1
+List Table 5 Dark Accent 1	List Table 5 Dark - Accent 1
+List Table 6 Colorful Accent 1	List Table 6 Colorful - Accent 1
+List Table 7 Colorful Accent 1	List Table 7 Colorful - Accent 1
+List Table 1 Light Accent 2	List Table 1 Light - Accent 2
+List Table 2 Accent 2	List Table 2 - Accent 2
+List Table 3 Accent 2	List Table 3 - Accent 2
+List Table 4 Accent 2	List Table 4 - Accent 2
+List Table 5 Dark Accent 2	List Table 5 Dark - Accent 2
+List Table 6 Colorful Accent 2	List Table 6 Colorful - Accent 2
+List Table 7 Colorful Accent 2	List Table 7 Colorful - Accent 2
+List Table 1 Light Accent 3	List Table 1 Light - Accent 3
+List Table 2 Accent 3	List Table 2 - Accent 3
+List Table 3 Accent 3	List Table 3 - Accent 3
+List Table 4 Accent 3	List Table 4 - Accent 3
+List Table 5 Dark Accent 3	List Table 5 Dark - Accent 3
+List Table 6 Colorful Accent 3	List Table 6 Colorful - Accent 3
+List Table 7 Colorful Accent 3	List Table 7 Colorful - Accent 3
+List Table 1 Light Accent 4	List Table 1 Light - Accent 4
+List Table 2 Accent 4	List Table 2 - Accent 4
+List Table 3 Accent 4	List Table 3 - Accent 4
+List Table 4 Accent 4	List Table 4 - Accent 4
+List Table 5 Dark Accent 4	List Table 5 Dark - Accent 4
+List Table 6 Colorful Accent 4	List Table 6 Colorful - Accent 4
+List Table 7 Colorful Accent 4	List Table 7 Colorful - Accent 4
+List Table 1 Light Accent 5	List Table 1 Light - Accent 5
+List Table 2 Accent 5	List Table 2 - Accent 5
+List Table 3 Accent 5	List Table 3 - Accent 5
+List Table 4 Accent 5	List Table 4 - Accent 5
+List Table 5 Dark Accent 5	List Table 5 Dark - Accent 5
+List Table 6 Colorful Accent 5	List Table 6 Colorful - Accent 5
+List Table 7 Colorful Accent 5	List Table 7 Colorful - Accent 5
+List Table 1 Light Accent 6	List Table 1 Light - Accent 6
+List Table 2 Accent 6	List Table 2 - Accent 6
+List Table 3 Accent 6	List Table 3 - Accent 6
+List Table 4 Accent 6	List Table 4 - Accent 6
+List Table 5 Dark Accent 6	List Table 5 Dark - Accent 6
+List Table 6 Colorful Accent 6	List Table 6 Colorful - Accent 6
+List Table 7 Colorful Accent 6	List Table 7 Colorful - Accent 6
+Mention	Mention
+Smart Hyperlink	Smart Hyperlink
+Hashtag	Hashtag
+Unresolved Mention	Unresolved Mention
+Smart Link	SmartLink
