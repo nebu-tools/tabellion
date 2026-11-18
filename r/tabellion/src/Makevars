@@ -1,0 +1,17 @@
+# Builds the Rust part with cargo. Inside the repository the crate is a
+# member of the workspace and shares its target directory; a source tarball
+# carries vendored crates instead (see DESIGN.md, "Installing the R package").
+TARGET_DIR = $(CURDIR)/../../../target/r
+LIBDIR = $(TARGET_DIR)/release
+STATLIB = $(LIBDIR)/libtabellion_r.a
+PKG_LIBS = -L$(LIBDIR) -ltabellion_r
+
+all: $(SHLIB)
+
+# cargo decides what is out of date.
+.PHONY: $(STATLIB)
+
+$(SHLIB): $(STATLIB)
+
+$(STATLIB):
+	cargo build --lib --release --manifest-path=./rust/Cargo.toml --target-dir $(TARGET_DIR)

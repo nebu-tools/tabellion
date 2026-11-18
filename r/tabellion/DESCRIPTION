@@ -1,0 +1,13 @@
+Package: tabellion
+Title: Build and Edit Word Documents from Data, R and Typst
+Version: 0.0.0.9000
+Authors@R: person("tabellion contributors", role = c("aut", "cre"), email = "noreply@example.invalid")
+Description: Fills Word templates with tables, figures, captions and
+    cross-references that Word treats as its own, edits existing documents as
+    tracked changes, and reads tables and text back into R. A Rust engine does
+    the work and keeps every untouched part of the document byte-identical.
+License: AGPL (>= 3)
+Encoding: UTF-8
+SystemRequirements: Cargo (Rust's package manager), rustc >= 1.85
+Imports: jsonlite
+Config/rextendr/version: 0.4.0

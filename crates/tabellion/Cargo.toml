@@ -1,0 +1,19 @@
+[package]
+name = "tabellion"
+description = "A Word tool: inspect, fill, convert and edit .docx files"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tabellion"
+path = "src/main.rs"
+
+[dependencies]
+nebu-docx.workspace = true
+tabellion-typst.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap = { version = "4", features = ["derive"] }
+zip.workspace = true

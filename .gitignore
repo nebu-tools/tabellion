@@ -1,3 +1,7 @@
 rv/library/
 examples/modul4/projekt/
 templates/
+target/
+/spike/out/
+*.o
+*.so

@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["crates/nebu-docx", "crates/tabellion-typst", "crates/tabellion", "r/tabellion/src/rust"]
+default-members = ["crates/nebu-docx", "crates/tabellion-typst", "crates/tabellion"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/nebu-tools/tabellion"
+
+[workspace.dependencies]
+nebu-docx = { path = "crates/nebu-docx" }
+tabellion-typst = { path = "crates/tabellion-typst" }
+tabellion = { path = "crates/tabellion" }
+zip = { version = "9.7", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[profile.release]
+debug = 1

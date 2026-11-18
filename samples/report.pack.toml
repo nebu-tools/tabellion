@@ -1,0 +1,51 @@
+# A pack says what a template means. tabellion reads it next to the
+# template; without a pack it falls back to Word's built-in style names.
+# See DESIGN.md, "Packs".
+
+[pack]
+name = "sample-report"
+version = 1
+language = "en-GB"
+
+# Templates this pack describes. `sha256` pins the exact file; `url` is
+# optional and only used by `tabellion pack fetch`.
+[[template]]
+id = "report"
+file = "report-template.docx"
+
+# Which style plays which part. Keys are roles; values name a style by
+# styleId, by w:name, or by the localised name Word shows.
+[styles]
+body = "Body Text"
+heading = ["heading 1", "heading 2", "heading 3"]
+caption = "caption"
+figure = "Figure"
+list_bullet = "List Bullet"
+list_number = "List Number"
+table_text = "Table Text"
+footnote_text = "footnote text"
+footnote_reference = "footnote reference"
+table = "Report Table"
+
+[captions]
+figure = "Figure"
+table = "Table"
+equation = "Equation"
+separator = ": "
+table_position = "above"
+figure_position = "below"
+
+# Text the R and Typst helpers write for numbers.
+[numbers]
+decimal_mark = "."
+big_mark = ","
+missing = "–"
+
+# Cover fields: placeholder text in the template and the key that fills it.
+[fields]
+client = { pattern = "{{client}}" }
+date = { pattern = "{{date}}" }
+
+# Blocks that must stay. A build that removes one stops with an error.
+[[required]]
+heading = "Methods"

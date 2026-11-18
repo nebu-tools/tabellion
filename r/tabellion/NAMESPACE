@@ -1,0 +1,3 @@
+useDynLib(tabellion, .registration = TRUE)
+export(open_docx, save_docx, add_table, add_typst, add_plot, docx_blocks, docx_tables, table_style, typst_table_style, at, rule)
+S3method(print, tabellion_docx)

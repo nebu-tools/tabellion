@@ -1,0 +1,19 @@
+[package]
+name = "tabellion-typst"
+description = "Typst content as Word content: evaluates Typst in-process and maps its content tree to the docx content model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nebu-docx.workspace = true
+typst = "0.15.1"
+typst-eval = "0.15.1"
+typst-render = "0.15.1"
+typst-layout = "0.15.1"
+typst-kit = { version = "0.15.1", default-features = false, features = ["embedded-fonts"] }
+comemo = "0.5.1"
+ecow = "0.2.6"
+serde.workspace = true
+serde_json.workspace = true
