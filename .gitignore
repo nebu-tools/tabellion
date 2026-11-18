@@ -1,3 +1,4 @@
-rv/library/
-examples/modul4/projekt/
-templates/
+/target/
+/fuzz/target/
+/fuzz/corpus/
+/fuzz/artifacts/
