@@ -6,10 +6,16 @@ use std::ops::Range;
 
 use nebu_docx::xml::{NodeKind, Tree};
 use nebu_docx::{Document, Error, Target, ns};
+use support::edits::node_ranges;
 use support::zipraw::assert_records_kept;
 use support::{corpus, entry, large, sample};
 
 const MAIN: &str = "word/document.xml";
+
+/// The bytes `n` was parsed from, in a tree not yet edited.
+fn range(t: &Tree, src: &[u8], n: nebu_docx::xml::NodeId) -> Range<usize> {
+    node_ranges(t, src)[&n].clone()
+}
 
 /// `after` is `before` with `range` replaced by `with`.
 fn assert_replaced(before: &[u8], after: &[u8], range: Range<usize>, with: &str) {
@@ -51,7 +57,7 @@ fn an_insertion_adds_its_bytes_and_nothing_else() {
     let t = doc.xml(MAIN).unwrap();
     let b = body(t);
     let anchor = t.elements(b).unwrap().nth(2000).unwrap();
-    let at = t.source_range(anchor).unwrap().unwrap().start;
+    let at = range(t, &before, anchor).start;
     let xml = r#"<w:p><w:r><w:t>New &amp; inserted</w:t></w:r></w:p>"#;
     let p = t.parse_fragment(xml, &[("w", ns::W)]).unwrap();
     t.insert_before(anchor, p[0]).unwrap();
@@ -72,7 +78,7 @@ fn an_attribute_change_rewrites_that_attribute_only() {
         .filter(|&n| t.is(n, Some(ns::W), "pStyle").unwrap())
         .nth(500)
         .unwrap();
-    let r = t.source_range(style).unwrap().unwrap();
+    let r = range(t, &before, style);
     let old = String::from_utf8(before[r.clone()].to_vec()).unwrap();
     t.set_attribute(style, Some(ns::W), "w:val", "Heading2")
         .unwrap();
@@ -119,7 +125,7 @@ fn text_changes_stay_inside_the_text_node() {
                 && t.text(n).unwrap().as_deref() == Some("{{author}}")
         })
         .unwrap();
-    let r = t.source_range(text).unwrap().unwrap();
+    let r = range(t, &before, text);
     t.set_text(text, "Ada <Lovelace> & co").unwrap();
     let out = doc.to_bytes().unwrap();
     assert_replaced(
@@ -143,7 +149,7 @@ fn a_removal_takes_out_exactly_the_node() {
         .filter(|&n| t.is(n, Some(ns::W), "tbl").unwrap())
         .nth(150)
         .unwrap();
-    let r = t.source_range(table).unwrap().unwrap();
+    let r = range(t, &before, table);
     t.detach(table).unwrap();
     assert_replaced(&before, &entry(&doc.to_bytes().unwrap(), MAIN), r, "");
 }
@@ -162,8 +168,9 @@ fn a_move_writes_the_node_as_it_was() {
         .filter(|&n| t.is(n, Some(ns::W), "p").unwrap())
         .last()
         .unwrap();
-    let r = t.source_range(first).unwrap().unwrap();
-    let at = t.source_range(last_para).unwrap().unwrap().end;
+    let ranges = node_ranges(t, &before);
+    let r = ranges[&first].clone();
+    let at = ranges[&last_para].end;
     t.insert_after(last_para, first).unwrap();
     let out = entry(&doc.to_bytes().unwrap(), MAIN);
     let moved = &before[r.clone()];
@@ -197,7 +204,7 @@ fn new_content_takes_the_documents_prefixes() {
         let t = doc.xml(MAIN).unwrap();
         let b = body(t);
         let first = t.elements(b).unwrap().next().unwrap();
-        let at = t.source_range(first).unwrap().unwrap().start;
+        let at = range(t, &before, first).start;
         let p = t
             .parse_fragment(r#"<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr><w:r><w:t>New</w:t></w:r></w:p>"#, &[("w", ns::W)])
             .unwrap();
@@ -295,7 +302,8 @@ fn names_resolve_through_any_prefix() {
 
 #[test]
 fn edits_that_would_break_the_tree_are_refused() {
-    let mut t = Tree::parse("<?xml version=\"1.0\"?><!--c--><a><b>text</b></a>").unwrap();
+    let src = "<?xml version=\"1.0\"?><!--c--><a><b>text</b></a>";
+    let mut t = Tree::parse(src).unwrap();
     let root = t.root_element();
     let b = t.elements(root).unwrap().next().unwrap();
     let text = t.children(b).unwrap().next().unwrap();
@@ -316,7 +324,7 @@ fn edits_that_would_break_the_tree_are_refused() {
     assert!(t.parse_fragment("<p:x/>", &[]).is_err());
     assert!(t.parse_fragment("<a>", &[]).is_err());
     // Nothing was changed by the refused edits.
-    assert!(!t.is_changed());
+    assert_eq!(t.to_bytes(), src.as_bytes());
 }
 
 #[test]
@@ -467,7 +475,20 @@ fn a_changed_utf16_part_stays_utf16() {
     let t = doc.xml("docProps/app.xml").unwrap();
     let app = t.elements(t.root_element()).unwrap().next().unwrap();
     let text = t.children(app).unwrap().next().unwrap();
-    let r = t.source_range(text).unwrap().unwrap();
+    // The scanner reads UTF-8; find the range there and count it in
+    // UTF-16 code units.
+    let (bom, body) = match before.strip_prefix(&[0xFF, 0xFE]) {
+        Some(b) => (2, b),
+        None => (0, &before[..]),
+    };
+    let units: Vec<u16> = body
+        .chunks(2)
+        .map(|c| u16::from_le_bytes([c[0], c[1]]))
+        .collect();
+    let utf8 = String::from_utf16(&units).unwrap();
+    let r8 = range(t, utf8.as_bytes(), text);
+    let at = |i: usize| bom + utf8[..i].encode_utf16().count() * 2;
+    let r = at(r8.start)..at(r8.end);
     t.set_text(text, "Survey tool").unwrap();
     let out = entry(&doc.to_bytes().unwrap(), "docProps/app.xml");
     let mut want = before[..r.start].to_vec();

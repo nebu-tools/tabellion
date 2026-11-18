@@ -180,7 +180,7 @@ impl Package {
         if !matches!(self.entries[i].body, Body::Xml(_)) {
             let bytes = self.read(name)?;
             let part = &self.entries[i].name;
-            let tree = Tree::parse_limited(bytes, &self.limits).map_err(|e| e.in_part(part))?;
+            let tree = Tree::parse_with_limits(bytes, &self.limits).map_err(|e| e.in_part(part))?;
             self.entries[i].body = Body::Xml(Box::new(tree));
         }
         match &mut self.entries[i].body {

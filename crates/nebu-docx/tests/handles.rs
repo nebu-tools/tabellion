@@ -27,7 +27,6 @@ fn refuses_everywhere(t: &mut Tree, x: NodeId, own: NodeId) {
     assert!(foreign(t.attributes(x)));
     assert!(foreign(t.text(x)));
     assert!(foreign(t.text_content(x)));
-    assert!(foreign(t.source_range(x)));
     assert!(foreign(t.set_text(x, "new")));
     assert!(foreign(t.set_attribute(x, None, "k", "v")));
     assert!(foreign(t.remove_attribute(x, None, "k")));
@@ -61,7 +60,6 @@ fn a_handle_from_another_tree_is_refused() {
     for x in all {
         refuses_everywhere(&mut t, x, own);
     }
-    assert!(!t.is_changed());
     assert_eq!(t.to_bytes(), SRC.as_bytes());
 }
 
@@ -88,7 +86,7 @@ fn fragments_and_created_nodes_belong_to_their_tree() {
     for x in frag.into_iter().chain([made]) {
         assert!(foreign(b.append(root, x)));
     }
-    assert!(!b.is_changed());
+    assert_eq!(b.to_bytes(), b"<a/>");
 }
 
 #[test]
@@ -193,7 +191,6 @@ fn edge_arguments_do_not_panic() {
         let _ = t.kind(all[n]);
         let _ = t.text(all[n]);
         let _ = t.attributes(all[n]);
-        let _ = t.source_range(all[n]);
         edit(|t, all| drop(t.detach(all[n])));
         edit(|t, all| {
             if let Ok(c) = t.deep_clone(all[n]) {

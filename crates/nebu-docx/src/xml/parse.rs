@@ -3,7 +3,7 @@
 //! It checks well-formedness as XML 1.0 with namespaces defines it, so that
 //! every span it records can later be read again without errors. The work is
 //! one pass over the text with no recursion; nesting depth and node count
-//! are limited by [`Limits`].
+//! are limited by [`Limits`](crate::Limits).
 
 use std::ops::Range;
 
@@ -11,7 +11,7 @@ use super::chars::{self, is_space};
 use super::{
     Data, Element, Encoding, Ix, Scope, ScopeId, Span, Tree, UriId, XML_NS, XMLNS_NS, XMLNS_URI,
 };
-use crate::{Error, Limits};
+use crate::Error;
 
 /// Turns the bytes of a part into text, by its byte order mark or, without
 /// one, by how its first characters are encoded.
@@ -216,8 +216,8 @@ pub(super) fn parse(
     root: Option<Ix>,
     base: ScopeId,
     fragment: bool,
-    limits: &Limits,
 ) -> Result<Vec<Ix>, Error> {
+    let max_depth = tree.limits.max_depth;
     let buf = tree.bufs.len() as u32;
     if text.len() >= u32::MAX as usize {
         return Err(Error::Unsupported("XML parts of 4 GiB or more".into()));
@@ -247,23 +247,14 @@ pub(super) fn parse(
     let mut keys: Vec<(Option<UriId>, &str, usize)> = vec![];
     let mut i = 0;
 
-    // Every node the parse makes goes through here: the node limit is
-    // checked before the node is allocated, whatever its kind.
-    let mut count = 0usize;
-    let mut add = |tree: &mut Tree,
-                   stack: &[Open],
-                   top: &mut Vec<Ix>,
-                   data: Data,
-                   span: Option<Span>|
+    // Every node the parse makes goes through here. The tree checks the
+    // node limit before it allocates a node, whatever its kind.
+    let add = |tree: &mut Tree,
+               stack: &[Open],
+               top: &mut Vec<Ix>,
+               data: Data,
+               span: Option<Span>|
      -> Result<Ix, Error> {
-        if count >= limits.max_xml_nodes {
-            return Err(Error::Limit {
-                what: format!("an XML part with more than {} nodes", limits.max_xml_nodes),
-                field: "max_xml_nodes",
-                limit: limits.max_xml_nodes as u64,
-            });
-        }
-        count += 1;
         let id = tree.push(data, span)?;
         match stack.last().map(|o| o.id).or(root) {
             Some(p) => {
@@ -533,11 +524,11 @@ pub(super) fn parse(
                 }
                 root_seen = true;
             }
-            if stack.len() >= limits.max_depth {
+            if stack.len() >= max_depth {
                 return Err(Error::Limit {
-                    what: format!("XML nested more than {} levels deep", limits.max_depth),
+                    what: format!("XML nested more than {max_depth} levels deep"),
                     field: "max_depth",
-                    limit: limits.max_depth as u64,
+                    limit: max_depth as u64,
                 });
             }
             let name = tree.intern_qname(qname, prefix.len(), ns);

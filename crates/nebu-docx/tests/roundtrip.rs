@@ -26,7 +26,10 @@ fn parsed_but_unchanged_parts_keep_the_file() {
             .filter(|p| p.ends_with(".xml") || p.ends_with(".rels"))
         {
             let tree = doc.xml(part).unwrap_or_else(|e| panic!("{name}: {e}"));
-            assert!(!tree.is_changed());
+            assert!(
+                tree.to_bytes() == support::entry(&bytes, part),
+                "{name} {part}"
+            );
         }
         let out = doc.to_bytes().unwrap();
         assert!(out == bytes, "{name}");
@@ -42,33 +45,6 @@ fn every_xml_part_writes_back_its_bytes() {
             }
             let tree = Tree::parse(data.clone()).unwrap_or_else(|e| panic!("{name} {part}: {e}"));
             assert!(tree.to_bytes() == data, "{name} {part}");
-        }
-    }
-}
-
-#[test]
-fn source_ranges_cover_the_node_bytes() {
-    for (name, bytes) in corpus() {
-        for (part, data) in entries(&bytes) {
-            if !part.ends_with(".xml") {
-                continue;
-            }
-            let tree = Tree::parse(data.clone()).unwrap();
-            let root = tree.root_element();
-            let r = tree.source_range(root).unwrap().unwrap();
-            let s = &data[r];
-            match name {
-                "utf16" if part.starts_with("docProps") => {
-                    assert_eq!(s.len() % 2, 0);
-                    assert!(
-                        s.starts_with(&[b'<', 0]) || s.starts_with(&[0, b'<']),
-                        "{part}"
-                    );
-                }
-                _ => {
-                    assert!(s.starts_with(b"<") && s.ends_with(b">"), "{name} {part}");
-                }
-            }
         }
     }
 }

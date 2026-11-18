@@ -47,6 +47,9 @@ mod chars;
 mod parse;
 mod write;
 
+#[cfg(test)]
+mod tests;
+
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ops::Range;
@@ -259,6 +262,9 @@ pub struct Tree {
     uris: Vec<Box<str>>,
     uri_index: HashMap<Box<str>, UriId>,
     encoding: Encoding,
+    /// The limits the tree was made with. They bound it for its whole life:
+    /// every node it allocates and every edit that deepens it.
+    limits: Limits,
 }
 
 impl Clone for Tree {
@@ -273,6 +279,7 @@ impl Clone for Tree {
             uris: self.uris.clone(),
             uri_index: self.uri_index.clone(),
             encoding: self.encoding,
+            limits: self.limits.clone(),
         }
     }
 }
@@ -288,11 +295,17 @@ impl Tree {
     /// with a byte order mark; [`to_bytes`](Self::to_bytes) writes the same
     /// encoding back.
     pub fn parse(bytes: impl Into<Vec<u8>>) -> Result<Tree, Error> {
-        Tree::parse_limited(bytes.into(), &Limits::default())
+        Tree::parse_with_limits(bytes, &Limits::default())
     }
 
-    pub(crate) fn parse_limited(bytes: Vec<u8>, limits: &Limits) -> Result<Tree, Error> {
-        let (text, encoding) = parse::decode_bytes(bytes)?;
+    /// Parses a complete XML document with the given limits. The tree keeps
+    /// them: [`max_xml_nodes`](Limits::max_xml_nodes) counts every node it
+    /// ever allocates, parsed, created, copied or from a fragment, and
+    /// [`max_depth`](Limits::max_depth) bounds every edit that deepens it.
+    /// An edit over a limit is refused with [`Error::Limit`] and changes
+    /// nothing.
+    pub fn parse_with_limits(bytes: impl Into<Vec<u8>>, limits: &Limits) -> Result<Tree, Error> {
+        let (text, encoding) = parse::decode_bytes(bytes.into())?;
         let mut t = Tree {
             id: new_tree_id(),
             bufs: vec![],
@@ -303,6 +316,7 @@ impl Tree {
             uris: vec![],
             uri_index: HashMap::new(),
             encoding,
+            limits: limits.clone(),
         };
         t.intern_uri(XML_NS);
         t.intern_uri(XMLNS_NS);
@@ -313,7 +327,7 @@ impl Tree {
             span: None,
             flags: 0,
         });
-        parse::parse(&mut t, text, Some(DOCUMENT), 0, false, limits)?;
+        parse::parse(&mut t, text, Some(DOCUMENT), 0, false)?;
         Ok(t)
     }
 
@@ -325,8 +339,9 @@ impl Tree {
     ///
     /// The fragment's nodes are written as parsed wherever the tree binds
     /// the same prefixes to the same namespaces, and with the tree's own
-    /// prefixes where it does not. The fragment is parsed with the default
-    /// [`Limits`].
+    /// prefixes where it does not. The fragment's nodes count against the
+    /// tree's [`Limits::max_xml_nodes`], and its nesting against
+    /// [`Limits::max_depth`]; over either, nothing is added.
     pub fn parse_fragment(
         &mut self,
         xml: &str,
@@ -352,7 +367,7 @@ impl Tree {
         }
         let scope = self.push_scope(Scope::new(None, bindings));
         let (nodes, scopes, bufs) = (self.nodes.len(), self.scopes.len(), self.bufs.len());
-        match parse::parse(self, xml.to_owned(), None, scope, true, &Limits::default()) {
+        match parse::parse(self, xml.to_owned(), None, scope, true) {
             Ok(ids) => Ok(ids.into_iter().map(|i| self.handle(i)).collect()),
             Err(e) => {
                 self.nodes.truncate(nodes);
@@ -392,7 +407,7 @@ impl Tree {
     }
 
     /// True if an edit reached the document since it was parsed.
-    pub fn is_changed(&self) -> bool {
+    pub(crate) fn is_changed(&self) -> bool {
         self.nodes[DOCUMENT as usize].flags != 0
     }
 
@@ -598,8 +613,10 @@ impl Tree {
 
     /// The byte range a node was parsed from, in the bytes given to
     /// [`parse`](Self::parse). `None` for nodes that were created or came
-    /// from a fragment. It stays the same after edits.
-    pub fn source_range(&self, id: NodeId) -> Result<Option<Range<usize>>, Error> {
+    /// from a fragment. It stays the same after edits. Only the tests use
+    /// it.
+    #[cfg(test)]
+    pub(crate) fn source_range(&self, id: NodeId) -> Result<Option<Range<usize>>, Error> {
         let Some(s) = self.node(id)?.span else {
             return Ok(None);
         };
@@ -830,7 +847,8 @@ impl Tree {
     /// Copies a node and everything below it. The copy is unattached and is
     /// written as the original was wherever it is attached in the same
     /// namespace scope. The document node and the XML declaration cannot be
-    /// copied.
+    /// copied. The copy's nodes count against [`Limits::max_xml_nodes`]; a
+    /// copy that does not fit is refused whole.
     pub fn deep_clone(&mut self, id: NodeId) -> Result<NodeId, Error> {
         let i = self.ix(id)?;
         if matches!(self.n(i).data, Data::Document | Data::Decl) {
@@ -838,6 +856,13 @@ impl Tree {
                 "the document node and the XML declaration cannot be copied".into(),
             ));
         }
+        let mut size = 0;
+        let mut stack = vec![i];
+        while let Some(n) = stack.pop() {
+            size += 1;
+            stack.extend_from_slice(&self.n(n).children);
+        }
+        self.room(size)?;
         let copy = |t: &mut Tree, src: Ix, parent: Option<Ix>| -> Result<Ix, Error> {
             let n = t.n(src);
             let node = Node {
@@ -922,7 +947,62 @@ impl Tree {
         }
     }
 
+    /// Checks that `extra` more nodes fit the node limit. Every node the
+    /// tree allocates, whatever made it, is checked here first.
+    fn room(&self, extra: usize) -> Result<(), Error> {
+        let max = self.limits.max_xml_nodes;
+        // The document node is not counted.
+        if (self.nodes.len() - 1).saturating_add(extra) > max {
+            return Err(Error::Limit {
+                what: format!("an XML part with more than {max} nodes"),
+                field: "max_xml_nodes",
+                limit: max as u64,
+            });
+        }
+        Ok(())
+    }
+
+    /// Checks that putting `child` under `parent` keeps every element within
+    /// the depth limit. Detached subtrees are bounded too, from their own
+    /// top, so a subtree built apart cannot grow past the limit either.
+    fn check_depth(&self, parent: Ix, child: Ix) -> Result<(), Error> {
+        if !matches!(self.n(child).data, Data::Element(_)) {
+            return Ok(());
+        }
+        let max = self.limits.max_depth;
+        let mut above = 0usize;
+        let mut cur = Some(parent);
+        while let Some(a) = cur {
+            if matches!(self.n(a).data, Data::Element(_)) {
+                above += 1;
+            }
+            cur = self.n(a).parent;
+        }
+        let over = || Error::Limit {
+            what: format!("XML nested more than {max} levels deep"),
+            field: "max_depth",
+            limit: max as u64,
+        };
+        if above >= max {
+            return Err(over());
+        }
+        // Only elements nest; the deepest element below `child` decides.
+        let mut stack = vec![(child, above + 1)];
+        while let Some((n, depth)) = stack.pop() {
+            if depth > max {
+                return Err(over());
+            }
+            for &c in &self.n(n).children {
+                if matches!(self.n(c).data, Data::Element(_)) {
+                    stack.push((c, depth + 1));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn push_raw(&mut self, node: Node) -> Result<Ix, Error> {
+        self.room(1)?;
         let Ok(id) = Ix::try_from(self.nodes.len()) else {
             return Err(Error::Edit(
                 "a tree cannot hold more than 4,294,967,295 nodes".into(),
@@ -1155,6 +1235,7 @@ impl Tree {
             }
             cur = self.n(a).parent;
         }
+        self.check_depth(p, c)?;
         Ok((p, c))
     }
 

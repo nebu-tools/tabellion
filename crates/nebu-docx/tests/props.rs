@@ -8,7 +8,9 @@ use std::collections::BTreeMap;
 
 use nebu_docx::xml::{NodeId, Tree};
 use proptest::prelude::*;
-use support::edits::{BOUNDARY_DOCUMENTS, C, URIS, document, from_tree, reference, tidy};
+use support::edits::{
+    BOUNDARY_DOCUMENTS, C, URIS, document, from_tree, node_ranges, reference, tidy,
+};
 
 const LOCALS: [&str; 4] = ["a", "b", "c", "d"];
 const ATTRS: [&str; 3] = ["x", "y", "z"];
@@ -305,10 +307,11 @@ proptest! {
     fn an_edit_stays_inside_its_target(seed in any::<u64>(), edit in edit_strategy()) {
         let xml = document(seed);
         let mut t = Tree::parse(xml.clone()).unwrap();
+        let ranges = node_ranges(&t, xml.as_bytes());
         let mut m = Model { els: vec![] };
         m.add(&reference(&xml), None);
         if let Some(target) = apply(&mut t, &mut m, &edit) {
-            let r = t.source_range(target).unwrap().unwrap();
+            let r = ranges[&target].clone();
             let out = t.to_bytes();
             let src = xml.as_bytes();
             prop_assert!(out.starts_with(&src[..r.start]));

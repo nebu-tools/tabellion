@@ -58,7 +58,22 @@ changes silently: encrypted entries, archives split over several disks,
 bytes between entries or between the last entry and the central directory,
 an end record that is not at the end of the file, a local header that names
 another entry or does not match its directory record, a data descriptor
-that does not match, and entries that overlap.
+that does not match, and entries that overlap. An archive comment that
+contains an end of central directory signature is refused, because a reader
+that searches from the end could take the comment for the end record and
+read another archive.
+
+Each local header must agree with its central directory record in the name,
+the compression method, the encryption, data descriptor and UTF-8 flags, the
+CRC and both sizes, with zip64 fields read on both sides. The one difference
+allowed is the one the zip format allows: with a data descriptor, the local
+header may give zero for the CRC and the sizes. The descriptor must then
+agree with the directory record. A descriptor may start with a signature or
+not and may hold 4-byte or 8-byte sizes. The engine reads it in each of
+these layouts and takes the one whose fields equal the directory record. If
+two fit, the next record decides, since records follow each other without
+gaps. If it does not decide, the archive is ambiguous and refused. Each of
+these errors names the entry and the field.
 
 Content types and relationships are parts like any other; adding an image
 adds one `Relationship` element and, if needed, one `Override` element, and
@@ -114,9 +129,10 @@ written again with the prefixes of its new place.
 
 ### Untrusted input
 
-The engine also runs on a server, on files that strangers upload. Opening a
-file has limits, with defaults that suit documents far larger than people
-write and that a caller can raise:
+The engine also runs on a server, on files that strangers upload. A
+document has limits, with defaults that suit documents far larger than
+people write and that a caller can raise. They bound it for its whole life,
+at open and under edits:
 
 | Limit | Default |
 | --- | --- |
@@ -127,13 +143,24 @@ write and that a caller can raise:
 | Nodes in one XML part: elements, text, comments, CDATA sections, processing instructions and the XML declaration | 10 million |
 
 Each limit is checked in one place: the entry count when the archive is
-read, the part sizes where a part is decompressed, the depth where the parser
-opens an element, and the node count where the parser makes a node of any
-kind, before it makes it. Decompression stops at the limit, whatever size
-the zip headers claim, so a zip bomb costs no more than the limit, and the
-checksum and size of every part read are checked. Parts are decompressed
-only when they are read, and an unchanged part is copied without being
-decompressed at all. The parser and the writer use no recursion, so depth
+read, the part sizes where a part is decompressed, the node count where the
+tree makes a node of any kind, before it makes it, and the depth where the
+parser opens an element and where an edit attaches a node. A tree keeps the
+limits it was opened with. Its node count covers the nodes that edits
+create, copy or parse from a fragment, and an insertion, move or fragment
+that would nest elements deeper than the limit is refused. A subtree that is
+not attached is held to the depth limit as well. An edit over a limit gives
+the same error as an open over it, which names the `Limits` field to raise,
+and leaves the tree as it was. A tree parsed on its own has
+`Limits::default()` unless the caller passes others.
+
+Decompression stops at the limit, whatever size the zip headers claim, so a
+zip bomb costs no more than the limit. When a part is first read, its CRC
+and size are checked against the bytes it decompresses to. Parts are
+decompressed only when they are read, and an unchanged part is copied
+without being decompressed at all. Its local header and descriptor have
+been checked against its directory record at open, so the copy says what
+the directory says. The parser and the writer use no recursion, so depth
 costs no stack. Zip entry names with `..` segments, a leading `/`, a
 backslash or control characters, and names that differ only in case, are
 refused.
@@ -285,7 +312,10 @@ fields::update(&mut doc)?;
 ```
 
 The tree is public so that other tools can do what the high-level calls do
-not, but most users never need it.
+not, but most users never need it. A tree can also be parsed on its own,
+with `Tree::parse` for the default limits or `Tree::parse_with_limits`. Where
+each node came from and whether the tree changed are kept inside the crate:
+the writer uses them, and callers see their effect in the bytes.
 
 A node handle, `NodeId`, carries the identity of the tree that made it, and
 every method that takes one checks it: a handle from another part's tree,
@@ -724,15 +754,18 @@ results that should show the time of opening, and `INCLUDETEXT` or
   prefixes differently, removals, copies, fragments with clashing bindings
   and handles of another tree: the output must parse, roxmltree must read
   the names, namespaces, attributes and text the tree reports, and every
-  node no edit touched must keep its bytes. The `edit` fuzz target runs the
-  same oracle.
+  node no edit touched must keep its bytes. One run in four uses limits a
+  little above what the document needs: the tree must stay within them,
+  and an edit they refuse must leave the tree as it was. The `edit` fuzz
+  target runs the same oracle.
 - **Conformance.** `tools/xmlconf.sh` runs the parser over the W3C XML
   Conformance Test Suite's cases that apply to a parser without DTDs, and
   CI runs it too. A disagreement fails the run unless
   `tests/xmlconf-expected.txt` lists it with a reason.
 - **Hostile input.** Truncated and damaged archives, zip bombs, deep nesting,
   malformed XML, duplicate and unsafe entry names give errors, never a panic.
-  Each limit is tested with an input of exactly its value and one more.
+  Each limit is tested with an input of exactly its value and one more, at
+  open and for every edit that makes nodes or deepens the tree.
 - **Schema validation.** Every output is validated against the ECMA-376
   transitional schemas plus Microsoft's extensions with the Open XML SDK's
   validator (a small .NET tool run in CI). Word's tolerance is not the

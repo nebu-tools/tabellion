@@ -23,8 +23,8 @@ record apart from the offset), and the entries keep their order. In a part
 that changed, only the edited nodes are written again, and the result is
 always well-formed XML. The engine resolves XML namespaces, so a
 document that uses an unusual prefix for Word's namespace works like any
-other. It has limits on size and depth, so it can open files from people
-you do not know.
+other. It has limits on size, depth and node count, which hold at open and
+under edits, so it can open and edit files from people you do not know.
 
 The command line has one command, `roundtrip`. It opens a document, saves it
 unchanged and checks that the copy is the same file, byte for byte:

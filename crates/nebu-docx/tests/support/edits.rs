@@ -9,14 +9,21 @@
 //! - the tree, the tree parsed from the output, and roxmltree reading the
 //!   output see the same elements, namespaces, attributes and text;
 //! - every element, comment, processing instruction and CDATA section that
-//!   no edit touched is written as the bytes it was parsed from.
+//!   no edit touched is written as the bytes it was parsed from;
+//! - the tree stays within the limits it was parsed with, and an edit the
+//!   limits refuse leaves the tree as it was.
+//!
+//! Some runs use limits just above what the document needs, so that edits
+//! reach them.
 
 #![allow(dead_code)]
 
-use std::collections::{BTreeMap, HashSet};
+use std::cell::Cell;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::ops::Range;
 
-use nebu_docx::Error;
 use nebu_docx::xml::{NodeId, NodeKind, Tree, XML_NS};
+use nebu_docx::{Error, Limits};
 
 // ---- random documents -----------------------------------------------------
 
@@ -438,8 +445,11 @@ impl State {
 }
 
 /// An edit either works or gives an error; a foreign handle gives
-/// `ForeignNode`.
-fn checked<T>(r: Result<T, Error>, foreign: bool) -> Option<T> {
+/// `ForeignNode`. `refused` notes an edit the limits refused.
+fn checked<T>(refused: &Cell<bool>, r: Result<T, Error>, foreign: bool) -> Option<T> {
+    if matches!(r, Err(Error::Limit { .. })) {
+        refused.set(true);
+    }
     match r {
         Ok(v) => {
             assert!(!foreign, "a foreign handle was accepted");
@@ -455,7 +465,23 @@ fn checked<T>(r: Result<T, Error>, foreign: bool) -> Option<T> {
 
 /// Applies the edits that `ops` describes to `xml` and checks the result.
 pub fn run(xml: &str, ops: &[u8]) {
-    let Ok(mut t) = Tree::parse(xml) else { return };
+    let Ok(t) = Tree::parse(xml) else { return };
+    // One run in four uses limits a little above what the document needs.
+    let (limits, ops) = match ops {
+        [l, n, d, rest @ ..] if l % 4 == 0 => {
+            let doc = t.document();
+            let nodes = t.descendants(doc).unwrap().count();
+            let limits = Limits {
+                max_xml_nodes: nodes + *n as usize % 12,
+                max_depth: (depth(&t, doc) + *d as usize % 3).max(1),
+                ..Limits::default()
+            };
+            (limits, rest)
+        }
+        _ => (Limits::default(), ops),
+    };
+    // A document exactly at its limits opens.
+    let mut t = Tree::parse_with_limits(xml, &limits).expect("a document within its limits");
     let other = Tree::parse("<f><g/></f>").unwrap();
     let doc = t.document();
     let mut s = State {
@@ -465,12 +491,15 @@ pub fn run(xml: &str, ops: &[u8]) {
         touched: HashSet::new(),
         foreign: other.root_element(),
     };
-    let original: HashSet<NodeId> = s.pool.iter().copied().collect();
+    let original = node_ranges(&t, xml.as_bytes());
     let mut c = Choices(ops);
     let mut steps = 0;
     while !c.done() && steps < 64 {
         steps += 1;
         let op = c.byte() % 14;
+        let before = t.to_bytes();
+        let nodes_before = t.descendants(doc).unwrap().count();
+        let refused = Cell::new(false);
         match op {
             0 => {
                 let (ns, name) = (c.pick(&NAMESPACES), c.pick(&NAMES));
@@ -479,12 +508,12 @@ pub fn run(xml: &str, ops: &[u8]) {
                 if ns == Some(XML_NS) {
                     continue;
                 }
-                if let Ok(e) = t.create_element(ns, name) {
+                if let Some(e) = checked(&refused, t.create_element(ns, name), false) {
                     s.add(&t, e);
                 }
             }
             1 => {
-                if let Ok(x) = t.create_text(c.pick(&TEXTS)) {
+                if let Some(x) = checked(&refused, t.create_text(c.pick(&TEXTS)), false) {
                     s.add(&t, x);
                 }
             }
@@ -492,7 +521,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                 let n = s.node(&mut c);
                 let f = n == s.foreign;
                 let v = c.pick(&TEXTS);
-                if checked(t.set_text(n, v), f).is_some() {
+                if checked(&refused, t.set_text(n, v), f).is_some() {
                     s.up(&t, n);
                     let kids: Vec<NodeId> = t.children(n).unwrap().collect();
                     for k in kids {
@@ -504,7 +533,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                 let n = s.node(&mut c);
                 let f = n == s.foreign;
                 let (ns, name, v) = (c.pick(&NAMESPACES), c.pick(&NAMES), c.pick(&TEXTS));
-                if checked(t.set_attribute(n, ns, name, v), f).is_some() {
+                if checked(&refused, t.set_attribute(n, ns, name, v), f).is_some() {
                     s.up(&t, n);
                 }
             }
@@ -512,7 +541,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                 let n = s.node(&mut c);
                 let f = n == s.foreign;
                 let (ns, local) = (c.pick(&NAMESPACES), c.pick(&["x", "y", "z", "k", "lang"]));
-                if checked(t.remove_attribute(n, ns, local), f) == Some(true) {
+                if checked(&refused, t.remove_attribute(n, ns, local), f) == Some(true) {
                     s.up(&t, n);
                 }
             }
@@ -523,7 +552,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                 if ns == Some(XML_NS) {
                     continue;
                 }
-                if checked(t.set_name(n, ns, name), f).is_some() {
+                if checked(&refused, t.set_name(n, ns, name), f).is_some() {
                     s.up(&t, n);
                     s.down(&t, n);
                 }
@@ -539,7 +568,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                     8 => t.insert_before(a, b),
                     _ => t.insert_after(a, b),
                 };
-                if checked(r, f).is_some() {
+                if checked(&refused, r, f).is_some() {
                     if let Some(p) = old {
                         s.up(&t, p);
                     }
@@ -551,7 +580,7 @@ pub fn run(xml: &str, ops: &[u8]) {
                 let n = s.node(&mut c);
                 let f = n == s.foreign;
                 let old = (!f).then(|| t.parent(n).unwrap()).flatten();
-                if checked(t.detach(n), f).is_some() {
+                if checked(&refused, t.detach(n), f).is_some() {
                     if let Some(p) = old {
                         s.up(&t, p);
                     }
@@ -561,25 +590,135 @@ pub fn run(xml: &str, ops: &[u8]) {
             11 => {
                 let n = s.node(&mut c);
                 let f = n == s.foreign;
-                if let Some(copy) = checked(t.deep_clone(n), f) {
+                if let Some(copy) = checked(&refused, t.deep_clone(n), f) {
                     s.add(&t, copy);
                 }
             }
             _ => {
                 let (x, b) = (c.pick(&FRAGMENTS), c.pick(&BINDINGS));
-                if let Ok(nodes) = t.parse_fragment(x, b) {
+                if let Some(nodes) = checked(&refused, t.parse_fragment(x, b), false) {
                     for n in nodes {
                         s.add(&t, n);
                     }
                 }
             }
         }
+        if refused.get() {
+            assert!(t.to_bytes() == before, "a refused edit changed the tree");
+            assert_eq!(t.descendants(doc).unwrap().count(), nodes_before);
+        }
     }
+    within(&t, &s.pool, &limits);
     check(&t, xml, &original, &s.touched);
 }
 
+/// The elements on the longest path down from `n`, `n` included.
+fn depth(t: &Tree, n: NodeId) -> usize {
+    let own = usize::from(t.kind(n).unwrap() == NodeKind::Element);
+    own + t
+        .children(n)
+        .unwrap()
+        .map(|k| depth(t, k))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Every node the run made is in `pool`; together they fit the node limit,
+/// and no tree, attached or not, is deeper than the depth limit.
+fn within(t: &Tree, pool: &[NodeId], limits: &Limits) {
+    let all: HashSet<NodeId> = pool.iter().copied().collect();
+    // The document node does not count.
+    assert!(
+        all.len() - 1 <= limits.max_xml_nodes,
+        "{} nodes, more than the limit of {}",
+        all.len() - 1,
+        limits.max_xml_nodes
+    );
+    for &n in &all {
+        if t.parent(n).unwrap().is_none() {
+            assert!(
+                depth(t, n) <= limits.max_depth,
+                "a tree {} deep, more than the limit of {}",
+                depth(t, n),
+                limits.max_depth
+            );
+        }
+    }
+}
+
+/// The byte range of each node of `t`, which must be freshly parsed from
+/// `src`. A scanner of its own finds the ranges, so the check does not rest
+/// on the parser's own record of them. Adjacent text reads as one node.
+pub fn node_ranges(t: &Tree, src: &[u8]) -> HashMap<NodeId, Range<usize>> {
+    let mut found: Vec<Range<usize>> = vec![];
+    let mut open: Vec<usize> = vec![];
+    let find = |from: usize, pat: &[u8]| {
+        src[from..]
+            .windows(pat.len())
+            .position(|w| w == pat)
+            .map(|p| from + p + pat.len())
+            .expect("a well-formed document")
+    };
+    let mut i = if src.starts_with(b"\xEF\xBB\xBF") {
+        3
+    } else {
+        0
+    };
+    while i < src.len() {
+        if src[i] != b'<' {
+            let end = src[i..]
+                .iter()
+                .position(|&c| c == b'<')
+                .map_or(src.len(), |p| i + p);
+            found.push(i..end);
+            i = end;
+        } else if src[i..].starts_with(b"<!--") {
+            let end = find(i + 4, b"-->");
+            found.push(i..end);
+            i = end;
+        } else if src[i..].starts_with(b"<![CDATA[") {
+            let end = find(i + 9, b"]]>");
+            found.push(i..end);
+            i = end;
+        } else if src[i..].starts_with(b"<?") {
+            let end = find(i + 2, b"?>");
+            found.push(i..end);
+            i = end;
+        } else if src[i..].starts_with(b"</") {
+            let end = find(i + 2, b">");
+            let k = open.pop().expect("an open element");
+            found[k].end = end;
+            i = end;
+        } else {
+            // A start tag: '>' inside a quoted value does not end it.
+            let mut j = i + 1;
+            let mut quote = None;
+            while quote.is_some() || src[j] != b'>' {
+                match (quote, src[j]) {
+                    (None, q @ (b'"' | b'\'')) => quote = Some(q),
+                    (Some(q), c) if c == q => quote = None,
+                    _ => {}
+                }
+                j += 1;
+            }
+            found.push(i..j + 1);
+            if src[j - 1] != b'/' {
+                open.push(found.len() - 1);
+            }
+            i = j + 1;
+        }
+    }
+    let nodes: Vec<NodeId> = t.descendants(t.document()).unwrap().collect();
+    assert_eq!(
+        nodes.len(),
+        found.len(),
+        "the scanner and the parser disagree"
+    );
+    nodes.into_iter().zip(found).collect()
+}
+
 /// The checks that follow any edit sequence.
-fn check(t: &Tree, xml: &str, original: &HashSet<NodeId>, touched: &HashSet<NodeId>) {
+fn check(t: &Tree, xml: &str, original: &HashMap<NodeId, Range<usize>>, touched: &HashSet<NodeId>) {
     let out = t.to_bytes();
     let text = String::from_utf8(out.clone()).expect("UTF-8 in, UTF-8 out");
     let again = Tree::parse(out.clone())
@@ -605,15 +744,18 @@ fn check(t: &Tree, xml: &str, original: &HashSet<NodeId>, touched: &HashSet<Node
             .filter(|&n| t.kind(n).unwrap() != NodeKind::Text)
             .collect()
     };
+    let ranges = node_ranges(&again, &out);
     let (a, b) = (marked(t), marked(&again));
     assert_eq!(a.len(), b.len());
     for (&n, &m) in a.iter().zip(&b) {
         assert_eq!(t.kind(n).unwrap(), again.kind(m).unwrap());
-        if !original.contains(&n) || touched.contains(&n) {
+        let Some(r) = original.get(&n).cloned() else {
+            continue;
+        };
+        if touched.contains(&n) {
             continue;
         }
-        let r = t.source_range(n).unwrap().expect("a parsed node");
-        let r2 = again.source_range(m).unwrap().expect("a parsed node");
+        let r2 = ranges[&m].clone();
         assert!(
             xml.as_bytes()[r.clone()] == out[r2],
             "an untouched node changed: {:?}\n{xml:?}\n=>\n{text:?}",

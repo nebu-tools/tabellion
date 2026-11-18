@@ -500,3 +500,164 @@ fn character_references_take_any_number_of_leading_zeros() {
     let t = Tree::parse(long).unwrap();
     assert_eq!(t.text_content(t.root_element()).unwrap(), "A");
 }
+
+/// An edit to try on a tree.
+type Edit<'a> = &'a dyn Fn(&mut Tree) -> Result<(), Error>;
+
+/// A tree of `src` with these limits.
+fn limited(src: &str, nodes: usize, depth: usize) -> Tree {
+    let limits = Limits {
+        max_xml_nodes: nodes,
+        max_depth: depth,
+        ..Limits::default()
+    };
+    Tree::parse_with_limits(src, &limits).unwrap()
+}
+
+/// `edit` works on a tree of `src` whose `field` is `at`, and with one less
+/// it gives the same error as an open over the limit and changes nothing.
+fn holds_at(src: &str, field: &str, at: usize, edit: Edit) {
+    let tree = |v: usize| match field {
+        "max_xml_nodes" => limited(src, v, 256),
+        _ => limited(src, 10_000, v),
+    };
+    let mut t = tree(at);
+    edit(&mut t).unwrap_or_else(|e| panic!("{field} {at}: {e}"));
+    let mut t = tree(at - 1);
+    let before = t.to_bytes();
+    let e = edit(&mut t).expect_err("over the limit");
+    assert!(
+        matches!(&e, Error::Limit { field: f, .. } if *f == field),
+        "{field} {}: {e}",
+        at - 1
+    );
+    let shown = e.to_string();
+    assert!(shown.contains(&format!("raise Limits::{field}")), "{shown}");
+    assert_eq!(t.to_bytes(), before, "a refused edit changed the tree");
+}
+
+/// Each edit that makes nodes stops at the node limit. The tree `<a><b/></a>`
+/// has 2 nodes.
+#[test]
+fn every_edit_that_makes_nodes_holds_at_the_node_limit() {
+    let src = "<a><b/></a>";
+    let b = |t: &Tree| t.elements(t.root_element()).unwrap().next().unwrap();
+    let edits: [(usize, Edit); 5] = [
+        (1, &|t| t.create_element(None, "c").map(drop)),
+        (1, &|t| t.create_text("c").map(drop)),
+        (1, &|t| t.set_text(b(t), "c")),
+        (3, &|t| t.parse_fragment("<x><y/>z</x>", &[]).map(drop)),
+        (2, &|t| t.deep_clone(t.root_element()).map(drop)),
+    ];
+    for (k, (more, edit)) in edits.into_iter().enumerate() {
+        holds_at(src, "max_xml_nodes", 2 + more, edit);
+        // A refused edit uses none of the budget: what is left still fits.
+        let mut t = limited(src, 2 + more - 1, 256);
+        let _ = edit(&mut t);
+        for _ in 0..more - 1 {
+            t.create_element(None, "e")
+                .unwrap_or_else(|e| panic!("edit {k}: {e}"));
+        }
+        assert!(is_limit(t.create_element(None, "e"), "max_xml_nodes"));
+    }
+}
+
+/// Each edit that can deepen the tree stops at the depth limit, attached
+/// or not. `<a><b><c/></b><d><e/></d></a>` is 3 deep, and each edit here
+/// makes it 4 or 5 deep.
+#[test]
+fn every_edit_that_deepens_holds_at_the_depth_limit() {
+    let src = "<a><b><c/></b><d><e/></d></a>";
+    let get = |t: &Tree, name: &str| {
+        t.descendants(t.document())
+            .unwrap()
+            .find(|&n| t.is(n, None, name).unwrap())
+            .unwrap()
+    };
+    // A detached x holding y.
+    let chain = |t: &mut Tree| -> Result<_, Error> {
+        let (x, y) = (t.create_element(None, "x")?, t.create_element(None, "y")?);
+        t.append(x, y)?;
+        Ok((x, y))
+    };
+    let edits: [(usize, Edit); 9] = [
+        (4, &|t| {
+            let n = t.create_element(None, "n")?;
+            t.append(get(t, "c"), n)
+        }),
+        (4, &|t| {
+            let n = t.create_element(None, "n")?;
+            t.insert(get(t, "c"), 0, n)
+        }),
+        // A detached subtree moved in.
+        (5, &|t| {
+            let (x, _) = chain(t)?;
+            t.append(get(t, "c"), x)
+        }),
+        (4, &|t| {
+            let (x, _) = chain(t)?;
+            t.insert_before(get(t, "c"), x)
+        }),
+        (4, &|t| {
+            let (x, _) = chain(t)?;
+            t.insert_after(get(t, "c"), x)
+        }),
+        // An attached subtree moved deeper.
+        (5, &|t| t.append(get(t, "c"), get(t, "d"))),
+        // A detached chain made deeper while detached: x, y, z, z is 4
+        // deep.
+        (4, &|t| {
+            let (_, y) = chain(t)?;
+            let (z, z2) = (t.create_element(None, "z")?, t.create_element(None, "z")?);
+            t.append(z, z2)?;
+            t.append(y, z)
+        }),
+        // A detached subtree that takes in an attached one: x, y, d, e.
+        (4, &|t| {
+            let (_, y) = chain(t)?;
+            t.append(y, get(t, "d"))
+        }),
+        // A fragment attached deep down.
+        (5, &|t| {
+            let f = t.parse_fragment("<x><y/></x>", &[])?;
+            t.append(get(t, "c"), f[0])
+        }),
+    ];
+    for (at, edit) in edits {
+        holds_at(src, "max_depth", at, edit);
+    }
+    // A fragment deeper than the limit is refused as it is parsed.
+    holds_at(src, "max_depth", 4, &|t| {
+        t.parse_fragment("<x><y><z><w/></z></y></x>", &[]).map(drop)
+    });
+}
+
+/// A document's trees keep the document's limits under edits.
+#[test]
+fn a_documents_trees_keep_its_limits_under_edits() {
+    let part = "customXml/n.xml";
+    // Opening reads the content types and the package relationships, which
+    // are 2 deep and have fewer nodes than this part's 301.
+    let bytes = with_part(part, &format!("<a>{}</a>", "<b/>".repeat(300)));
+    let limits = Limits {
+        max_xml_nodes: 302,
+        max_depth: 2,
+        ..Limits::default()
+    };
+    let mut doc = Document::from_bytes_with_limits(bytes, limits).unwrap();
+    let t = doc.xml(part).unwrap();
+    let b = t.elements(t.root_element()).unwrap().next().unwrap();
+    let c = t.create_element(None, "c").unwrap();
+    assert!(is_limit(t.append(b, c), "max_depth"));
+    assert!(is_limit(t.create_element(None, "d"), "max_xml_nodes"));
+    // A tree made without a document has the default limits.
+    let mut t = Tree::parse("<a/>").unwrap();
+    let mut n = t.root_element();
+    for _ in 1..Limits::default().max_depth {
+        let c = t.create_element(None, "c").unwrap();
+        t.append(n, c).unwrap();
+        n = c;
+    }
+    let c = t.create_element(None, "c").unwrap();
+    assert!(is_limit(t.append(n, c), "max_depth"));
+}
