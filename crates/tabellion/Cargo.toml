@@ -1,0 +1,19 @@
+[package]
+name = "tabellion"
+description = "Build and edit Word documents from the command line"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tabellion"
+path = "src/main.rs"
+
+[dependencies]
+nebu-docx.workspace = true
+clap.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

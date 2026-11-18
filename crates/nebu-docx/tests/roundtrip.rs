@@ -1,0 +1,146 @@
+//! An unchanged save gives back the input file, and parsing a part and
+//! writing it unchanged gives back its bytes.
+
+mod support;
+
+use nebu_docx::Document;
+use nebu_docx::xml::Tree;
+use support::{corpus, entries};
+
+#[test]
+fn unchanged_save_is_the_input_file() {
+    for (name, bytes) in corpus() {
+        let doc = Document::from_bytes(bytes.clone()).unwrap_or_else(|e| panic!("{name}: {e}"));
+        let out = doc.to_bytes().unwrap();
+        assert!(out == bytes, "{name}");
+    }
+}
+
+#[test]
+fn parsed_but_unchanged_parts_keep_the_file() {
+    for (name, bytes) in corpus() {
+        let mut doc = Document::from_bytes(bytes.clone()).unwrap();
+        let parts: Vec<String> = doc.parts().map(String::from).collect();
+        for part in parts
+            .iter()
+            .filter(|p| p.ends_with(".xml") || p.ends_with(".rels"))
+        {
+            let tree = doc.xml(part).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                tree.to_bytes() == support::entry(&bytes, part),
+                "{name} {part}"
+            );
+        }
+        let out = doc.to_bytes().unwrap();
+        assert!(out == bytes, "{name}");
+    }
+}
+
+#[test]
+fn every_xml_part_writes_back_its_bytes() {
+    for (name, bytes) in corpus() {
+        for (part, data) in entries(&bytes) {
+            if !(part.ends_with(".xml") || part.ends_with(".rels")) {
+                continue;
+            }
+            let tree = Tree::parse(data.clone()).unwrap_or_else(|e| panic!("{name} {part}: {e}"));
+            assert!(tree.to_bytes() == data, "{name} {part}");
+        }
+    }
+}
+
+#[test]
+fn saving_to_a_file_and_opening_it_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("out.docx");
+    let doc = Document::from_bytes(support::sample()).unwrap();
+    doc.save(&path).unwrap();
+    let again = Document::open(&path).unwrap();
+    assert_eq!(again.main_part(), "word/document.xml");
+    assert!(std::fs::read(&path).unwrap() == support::sample());
+    assert_eq!(
+        std::fs::read_dir(dir.path()).unwrap().count(),
+        1,
+        "no temporary file is left"
+    );
+}
+
+/// Writes the corpus, saved unchanged, and two edited documents to the
+/// directory in `TABELLION_CORPUS_OUT`, for a check in Word with
+/// `tools/word/check.sh`.
+#[test]
+#[ignore = "writes files for a Word check"]
+fn write_corpus_for_word() {
+    let Some(dir) = std::env::var_os("TABELLION_CORPUS_OUT") else {
+        return;
+    };
+    let dir = std::path::PathBuf::from(dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, bytes) in corpus() {
+        let doc = Document::from_bytes(bytes).unwrap();
+        doc.save(dir.join(format!("{name}.docx"))).unwrap();
+    }
+    boundaries_for_word(&dir);
+    for name in ["prefixed", "default-namespace"] {
+        let bytes = corpus().into_iter().find(|(n, _)| *n == name).unwrap().1;
+        let mut doc = Document::from_bytes(bytes).unwrap();
+        let t = doc.xml("word/document.xml").unwrap();
+        let body = t
+            .child(t.root_element(), Some(nebu_docx::ns::W), "body")
+            .unwrap()
+            .unwrap();
+        let p = t
+            .parse_fragment(
+                r#"<w:p><w:pPr><w:pStyle w:val="BodyText"/></w:pPr><w:r><w:rPr><w:b/></w:rPr><w:t>Inserted by the engine.</w:t></w:r></w:p>"#,
+                &[("w", nebu_docx::ns::W)],
+            )
+            .unwrap();
+        t.insert(body, 1, p[0]).unwrap();
+        doc.save(dir.join(format!("{name}-edited.docx"))).unwrap();
+    }
+}
+
+/// The sample after edits that put text next to text where it could form
+/// `]]>` or join a carriage return to a line feed, and a fragment whose
+/// default namespace is WordprocessingML, which the file binds to `w`.
+fn boundaries_for_word(dir: &std::path::Path) {
+    use nebu_docx::ns::W;
+    let src = String::from_utf8(support::entry(&support::sample(), "word/document.xml")).unwrap();
+    let src = src.replace(
+        "<w:t>The summary goes here.</w:t>",
+        "<w:t xml:space=\"preserve\">>Greater]]<!--cut-->> and less\r</w:t>",
+    );
+    assert!(src.contains("<!--cut-->"));
+    let bytes = support::sample_with(&[("word/document.xml", Some(src.into_bytes()))]);
+    let mut doc = Document::from_bytes(bytes).unwrap();
+    let t = doc.xml("word/document.xml").unwrap();
+    let wt = t
+        .descendants(t.root_element())
+        .unwrap()
+        .find(|&n| {
+            t.is(n, Some(W), "t").unwrap() && t.text_content(n).unwrap().starts_with(">Greater")
+        })
+        .unwrap();
+    let kids: Vec<_> = t.children(wt).unwrap().collect();
+    let (first, comment, last) = (kids[0], kids[1], kids[2]);
+    let new = t.create_text("]]").unwrap();
+    t.insert_before(first, new).unwrap();
+    t.detach(comment).unwrap();
+    let lf = t.create_text("\nmore").unwrap();
+    t.insert_after(last, lf).unwrap();
+    let body = t.child(t.root_element(), Some(W), "body").unwrap().unwrap();
+    let p = t
+        .parse_fragment(
+            "<p><r><t xml:space='preserve'>Fragment ]]</t></r></p>",
+            &[("", W)],
+        )
+        .unwrap();
+    t.insert(body, 0, p[0]).unwrap();
+    let out = String::from_utf8(t.to_bytes()).unwrap();
+    assert!(
+        out.contains("]&#93;>Greater]]&gt; and less\r&#10;more"),
+        "{out}"
+    );
+    assert!(out.contains("<w:p><w:r><w:t xml:space='preserve'>Fragment ]]</w:t></w:r></w:p>"));
+    doc.save(dir.join("boundaries-edited.docx")).unwrap();
+}

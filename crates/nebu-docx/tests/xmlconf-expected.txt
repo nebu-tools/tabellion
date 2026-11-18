@@ -1,0 +1,5 @@
+# Cases of the W3C XML Conformance Test Suite (release 20130923) where the
+# parser disagrees with the suite on purpose, one per line: the case's ID,
+# a space, and the reason. See tests/xmlconf.rs for the cases that apply.
+#
+# There are none: the parser agrees on all of them.
