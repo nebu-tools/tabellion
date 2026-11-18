@@ -113,6 +113,16 @@ impl Package {
         })
     }
 
+    /// The limits the package was opened with.
+    pub(crate) fn limits(&self) -> &Limits {
+        &self.limits
+    }
+
+    /// The bytes the archive was read from.
+    pub(crate) fn source_bytes(&self) -> &[u8] {
+        &self.archive.bytes
+    }
+
     /// The names of all parts in archive order, directory entries excluded.
     pub(crate) fn names(&self) -> impl Iterator<Item = &str> {
         self.entries

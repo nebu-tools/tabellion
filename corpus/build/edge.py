@@ -1,0 +1,187 @@
+"""Writes corpus/edge.docx: WordprocessingML written by hand for the cases
+that Word does not write from its interface or writes only one way.
+
+    python3 edge.py OUT.docx BIRD.png
+
+Fields nested in field codes, hidden text, symbols and special hyphens,
+breaks, joined paragraphs, mc:AlternateContent whose choice Word does not
+understand, an ignorable element of an unknown namespace, custom XML and
+smart tags, a table row with grid columns before and after, an equation, a
+group content control and one that shows its placeholder, a note with its
+own mark, a bookmark over two paragraphs, a legacy VML picture and two
+paragraphs that share a paraId.
+"""
+import sys
+import zipfile
+
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+NS = (
+    f'xmlns:w="{W}" '
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" '
+    'xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" '
+    'xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" '
+    'xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" '
+    'xmlns:v="urn:schemas-microsoft-com:vml" '
+    'xmlns:o="urn:schemas-microsoft-com:office:office" '
+    'xmlns:x="urn:example:field-notes" '
+    'xmlns:future="urn:example:future-word" '
+    'mc:Ignorable="w14 x"'
+)
+DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+AUTHOR = 'w:author="Wren Ashby" w:date="2026-05-03T08:00:00Z"'
+
+
+def p(body, pid=None, ppr=""):
+    attr = f' w14:paraId="{pid}" w14:textId="77777777"' if pid else ""
+    return f"<w:p{attr}>{ppr}{body}</w:p>"
+
+
+def r(text, rpr=""):
+    space = ' xml:space="preserve"' if text != text.strip() else ""
+    return f"<w:r>{rpr}<w:t{space}>{text}</w:t></w:r>"
+
+
+def fld(kind):
+    return f'<w:r><w:fldChar w:fldCharType="{kind}"/></w:r>'
+
+
+def instr(code):
+    return f'<w:r><w:instrText xml:space="preserve">{code}</w:instrText></w:r>'
+
+
+def style(sid):
+    return f'<w:pPr><w:pStyle w:val="{sid}"/></w:pPr>'
+
+
+body = "".join([
+    p(r("Edge cases of the Alder Marshes survey"), "10000001", style("Title")),
+    p(r("Fields"), "10000002", style("Heading1")),
+    # A complex field nested in the code of another.
+    p(r("The sum is ") + fld("begin") + instr(" IF ") + fld("begin") + instr(" = 2 + 2 ")
+      + fld("separate") + r("4") + fld("end") + instr(' = 4 "right" "wrong" ')
+      + fld("separate") + r("right") + fld("end") + r("."), "10000003"),
+    # A field without a separator has no result.
+    p(r("Nothing follows: ") + fld("begin") + instr(" PAGE ") + fld("end") + r("."), "10000004"),
+    p(r("Text"), "10000005", style("Heading1")),
+    p(r("Seen ") + r("unseen ", "<w:rPr><w:vanish/></w:rPr>") + r("and seen again."), "10000006"),
+    p(r("Tick") + '<w:r><w:sym w:font="Wingdings" w:char="F0FC"/></w:r>'
+      + r(" and non") + "<w:r><w:noBreakHyphen/></w:r>" + r("breaking, opt")
+      + "<w:r><w:softHyphen/></w:r>" + r("ional.") + "<w:r><w:tab/></w:r>" + r("After a tab.")
+      + '<w:r><w:br/></w:r>' + r("After a line break."), "10000007"),
+    # The mark of this paragraph is deleted, so it joins the next one.
+    p(r("Joined"), "10000008", f"<w:pPr><w:rPr><w:del w:id=\"901\" {AUTHOR}/></w:rPr></w:pPr>"),
+    p(r(" together."), "10000009"),
+    # Word does not understand the namespace the choice requires.
+    p('<mc:AlternateContent><mc:Choice Requires="future">' + r("Choice text.")
+      + "</mc:Choice><mc:Fallback>" + r("Fallback text.") + "</mc:Fallback></mc:AlternateContent>",
+      "1000000A"),
+    # An ignorable element of an unknown namespace: its content is ignored.
+    p(r("Before. ") + "<x:aside>" + r("Inside an aside.") + "</x:aside>" + r("After."), "1000000B"),
+    '<w:customXml w:uri="urn:example:field-notes" w:element="note">'
+    + p(r("In custom XML."), "1000000C") + "</w:customXml>",
+    p(r("Near ") + '<w:smartTag w:uri="urn:schemas-microsoft-com:office:smarttags" w:element="place">'
+      + r("Alder") + "</w:smartTag>" + r(" weir."), "1000000D"),
+    # An equation.
+    p(r("Pairs: ") + "<m:oMath><m:r><m:t>a+b=c</m:t></m:r></m:oMath>", "1000000E"),
+    # A bookmark over two paragraphs.
+    p('<w:bookmarkStart w:id="1" w:name="two_paragraphs"/>' + r("First half,"), "1000000F"),
+    p(r("second half.") + '<w:bookmarkEnd w:id="1"/>', "10000010"),
+    # Two paragraphs share a paraId.
+    p(r("Twin one."), "10000011"),
+    p(r("Twin two."), "10000011"),
+    p(r("A direct outline level."), "10000012", '<w:pPr><w:outlineLvl w:val="1"/></w:pPr>'),
+    p(r("A note with its own mark") + '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+      '<w:footnoteReference w:customMarkFollows="1" w:id="2"/><w:t>*</w:t></w:r>'
+      + r(" and one with a number") + '<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+      '<w:footnoteReference w:id="1"/></w:r>' + r("."), "10000013"),
+    p(r("Tables and controls"), "10000014", style("Heading1")),
+    '<w:tbl><w:tblPr><w:tblStyle w:val="TableGrid"/><w:tblW w:w="0" w:type="auto"/></w:tblPr>'
+    '<w:tblGrid><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/><w:gridCol w:w="2000"/></w:tblGrid>'
+    '<w:tr><w:tc>' + p(r("Wren"), "10000015") + '</w:tc><w:tc>' + p(r("Robin"), "10000016")
+    + '</w:tc><w:tc>' + p(r("Dunnock"), "10000017") + '</w:tc></w:tr>'
+    '<w:tr><w:trPr><w:gridBefore w:val="1"/><w:gridAfter w:val="1"/></w:trPr><w:tc>'
+    + p(r("Middle only"), "10000018") + '</w:tc></w:tr></w:tbl>',
+    p("", "10000019"),
+    '<w:sdt><w:sdtPr><w:alias w:val="Visit"/><w:tag w:val="visit:group"/><w:group/></w:sdtPr>'
+    '<w:sdtContent>' + p(r("Visit on ") + '<w:sdt><w:sdtPr><w:alias w:val="Day"/>'
+    '<w:tag w:val="visit:day"/><w:showingPlcHdr/><w:text/></w:sdtPr><w:sdtContent>'
+    + r("Click to enter the day.", '<w:rPr><w:rStyle w:val="PlaceholderText"/></w:rPr>')
+    + "</w:sdtContent></w:sdt>", "1000001A") + p(r("Second line of the visit."), "1000001B")
+    + "</w:sdtContent></w:sdt>",
+    p(r("A legacy picture: ") + '<w:r><w:pict><v:shape id="bird" type="#_x0000_t75" '
+      'style="width:48pt;height:32pt" alt="A bird shape drawn the old way">'
+      '<v:imagedata r:id="rId4" o:title="Legacy bird"/></v:shape></w:pict></w:r>', "1000001C"),
+    '<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1417" w:right="1417" '
+    'w:bottom="1134" w:left="1417" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr>',
+])
+
+document = f"{DECL}<w:document {NS}><w:body>{body}</w:body></w:document>"
+
+styles = f"""{DECL}<w:styles xmlns:w="{W}">
+<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr></w:rPrDefault></w:docDefaults>
+<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>
+<w:style w:type="paragraph" w:styleId="Title"><w:name w:val="Title"/><w:basedOn w:val="Normal"/><w:rPr><w:sz w:val="48"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/><w:pPr><w:outlineLvl w:val="0"/></w:pPr><w:rPr><w:b/><w:sz w:val="32"/></w:rPr></w:style>
+<w:style w:type="paragraph" w:styleId="FootnoteText"><w:name w:val="footnote text"/><w:basedOn w:val="Normal"/></w:style>
+<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/></w:style>
+<w:style w:type="character" w:styleId="FootnoteReference"><w:name w:val="footnote reference"/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>
+<w:style w:type="character" w:styleId="PlaceholderText"><w:name w:val="Placeholder Text"/><w:rPr><w:color w:val="808080"/></w:rPr></w:style>
+<w:style w:type="table" w:default="1" w:styleId="TableNormal"><w:name w:val="Normal Table"/></w:style>
+<w:style w:type="table" w:styleId="TableGrid"><w:name w:val="Table Grid"/><w:basedOn w:val="TableNormal"/><w:tblPr><w:tblBorders><w:top w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:left w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:bottom w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:right w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideH w:val="single" w:sz="4" w:space="0" w:color="auto"/><w:insideV w:val="single" w:sz="4" w:space="0" w:color="auto"/></w:tblBorders></w:tblPr></w:style>
+</w:styles>"""
+
+footnotes = f"""{DECL}<w:footnotes xmlns:w="{W}">
+<w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>
+<w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
+<w:footnote w:id="1"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Counted twice.</w:t></w:r></w:p></w:footnote>
+<w:footnote w:id="2"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:t>*</w:t></w:r><w:r><w:t xml:space="preserve"> Marked by hand.</w:t></w:r></w:p></w:footnote>
+</w:footnotes>"""
+
+settings = f"""{DECL}<w:settings xmlns:w="{W}"><w:defaultTabStop w:val="708"/><w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr></w:settings>"""
+
+types = f"""{DECL}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Default Extension="png" ContentType="image/png"/>
+<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+<Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+<Override PartName="/word/settings.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.settings+xml"/>
+<Override PartName="/word/footnotes.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml"/>
+<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+</Types>"""
+
+REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+package_rels = f"""{DECL}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="{REL}/officeDocument" Target="word/document.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+<Relationship Id="rId3" Type="{REL}/extended-properties" Target="docProps/app.xml"/>
+</Relationships>"""
+
+document_rels = f"""{DECL}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="{REL}/styles" Target="styles.xml"/>
+<Relationship Id="rId2" Type="{REL}/settings" Target="settings.xml"/>
+<Relationship Id="rId3" Type="{REL}/footnotes" Target="footnotes.xml"/>
+<Relationship Id="rId4" Type="{REL}/image" Target="media/bird.png"/>
+</Relationships>"""
+
+core = f"""{DECL}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Edge cases</dc:title><dc:creator>Wren Ashby</dc:creator><cp:lastModifiedBy>Wren Ashby</cp:lastModifiedBy><dcterms:created xsi:type="dcterms:W3CDTF">2026-05-03T08:00:00Z</dcterms:created></cp:coreProperties>"""
+
+app = f"""{DECL}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>tabellion corpus</Application></Properties>"""
+
+out, png = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+    def add(name, data):
+        info = zipfile.ZipInfo(name, date_time=(2026, 5, 3, 8, 0, 0))
+        info.compress_type = zipfile.ZIP_DEFLATED
+        z.writestr(info, data)
+    add("[Content_Types].xml", types)
+    add("_rels/.rels", package_rels)
+    add("docProps/core.xml", core)
+    add("docProps/app.xml", app)
+    add("word/document.xml", document)
+    add("word/_rels/document.xml.rels", document_rels)
+    add("word/styles.xml", styles)
+    add("word/settings.xml", settings)
+    add("word/footnotes.xml", footnotes)
+    add("word/media/bird.png", open(png, "rb").read())

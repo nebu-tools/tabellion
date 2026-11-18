@@ -553,6 +553,32 @@ impl Tree {
         })
     }
 
+    /// The namespace a prefix is bound to at an element, by its own
+    /// declarations and those of its ancestors. An empty prefix asks for
+    /// the default namespace. `None` if the prefix is not bound there.
+    pub fn namespace_of_prefix(&self, id: NodeId, prefix: &str) -> Result<Option<&str>, Error> {
+        let mut i = self.ix(id)?;
+        loop {
+            if let Data::Element(e) = &self.n(i).data
+                && let Some(s) = e.scope
+            {
+                let u = self.lookup(s, prefix).flatten();
+                return Ok(u.map(|u| &*self.uris[u as usize]));
+            }
+            match self.n(i).parent {
+                Some(p) => i = p,
+                None => return Ok((prefix == "xml").then_some(XML_NS)),
+            }
+        }
+    }
+
+    /// The `k`-th child, counting from 0. Lets a walk over the tree keep a
+    /// position without collecting the children.
+    pub(crate) fn child_at(&self, id: NodeId, k: usize) -> Option<NodeId> {
+        let i = self.ix(id).ok()?;
+        self.n(i).children.get(k).map(|&c| self.handle(c))
+    }
+
     /// The attributes of an element in source order, without namespace
     /// declarations. Empty for other nodes.
     pub fn attributes(&self, id: NodeId) -> Result<Vec<Attribute<'_>>, Error> {

@@ -44,7 +44,7 @@ fn roundtrip_reports_a_file_it_cannot_read() {
         .arg(dir.path().join("out.docx"))
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(2));
+    assert_eq!(o.status.code(), Some(3));
     let stderr = String::from_utf8(o.stderr).unwrap();
     assert!(
         stderr.starts_with("tabellion: ") && stderr.contains("not a readable .docx file"),

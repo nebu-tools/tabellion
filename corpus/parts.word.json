@@ -1,0 +1,594 @@
+{
+ "word_version": "16.0",
+ "stories": {
+  "1": [
+   "Parts catalogue: garden pumps\rPumps\rAll prices include delivery.\rThe P-100 pump quietly moves 40 litres a minute.\rThe P-200 pump moves 65 litres a minute.\rSpare seals fit both pumps.\rHoses come in two lengths.\rClamps are sold in pairs.\rHoses come in two lengths.\rPart\r\u0007Name\r\u0007Price\r\u0007\r\u0007P-100\r\u0007Small pump\r\u0007120.00\r\u0007\r\u0007P-200\r\u0007Large pump\r\u0007180.00\r\u0007\r\u0007S-1\r\u0007Seal kit\r\u00079.50\r\u0007\r\u0007H-1\r\u0007Hose\r\u000714.00\r\u0007\r\u0007\rOrder form\rRich text: Notes for the order\rPlain text: Order number\rDate: 2026-05-03\rCombo box: Seal kit\rDrop-down list: Seal kit\rCheck box: ☒\rPicture: /\rBuilding block gallery: Choose a building block.\rDelivery to the north shed.\rPayment on delivery.\rLine item: one pump.\r\r"
+  ],
+  "4": [
+   "Is the P-100 still sold?\rYes, until the end of the year.\rCheck the seal sizes.\r"
+  ]
+ },
+ "sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r"
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r"
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r"
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r"
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r"
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r"
+    }
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "rows": 5,
+   "columns": 3,
+   "nesting": 1,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "text": "Part\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "text": "Name\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "text": "Price\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "text": "P-100\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "text": "Small pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "text": "120.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "text": "P-200\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "text": "Large pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "text": "180.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 1,
+     "text": "S-1\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 2,
+     "text": "Seal kit\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 3,
+     "text": "9.50\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 5,
+     "column": 1,
+     "text": "H-1\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 5,
+     "column": 2,
+     "text": "Hose\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 5,
+     "column": 3,
+     "text": "14.00\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "fields": [],
+ "revisions": [
+  {
+   "story": 1,
+   "type": 1,
+   "author": "Pip Tanager",
+   "text": "All prices include delivery.\r",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 1,
+   "author": "Wren Ashby",
+   "text": "quietly ",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 3,
+   "author": "Wren Ashby",
+   "text": "40 litres",
+   "format": "Formatted: Font: Bold"
+  },
+  {
+   "story": 1,
+   "type": 2,
+   "author": "Wren Ashby",
+   "text": "pump ",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 10,
+   "author": "Wren Ashby",
+   "text": "Spare seals fit both pumps.\r",
+   "format": "Formatted: Centered"
+  },
+  {
+   "story": 1,
+   "type": 15,
+   "author": "Pip Tanager",
+   "text": "Hoses come in two lengths.\r",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 14,
+   "author": "Pip Tanager",
+   "text": "Hoses come in two lengths.\r",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 11,
+   "author": "Pip Tanager",
+   "text": "Part\r\u0007Name\r\u0007Price\r\u0007\r\u0007P-100\r\u0007Small pump\r\u0007120.00\r\u0007\r\u0007P-200\r\u0007Large pump\r\u0007180.00\r\u0007\r\u0007S-1\r\u0007Seal kit\r\u00079.50\r\u0007\r\u0007",
+   "format": "Formatted Table"
+  },
+  {
+   "story": 1,
+   "type": 2,
+   "author": "Pip Tanager",
+   "text": "S-1\r\u0007Seal kit\r\u00079.50\r\u0007\r\u0007",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 1,
+   "author": "Pip Tanager",
+   "text": "H-1\r\u0007Hose\r\u000714.00\r\u0007\r\u0007",
+   "format": ""
+  }
+ ],
+ "comments": [
+  {
+   "index": 1,
+   "author": "Wren Ashby",
+   "initials": "WA",
+   "text": "Is the P-100 still sold?",
+   "scope": "P-100",
+   "parent": null,
+   "done": false
+  },
+  {
+   "index": 2,
+   "author": "Pip Tanager",
+   "initials": "PT",
+   "text": "Yes, until the end of the year.",
+   "scope": "P-100",
+   "parent": 1,
+   "done": false
+  },
+  {
+   "index": 3,
+   "author": "Pip Tanager",
+   "initials": "PT",
+   "text": "Check the seal sizes.",
+   "scope": "Spare seals fit both pumps.",
+   "parent": null,
+   "done": false
+  }
+ ],
+ "bookmarks": [],
+ "footnotes": [],
+ "endnotes": [],
+ "inline_shapes": [
+  {
+   "type": 3,
+   "alt": "",
+   "title": "",
+   "width": 150,
+   "height": 150
+  }
+ ],
+ "shapes": [],
+ "content_controls": [
+  {
+   "type": 0,
+   "tag": "order:rich",
+   "title": "Rich text",
+   "text": "Notes for the order",
+   "placeholder": false
+  },
+  {
+   "type": 1,
+   "tag": "order:plain",
+   "title": "Plain text",
+   "text": "Order number",
+   "placeholder": false
+  },
+  {
+   "type": 6,
+   "tag": "order:date",
+   "title": "Date",
+   "text": "2026-05-03",
+   "placeholder": false
+  },
+  {
+   "type": 3,
+   "tag": "order:combo",
+   "title": "Combo box",
+   "text": "Seal kit",
+   "placeholder": false
+  },
+  {
+   "type": 4,
+   "tag": "order:dropdown",
+   "title": "Drop-down list",
+   "text": "Seal kit",
+   "placeholder": false
+  },
+  {
+   "type": 8,
+   "tag": "order:check",
+   "title": "Check box",
+   "text": "☒",
+   "placeholder": false
+  },
+  {
+   "type": 2,
+   "tag": "order:picture",
+   "title": "Picture",
+   "text": "/",
+   "placeholder": true
+  },
+  {
+   "type": 5,
+   "tag": "order:gallery",
+   "title": "Building block gallery",
+   "text": "Choose a building block.",
+   "placeholder": true
+  },
+  {
+   "type": 9,
+   "tag": "order:repeat",
+   "title": "Repeating section",
+   "text": "Line item: one pump.",
+   "placeholder": false
+  }
+ ],
+ "styles": [
+  {
+   "name": "Comment Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Comment Subject",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Comment Text",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Default Paragraph Font",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footer",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Header",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 1",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 2",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 3",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 4",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 5",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 6",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 7",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 8",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 9",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Emphasis",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Intense Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "List Paragraph",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "No List",
+   "builtin": true,
+   "type": 4
+  },
+  {
+   "name": "Normal",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Placeholder Text",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Subtitle",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Table Normal",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Title",
+   "builtin": true,
+   "type": 1
+  }
+ ],
+ "accepted": {
+  "1": [
+   "Parts catalogue: garden pumps\rPumps\rAll prices include delivery.\rThe P-100 pump quietly moves 40 litres a minute.\rThe P-200 moves 65 litres a minute.\rSpare seals fit both pumps.\rHoses come in two lengths.\rClamps are sold in pairs.\rPart\r\u0007Name\r\u0007Price\r\u0007\r\u0007P-100\r\u0007Small pump\r\u0007120.00\r\u0007\r\u0007P-200\r\u0007Large pump\r\u0007180.00\r\u0007\r\u0007H-1\r\u0007Hose\r\u000714.00\r\u0007\r\u0007\rOrder form\rRich text: Notes for the order\rPlain text: Order number\rDate: 2026-05-03\rCombo box: Seal kit\rDrop-down list: Seal kit\rCheck box: ☒\rPicture: /\rBuilding block gallery: Choose a building block.\rDelivery to the north shed.\rPayment on delivery.\rLine item: one pump.\r\r"
+  ],
+  "4": [
+   "Is the P-100 still sold?\rYes, until the end of the year.\rCheck the seal sizes.\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "accepted_tables": [
+  {
+   "rows": 4,
+   "columns": 3,
+   "nesting": 1,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "text": "Part\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "text": "Name\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "text": "Price\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "text": "P-100\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "text": "Small pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "text": "120.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "text": "P-200\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "text": "Large pump\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "text": "180.00\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 1,
+     "text": "H-1\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 2,
+     "text": "Hose\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 4,
+     "column": 3,
+     "text": "14.00\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "rejected": {
+  "1": [
+   "Parts catalogue: garden pumps\rPumps\rThe P-100 pump moves 40 litres a minute.\rThe P-200 pump moves 65 litres a minute.\rSpare seals fit both pumps.\rClamps are sold in pairs.\rHoses come in two lengths.\rPart\r\u0007Name\r\u0007Price\r\u0007\r\u0007P-100\r\u0007Small pump\r\u0007120.00\r\u0007\r\u0007P-200\r\u0007Large pump\r\u0007180.00\r\u0007\r\u0007S-1\r\u0007Seal kit\r\u00079.50\r\u0007\r\u0007\rOrder form\rRich text: Notes for the order\rPlain text: Order number\rDate: 2026-05-03\rCombo box: Seal kit\rDrop-down list: Seal kit\rCheck box: ☒\rPicture: /\rBuilding block gallery: Choose a building block.\rDelivery to the north shed.\rPayment on delivery.\rLine item: one pump.\r\r"
+  ],
+  "4": [
+   "Is the P-100 still sold?\rYes, until the end of the year.\rCheck the seal sizes.\r"
+  ]
+ }
+}

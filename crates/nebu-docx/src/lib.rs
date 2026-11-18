@@ -29,9 +29,12 @@
 mod archive;
 mod document;
 mod package;
+mod sha256;
+mod view;
 pub mod xml;
 
 pub use document::{Document, Relationship, Target};
+pub use view::*;
 
 /// Namespaces that callers of this crate meet.
 pub mod ns {
@@ -141,6 +144,10 @@ pub enum Error {
     /// A [`NodeId`](xml::NodeId) was passed to a tree that did not make it.
     #[error("the node belongs to another tree")]
     ForeignNode,
+    /// A request that the document cannot answer: a place that matches no
+    /// block or several, an unknown option.
+    #[error("{0}")]
+    Invalid(String),
 }
 
 fn location(part: &Option<String>, line: usize, column: usize) -> String {

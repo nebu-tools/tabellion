@@ -189,6 +189,22 @@ impl Document {
         self.package.to_bytes()
     }
 
+    /// The SHA-256 of the file the document was read from, in lower-case
+    /// hex. A `#<index>` block id holds for this file only.
+    pub fn sha256(&self) -> String {
+        crate::sha256::hex(self.package.source_bytes())
+    }
+
+    /// The limits the document was opened with.
+    pub(crate) fn limits(&self) -> &Limits {
+        self.package.limits()
+    }
+
+    /// The tree of a part that has been parsed already.
+    pub(crate) fn parsed(&self, name: &str) -> Option<&Tree> {
+        self.package.parsed(name)
+    }
+
     /// The main document part, usually `word/document.xml`.
     pub fn main_part(&self) -> &str {
         &self.main

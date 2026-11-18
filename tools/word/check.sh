@@ -10,6 +10,7 @@
 # repair dialog: the script then stops that Word, by the process id check.ps1
 # recorded, and reports the file as failed. OUTDIR receives one JSON report
 # per file and the files Word saved (updated, accepted, rejected, PDF).
+# Set TABELLION_WORD_READ=1 for a full reading of each file (see check.ps1).
 set -uo pipefail
 PS=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
 limit=${TABELLION_WORD_TIMEOUT:-180}
@@ -25,7 +26,7 @@ for f in "$@"; do
   cp "$f" "$dir/"
   w() { wslpath -w "$dir/$1"; }
   timeout "$limit" "$PS" -NoProfile -ExecutionPolicy Bypass -File "$(w check.ps1)" \
-    -Out "$(w report.json)" -PidFile "$(w word.pid)" ${TABELLION_WORD_PDF:+-Pdf} "$(w "$(basename "$f")")" >/dev/null 2>"$out/$stem.stderr"
+    -Out "$(w report.json)" -PidFile "$(w word.pid)" ${TABELLION_WORD_PDF:+-Pdf} ${TABELLION_WORD_READ:+-Read} "$(w "$(basename "$f")")" >/dev/null 2>"$out/$stem.stderr"
   status=$?
   if [ $status -eq 124 ] && [ -f "$dir/word.pid" ]; then
     pid=$(tr -dc 0-9 < "$dir/word.pid")
