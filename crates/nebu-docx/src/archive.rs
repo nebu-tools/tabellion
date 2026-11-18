@@ -5,7 +5,9 @@
 //! the file. The writer copies those ranges for entries that did not change
 //! and writes changed and new entries afresh. Whatever the reader cannot
 //! carry through as it is, it refuses: encrypted entries, archives on more
-//! than one disk, bytes between records that belong to no entry.
+//! than one disk, bytes between records that belong to no entry, a local
+//! header or data descriptor that disagrees with its central directory
+//! record, and an archive comment that holds an end record signature.
 
 use std::io::{Read, Write};
 use std::ops::Range;
@@ -157,10 +159,12 @@ impl Archive {
         if n < 22 {
             return Err(damaged("the file is too short to be a zip archive"));
         }
-        // The end record is the last 22 bytes plus its comment.
+        // The end record is the last 22 bytes plus its comment. A comment
+        // that holds the record's signature itself could be taken for the
+        // end record by a reader that searches from the end, so such a
+        // comment is refused: the archive could mean two things.
         let lowest = n.saturating_sub(22 + u16::MAX as usize);
         let end = (lowest..=n - 22)
-            .rev()
             .find(|&i| {
                 let f = Fields(&b[i..]);
                 f.u32(0) == END && i + 22 + f.u16(20) as usize == n
@@ -168,6 +172,11 @@ impl Archive {
             .ok_or_else(|| {
                 damaged("it has no end of central directory record at the end of the file")
             })?;
+        if b[end + 22..].windows(4).any(|w| w == END.to_le_bytes()) {
+            return Err(damaged(
+                "the archive comment contains an end of central directory signature, so readers can disagree on where the archive ends",
+            ));
+        }
         let f = Fields(&b[end..]);
         let (disk, cd_disk) = (f.u16(4), f.u16(6));
         let (on_disk, total) = (f.u16(8) as u64, f.u16(10) as u64);
@@ -243,13 +252,16 @@ impl Archive {
                 "the central directory has bytes that belong to no entry",
             ));
         }
-        for e in &mut entries {
-            local_record(b, e)?;
-        }
-
-        // The local records follow one another without gaps or overlaps.
+        // The local records follow one another without gaps or overlaps, so
+        // each one ends where the next one starts.
         let mut order: Vec<usize> = (0..entries.len()).collect();
         order.sort_by_key(|&i| entries[i].local.start);
+        for (k, &i) in order.iter().enumerate() {
+            let next = order
+                .get(k + 1)
+                .map_or(cd_start, |&j| entries[j].local.start);
+            local_record(b, &mut entries[i], next)?;
+        }
         let first = order.first().map_or(cd_start, |&i| entries[i].local.start);
         let mut pos = first;
         for &i in &order {
@@ -558,8 +570,10 @@ fn central_record(b: &[u8], at: &mut usize, cd_end: usize) -> Result<Entry, Erro
     })
 }
 
-/// Finds the entry's local record: header, data and data descriptor.
-fn local_record(b: &[u8], e: &mut Entry) -> Result<(), Error> {
+/// Finds the entry's local record: header, data and data descriptor, and
+/// checks that the local header and the data descriptor agree with the
+/// central directory record. `next` is where the next record starts.
+fn local_record(b: &[u8], e: &mut Entry, next: usize) -> Result<(), Error> {
     let name = e.name.clone();
     let what = format!("the local header of {name}");
     let (head, start) = slice(b, e.local.start as u64, 30, &what)?;
@@ -574,47 +588,162 @@ fn local_record(b: &[u8], e: &mut Entry) -> Result<(), Error> {
             "{what} names another entry; the archive is ambiguous"
         )));
     }
-    let flags = f.u16(6);
-    if flags & (FLAG_ENCRYPTED | FLAG_STRONG) != 0 || f.u16(8) != e.method {
-        return Err(damaged(format!(
-            "{what} does not match its directory record"
-        )));
+    let differs = |field: &str, local: String, central: String| {
+        damaged(format!(
+            "{what} does not match its directory record in the {field} ({local} against {central})"
+        ))
+    };
+    let method = f.u16(8);
+    if method != e.method {
+        return Err(differs(
+            "compression method",
+            method.to_string(),
+            e.method.to_string(),
+        ));
     }
-    let zip64 = extras(&rest[nlen as usize..])?
-        .iter()
-        .any(|(id, _)| *id == ZIP64_EXTRA);
+    let flags = f.u16(6);
+    let set = |v: u16| if v != 0 { "set" } else { "not set" }.to_string();
+    for (mask, field) in [
+        (
+            FLAG_ENCRYPTED | FLAG_STRONG | FLAG_MASKED,
+            "encryption flags",
+        ),
+        (FLAG_DESCRIPTOR, "data descriptor flag"),
+        (FLAG_UTF8, "UTF-8 flag"),
+    ] {
+        if flags & mask != e.flags & mask {
+            return Err(differs(field, set(flags & mask), set(e.flags & mask)));
+        }
+    }
+
+    // The sizes, from the zip64 field where the header has no room. In a
+    // local header that field holds the uncompressed size and then the
+    // compressed size.
+    let crc = f.u32(14);
+    let (mut compressed, mut size) = (f.u32(18) as u64, f.u32(22) as u64);
+    let extra = &rest[nlen as usize..];
+    let zip64 = extras(extra)?
+        .into_iter()
+        .find(|(id, _)| *id == ZIP64_EXTRA)
+        .map(|(_, r)| &extra[r]);
+    if let Some(z) = zip64 {
+        let field = |at: usize, what_: &str| -> Result<u64, Error> {
+            if at + 8 > z.len() {
+                return Err(damaged(format!("the zip64 field of {what} has no {what_}")));
+            }
+            Ok(Fields(z).u64(at))
+        };
+        let both = z.len() >= 16;
+        if size == 0xFFFF_FFFF {
+            size = field(0, "size")?;
+        }
+        if compressed == 0xFFFF_FFFF {
+            let at = if both || f.u32(22) == u32::MAX { 8 } else { 0 };
+            compressed = field(at, "compressed size")?;
+        }
+    }
+    // With a data descriptor, the local header may give zero for the
+    // checksum and the sizes, and the descriptor gives them.
+    let later = flags & FLAG_DESCRIPTOR != 0;
+    let hex = |v: u32| format!("{v:08x}");
+    if crc != e.crc && !(later && crc == 0) {
+        return Err(differs("CRC", hex(crc), hex(e.crc)));
+    }
+    if compressed != e.compressed && !(later && compressed == 0) {
+        return Err(differs(
+            "compressed size",
+            compressed.to_string(),
+            e.compressed.to_string(),
+        ));
+    }
+    if size != e.size && !(later && size == 0) {
+        return Err(differs(
+            "uncompressed size",
+            size.to_string(),
+            e.size.to_string(),
+        ));
+    }
+
     let data_start = start as u64 + 30 + nlen + xlen;
     let (_, ds) = slice(b, data_start, e.compressed, &format!("the data of {name}"))?;
     let data_end = ds + e.compressed as usize;
     let mut end = data_end;
-    if flags & FLAG_DESCRIPTOR != 0 {
-        let after = &b[data_end..];
-        let signed = after.len() >= 4 && Fields(after).u32(0) == DESCRIPTOR;
-        let body = if signed { &after[4..] } else { after };
-        let narrow = body.len() >= 12 && {
-            let g = Fields(body);
-            g.u32(0) == e.crc && g.u32(4) as u64 == e.compressed && g.u32(8) as u64 == e.size
-        };
-        let wide = body.len() >= 20 && {
-            let g = Fields(body);
-            g.u32(0) == e.crc && g.u64(4) == e.compressed && g.u64(12) == e.size
-        };
-        // A descriptor with zip64 sizes follows a header with a zip64 field;
-        // try that width first.
-        let len = match (zip64, wide, narrow) {
-            (true, true, _) | (false, true, false) => 20,
-            (_, _, true) => 12,
-            _ => {
-                return Err(damaged(format!(
-                    "the data descriptor of {name} does not match its directory record"
-                )));
-            }
-        };
-        end = data_end + usize::from(signed) * 4 + len;
+    if later {
+        end = data_end
+            + descriptor(
+                &b[data_end..],
+                e,
+                zip64.is_some(),
+                next - data_end.min(next),
+            )?;
     }
     e.data = ds..data_end;
     e.local = start..end;
     Ok(())
+}
+
+/// The length of the data descriptor at the start of `after`. A descriptor
+/// may or may not start with a signature and may have 4-byte or 8-byte
+/// sizes; the layout is the one whose fields equal the central directory
+/// record. If several fit, the one that ends where the next record starts
+/// (`room` bytes on) is taken, and if that does not decide, the archive is
+/// ambiguous.
+fn descriptor(after: &[u8], e: &Entry, zip64: bool, room: usize) -> Result<usize, Error> {
+    // (signed, wide) to (crc, compressed, size) and length.
+    let read = |signed: bool, wide: bool| -> Option<((u32, u64, u64), usize)> {
+        let body = if signed {
+            (after.len() >= 4 && Fields(after).u32(0) == DESCRIPTOR).then(|| &after[4..])?
+        } else {
+            after
+        };
+        let len = if wide { 20 } else { 12 };
+        if body.len() < len {
+            return None;
+        }
+        let g = Fields(body);
+        let v = if wide {
+            (g.u32(0), g.u64(4), g.u64(12))
+        } else {
+            (g.u32(0), g.u32(4) as u64, g.u32(8) as u64)
+        };
+        Some((v, usize::from(signed) * 4 + len))
+    };
+    let want = (e.crc, e.compressed, e.size);
+    let fits: Vec<usize> = [(false, false), (true, false), (false, true), (true, true)]
+        .into_iter()
+        .filter_map(|(s, w)| read(s, w).filter(|(v, _)| *v == want).map(|(_, len)| len))
+        .collect();
+    let what = format!("the data descriptor of {}", e.name);
+    match fits[..] {
+        [len] => Ok(len),
+        [] => {
+            // Name the field that differs in the layout the bytes suggest.
+            let signed = after.len() >= 4 && Fields(after).u32(0) == DESCRIPTOR;
+            let Some(((crc, compressed, size), _)) = read(signed, zip64) else {
+                return Err(damaged(format!("{what} is cut short")));
+            };
+            let (field, got, central) = if crc != e.crc {
+                ("CRC", format!("{crc:08x}"), format!("{:08x}", e.crc))
+            } else if compressed != e.compressed {
+                (
+                    "compressed size",
+                    compressed.to_string(),
+                    e.compressed.to_string(),
+                )
+            } else {
+                ("uncompressed size", size.to_string(), e.size.to_string())
+            };
+            Err(damaged(format!(
+                "{what} does not match its directory record in the {field} ({got} against {central})"
+            )))
+        }
+        _ => match fits.iter().filter(|&&len| len == room).count() {
+            1 => Ok(room),
+            _ => Err(damaged(format!(
+                "{what} can be read in more than one layout; the archive is ambiguous"
+            ))),
+        },
+    }
 }
 
 /// A changed or new entry, compressed and ready to write.

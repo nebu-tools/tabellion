@@ -286,3 +286,249 @@ fn shift_after(b: &[u8], at: u32, by: u32) -> Vec<u8> {
     }
     b
 }
+
+/// The sample's parts and one more entry, `custom.bin`, stored as `spec`
+/// says, with the offset of its local header.
+fn with_custom(spec: Spec, layout: &Layout) -> (Vec<u8>, usize) {
+    let mut s = specs();
+    s.push(spec);
+    let b = build(&s, layout);
+    let at = records(&b)
+        .entries
+        .iter()
+        .find(|e| e.name == "custom.bin")
+        .unwrap()
+        .offset as usize;
+    (b, at)
+}
+
+fn custom(data: &[u8]) -> Spec {
+    Spec {
+        deflate: false,
+        ..Spec::new("custom.bin", data)
+    }
+}
+
+/// The archive opens, saves unchanged as itself, and keeps `custom.bin`'s
+/// records after another part changes.
+fn carried_through(bytes: Vec<u8>) {
+    let mut doc = Document::from_bytes(bytes.clone()).unwrap_or_else(|e| panic!("{e}"));
+    assert!(doc.to_bytes().unwrap() == bytes);
+    assert_eq!(doc.read_part("custom.bin").unwrap(), entry_data(&bytes));
+    add_paragraph(&mut doc);
+    assert_records_kept(&bytes, &doc.to_bytes().unwrap(), &[MAIN]);
+}
+
+fn entry_data(bytes: &[u8]) -> Vec<u8> {
+    support::entry(bytes, "custom.bin")
+}
+
+/// The error names the entry and the field.
+fn refused_for(bytes: Vec<u8>, field: &str) {
+    let e = refused(bytes);
+    assert!(
+        matches!(&e, Error::Zip(m) if m.contains("custom.bin") && m.contains(field)),
+        "{field}: {e}"
+    );
+}
+
+#[test]
+fn a_local_header_that_disagrees_with_its_directory_record_is_refused() {
+    let (good, at) = with_custom(custom(b"some data"), &Layout::default());
+    carried_through(good.clone());
+    let patch = |off: usize, v: &[u8]| {
+        let mut b = good.clone();
+        b[at + off..at + off + v.len()].copy_from_slice(v);
+        b
+    };
+    // CRC, compressed size and size: what the reviewer's probe did.
+    refused_for(patch(14, &123u32.to_le_bytes()), "CRC");
+    refused_for(patch(18, &123u32.to_le_bytes()), "compressed size");
+    refused_for(patch(22, &123u32.to_le_bytes()), "uncompressed size");
+    // Without a data descriptor, zero is not allowed either.
+    refused_for(patch(14, &[0; 4]), "CRC");
+    refused_for(patch(8, &8u16.to_le_bytes()), "compression method");
+    let flags = u16::from_le_bytes([good[at + 6], good[at + 7]]);
+    refused_for(patch(6, &(flags | 1 << 11).to_le_bytes()), "UTF-8 flag");
+    refused_for(
+        patch(6, &(flags | 1 << 3).to_le_bytes()),
+        "data descriptor flag",
+    );
+    let e = refused(patch(6, &(flags | 1).to_le_bytes()));
+    assert!(
+        matches!(&e, Error::Zip(m) if m.contains("encryption")),
+        "{e}"
+    );
+}
+
+#[test]
+fn a_local_zip64_field_is_read_before_the_comparison() {
+    let spec = Spec {
+        zip64: true,
+        ..custom(b"some data")
+    };
+    let (good, at) = with_custom(spec, &Layout::default());
+    carried_through(good.clone());
+    // The local zip64 field holds the size, then the compressed size.
+    let z = at + 30 + "custom.bin".len() + 4;
+    for (off, field) in [(0, "uncompressed size"), (8, "compressed size")] {
+        let mut b = good.clone();
+        b[z + off..z + off + 8].copy_from_slice(&(5u64 << 30).to_le_bytes());
+        refused_for(b, field);
+    }
+}
+
+#[test]
+fn with_a_data_descriptor_the_local_header_may_leave_the_values_out() {
+    for zip64 in [false, true] {
+        let spec = Spec {
+            descriptor: Some((true, zip64)),
+            zip64,
+            ..custom(b"some data")
+        };
+        let (good, at) = with_custom(spec, &Layout::default());
+        // The builder writes zeros in the local header.
+        assert_eq!(good[at + 14..at + 26], [0; 12]);
+        carried_through(good.clone());
+        // Values that are given must be right.
+        let mut b = good.clone();
+        b[at + 14..at + 18].copy_from_slice(&123u32.to_le_bytes());
+        refused_for(b, "CRC");
+        let mut b = good.clone();
+        b[at + 22..at + 26].copy_from_slice(&123u32.to_le_bytes());
+        refused_for(b, "uncompressed size");
+        // The right values are allowed too.
+        let mut b = good.clone();
+        b[at + 14..at + 18].copy_from_slice(&crc32fast::hash(b"some data").to_le_bytes());
+        b[at + 18..at + 22].copy_from_slice(&9u32.to_le_bytes());
+        b[at + 22..at + 26].copy_from_slice(&9u32.to_le_bytes());
+        carried_through(b);
+    }
+}
+
+/// Four bytes whose CRC-32 is `crc`. The CRC of a 4-byte message is an
+/// affine function of its bits, so a basis of single-bit messages gives it.
+fn with_crc(crc: u32) -> [u8; 4] {
+    let base = crc32fast::hash(&[0; 4]);
+    let mut basis: [Option<(u32, u32)>; 32] = [None; 32];
+    for i in 0..32 {
+        let (mut v, mut m) = (
+            crc32fast::hash(&(1u32 << i).to_le_bytes()) ^ base,
+            1u32 << i,
+        );
+        while v != 0 {
+            let k = 31 - v.leading_zeros() as usize;
+            match basis[k] {
+                Some((bv, bm)) => {
+                    v ^= bv;
+                    m ^= bm;
+                }
+                None => {
+                    basis[k] = Some((v, m));
+                    break;
+                }
+            }
+        }
+    }
+    let (mut v, mut m) = (crc ^ base, 0);
+    while v != 0 {
+        let (bv, bm) = basis[31 - v.leading_zeros() as usize].unwrap();
+        v ^= bv;
+        m ^= bm;
+    }
+    let out = m.to_le_bytes();
+    assert_eq!(crc32fast::hash(&out), crc);
+    out
+}
+
+#[test]
+fn every_data_descriptor_layout_is_read() {
+    let collision = with_crc(0x0807_4b50);
+    for data in [&b"some data"[..], &collision[..], b""] {
+        for signed in [false, true] {
+            for wide in [false, true] {
+                let spec = Spec {
+                    descriptor: Some((signed, wide)),
+                    zip64: wide,
+                    ..custom(data)
+                };
+                let (b, _) = with_custom(spec, &Layout::default());
+                carried_through(b);
+            }
+        }
+    }
+}
+
+#[test]
+fn a_descriptor_that_fits_two_layouts_is_placed_by_the_next_record() {
+    // An empty entry's wide descriptor also reads as a narrow one: CRC 0,
+    // sizes 0. The next record starts after the wide one, so that is it.
+    for signed in [false, true] {
+        let spec = Spec {
+            descriptor: Some((signed, true)),
+            ..custom(b"")
+        };
+        let (b, at) = with_custom(spec, &Layout::default());
+        carried_through(b.clone());
+        // With four more bytes after it, neither layout ends at the next
+        // record, and the archive is ambiguous.
+        let r = records(&b);
+        let me = r.entries.iter().find(|e| e.name == "custom.bin").unwrap();
+        let after = at + me.local.len();
+        let mut gap = b.clone();
+        gap.splice(after..after, [0u8; 4]);
+        let e = refused(shift_after(&gap, after as u32, 4));
+        assert!(
+            matches!(&e, Error::Zip(m) if m.contains("custom.bin") && m.contains("ambiguous")),
+            "{e}"
+        );
+    }
+}
+
+#[test]
+fn a_descriptor_that_disagrees_names_the_field() {
+    for (signed, wide) in [(false, false), (true, false), (false, true), (true, true)] {
+        let spec = Spec {
+            descriptor: Some((signed, wide)),
+            zip64: wide,
+            ..custom(b"some data")
+        };
+        let (good, at) = with_custom(spec, &Layout::default());
+        let d = at
+            + records(&good)
+                .entries
+                .iter()
+                .find(|e| e.name == "custom.bin")
+                .unwrap()
+                .local
+                .len()
+            - if wide { 20 } else { 12 };
+        let w = if wide { 8 } else { 4 };
+        for (off, field) in [
+            (0, "CRC"),
+            (4, "compressed size"),
+            (4 + w, "uncompressed size"),
+        ] {
+            let mut b = good.clone();
+            b[d + off] ^= 0x40;
+            refused_for(b, field);
+        }
+    }
+}
+
+#[test]
+fn an_archive_comment_with_an_end_record_signature_is_refused() {
+    let comment = [b"note ".as_slice(), b"PK\x05\x06", &[0; 18]].concat();
+    let b = build(
+        &specs(),
+        &Layout {
+            comment,
+            ..Layout::default()
+        },
+    );
+    let e = refused(b);
+    assert!(
+        matches!(&e, Error::Zip(m) if m.contains("archive comment")),
+        "{e}"
+    );
+}
