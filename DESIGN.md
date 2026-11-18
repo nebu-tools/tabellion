@@ -46,7 +46,7 @@ The weaknesses are the ones the audit found. The XML edits are string and
 regular-expression operations in R, with xml2 for some nodes. Block kinds
 are found by German style ids such as `berschrift1` and `Beschriftung`. The API and the JSON keys are German.
 The code knows one publisher's templates. And it is slow: reading and parsing
-the largest template takes 6 to 7 seconds, one tracked edit on it 11 seconds,
+the largest template takes 6.5 seconds, one tracked edit on it 12 seconds,
 and on a generated 279-page document reading alone takes about a minute (see
 "Performance").
 
