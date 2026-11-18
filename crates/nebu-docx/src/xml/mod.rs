@@ -288,6 +288,17 @@ impl Clone for Tree {
     }
 }
 
+impl Tree {
+    /// A copy with the same identity, to put back in place of this tree
+    /// when an edit of several steps fails half-way: handles of the tree
+    /// address the copy's nodes.
+    pub(crate) fn snapshot(&self) -> Tree {
+        let mut t = self.clone();
+        t.id = self.id;
+        t
+    }
+}
+
 const DOCUMENT: Ix = 0;
 const XML_URI: UriId = 0;
 const XMLNS_URI: UriId = 1;

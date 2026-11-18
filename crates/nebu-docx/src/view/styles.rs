@@ -388,7 +388,11 @@ impl Styles {
         paragraph: Option<&str>,
         table: Option<&str>,
     ) -> Toggles {
-        let mut on = self.doc_defaults.on & self.doc_defaults.named;
+        // The styles toggle among themselves; the document defaults give
+        // only what no style states. Word does so: with bold in the
+        // defaults, a character style that is bold leaves its text bold.
+        let mut on = 0u16;
+        let mut stated = 0u16;
         let table = match table {
             Some(id) => self.get(id),
             None => self.default_of(StyleKind::Table),
@@ -400,7 +404,10 @@ impl Styles {
         ];
         for s in styles.into_iter().flatten() {
             on ^= s.toggles.on & s.toggles.named;
+            stated |= s.toggles.named;
         }
+        let defaults = self.doc_defaults.on & self.doc_defaults.named & !stated;
+        on |= defaults;
         on = (on & !direct.named) | (direct.on & direct.named);
         Toggles(on)
     }

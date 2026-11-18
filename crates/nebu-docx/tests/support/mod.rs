@@ -5,6 +5,7 @@
 
 pub mod edits;
 pub mod large;
+pub mod xsd;
 pub mod zipraw;
 
 use std::io::{Cursor, Read, Write};
@@ -207,4 +208,70 @@ pub fn corpus() -> Vec<(&'static str, Vec<u8>)> {
         ),
         ("stored", stored),
     ]
+}
+
+/// A PNG of a bird on a plain ground, `w` by `h` pixels at 96 per inch, as
+/// `corpus/build/png.py` draws it.
+pub fn png(w: u32, h: u32) -> Vec<u8> {
+    fn chunk(out: &mut Vec<u8>, kind: &[u8], data: &[u8]) {
+        out.extend((data.len() as u32).to_be_bytes());
+        let mut c = kind.to_vec();
+        c.extend_from_slice(data);
+        out.extend_from_slice(&c);
+        out.extend(crc32fast::hash(&c).to_be_bytes());
+    }
+    let mut raw = vec![];
+    for y in 0..h {
+        raw.push(0);
+        for x in 0..w {
+            let (fx, fy) = (x as f64, y as f64);
+            let (w, h) = (w as f64, h as f64);
+            let body = ((fx - w * 0.45) / (w * 0.28)).powi(2)
+                + ((fy - h * 0.6) / (h * 0.2)).powi(2)
+                <= 1.0;
+            let head = ((fx - w * 0.72) / (w * 0.1)).powi(2)
+                + ((fy - h * 0.42) / (h * 0.12)).powi(2)
+                <= 1.0;
+            raw.extend(if body || head {
+                [40, 40, 40]
+            } else {
+                [200, 225, 190]
+            });
+        }
+    }
+    let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::best());
+    z.write_all(&raw).unwrap();
+    let data = z.finish().unwrap();
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    let mut ihdr = vec![];
+    ihdr.extend(w.to_be_bytes());
+    ihdr.extend(h.to_be_bytes());
+    ihdr.extend([8, 2, 0, 0, 0]);
+    chunk(&mut out, b"IHDR", &ihdr);
+    chunk(&mut out, b"IDAT", &data);
+    chunk(&mut out, b"IEND", b"");
+    out
+}
+
+/// Base64 with padding, for pictures in the JSON form.
+pub fn base64(bytes: &[u8]) -> String {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for c in bytes.chunks(3) {
+        let n = (u32::from(c[0]) << 16)
+            | (u32::from(*c.get(1).unwrap_or(&0)) << 8)
+            | u32::from(*c.get(2).unwrap_or(&0));
+        for k in 0..4 {
+            out.push(if k <= c.len() {
+                A[((n >> (18 - 6 * k)) & 63) as usize] as char
+            } else {
+                '='
+            });
+        }
+    }
+    out
+}
+
+pub fn assert_records_kept(before: &[u8], after: &[u8], changed: &[&str]) {
+    zipraw::assert_records_kept(before, after, changed)
 }

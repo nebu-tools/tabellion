@@ -15,6 +15,12 @@
         "$ref": "#/$defs/block"
       }
     },
+    "paragraphs": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/paragraph"
+      }
+    },
     "styles": {
       "type": "array",
       "items": {
@@ -788,6 +794,60 @@
         "text",
         "element",
         "control",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "paragraph": {
+      "description": "A paragraph of any story: the body, a table cell, a content control, a header or footer, a note, a comment or a text box.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "cell": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/cell_ref"
+            }
+          ]
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        }
+      },
+      "required": [
+        "index",
+        "location",
+        "cell",
+        "style",
+        "style_name",
+        "text",
         "content"
       ],
       "additionalProperties": false

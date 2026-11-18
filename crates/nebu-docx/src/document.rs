@@ -69,6 +69,9 @@ pub struct Document {
     main: String,
     /// The views as last read.
     pub(crate) views: Option<Box<crate::view::Cache>>,
+    /// The number of insertions made, which seeds the ids the next one
+    /// creates.
+    pub(crate) writes: u64,
 }
 
 impl std::fmt::Debug for Document {
@@ -126,6 +129,7 @@ impl Document {
             package,
             main: String::new(),
             views: None,
+            writes: 0,
         };
         let rels = doc.relationships("")?;
         let Some(rel) = rels
@@ -196,6 +200,24 @@ impl Document {
     /// hex. A `#<index>` block id holds for this file only.
     pub fn sha256(&self) -> String {
         crate::sha256::hex(self.package.source_bytes())
+    }
+
+    /// The parts as they are, to put back with [`Document::restore`].
+    pub(crate) fn snapshot(&self) -> (crate::package::Snapshot, u64) {
+        (self.package.snapshot(), self.writes)
+    }
+
+    /// Puts the parts back as a snapshot had them. The views are read
+    /// again on next use.
+    pub(crate) fn restore(&mut self, s: (crate::package::Snapshot, u64)) {
+        self.package.restore(s.0);
+        self.writes = s.1;
+        self.views = None;
+    }
+
+    /// The source part's name as the package spells it, for the writer.
+    pub(crate) fn source_part(&self, source: &str) -> Result<String, Error> {
+        self.source_name(source)
     }
 
     /// The stamp of the parsed trees and the list of parts.

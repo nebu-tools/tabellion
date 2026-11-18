@@ -161,6 +161,7 @@ fn views(doc: &mut Document) -> Vec<(&'static str, Value)> {
     let v = doc.views().unwrap();
     let j = |x: serde_json::Result<Value>| x.unwrap();
     add("blocks", j(serde_json::to_value(v.blocks())));
+    add("paragraphs", j(serde_json::to_value(v.paragraphs())));
     let styles: Vec<_> = v.styles().iter().collect();
     add("styles", j(serde_json::to_value(styles)));
     add("tables", j(serde_json::to_value(v.tables())));
@@ -197,8 +198,8 @@ fn every_view_has_the_documented_shape() {
             validate(&root, &root, &v, key, &mut errors);
             // Which kinds of content occur, so that the schema's variants
             // are exercised.
-            if key == "blocks" {
-                for b in v["blocks"].as_array().unwrap() {
+            if key == "blocks" || key == "paragraphs" {
+                for b in v[key].as_array().unwrap() {
                     for i in b["content"].as_array().unwrap() {
                         seen.insert(i["type"].as_str().unwrap().to_string());
                     }

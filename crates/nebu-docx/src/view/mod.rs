@@ -201,6 +201,30 @@ pub struct Block {
     pub node: NodeId,
 }
 
+/// A paragraph of any story.
+#[derive(Debug, Clone, Serialize)]
+pub struct Paragraph {
+    /// The position in `Views::paragraphs()`, from 0.
+    pub index: usize,
+    /// Where it is: the story, the part and, in the body, the top-level
+    /// block that holds it.
+    pub location: Location,
+    /// The innermost table cell that holds it.
+    pub cell: Option<CellRef>,
+    /// The paragraph style id.
+    pub style: Option<String>,
+    /// The English name Word shows for that style.
+    pub style_name: Option<String>,
+    /// The text a reader sees, with revisions accepted.
+    pub text: String,
+    /// Its runs and the inline objects between them.
+    pub content: Vec<Inline>,
+    /// The paragraph's element, which [`Place`](crate::Place) takes for an
+    /// insertion next to it.
+    #[serde(skip)]
+    pub node: NodeId,
+}
+
 /// Direct formatting of a run. Unset properties come from styles.
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct Format {

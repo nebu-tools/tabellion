@@ -666,9 +666,16 @@ fn notes_match_word() {
             // Word's index counts every note, one with its own mark too;
             // Tabellion's number is the one Word shows, which such a note
             // has not. Both lists are in the order of the references.
+            // Word drops a note whose reference is in a text box when it
+            // opens the file; Tabellion lists it without a number.
             let ours: Vec<(usize, String)> = notes
                 .iter()
-                .filter(|n| n.kind == kind && n.location.is_some())
+                .filter(|n| {
+                    n.kind == kind
+                        && n.location
+                            .as_ref()
+                            .is_some_and(|l| l.story != StoryKind::TextBox)
+                })
                 .enumerate()
                 .map(|(i, n)| (i + 1, words(&n.text)))
                 .collect();

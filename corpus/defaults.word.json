@@ -1,0 +1,842 @@
+{
+ "word_version": "16.0",
+ "stories": {
+  "1": [
+   "Document defaults\rA wren sang in the reeds.\rA robin sang on the fence.\rA dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.\rA swift flew over the marsh.\rA coot dived by the reeds.\rA snipe rose from the grass.\rWren\r\u0007Robin\r\u0007\r\u0007Delivery to the north shed.\rPayment on delivery.\rThe survey ends here.\r\r"
+  ]
+ },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 18,
+   "text": "Document defaults\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 18,
+   "end": 44,
+   "text": "A wren sang in the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 44,
+   "end": 71,
+   "text": "A robin sang on the fence.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 71,
+   "end": 102,
+   "text": "A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 102,
+   "end": 129,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 129,
+   "end": 160,
+   "text": "A heron stood in the shallows.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 160,
+   "end": 189,
+   "text": "A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 189,
+   "end": 216,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 216,
+   "end": 245,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 245,
+   "end": 250,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 250,
+   "end": 256,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 256,
+   "end": 257,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 257,
+   "end": 286,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 286,
+   "end": 310,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 310,
+   "end": 332,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 332,
+   "end": 333,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  }
+ ],
+ "sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "rows": 1,
+   "columns": 2,
+   "nesting": 1,
+   "start": 245,
+   "end": 257,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 245,
+     "end": 250,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 250,
+     "end": 256,
+     "text": "Robin\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "fields": [],
+ "revisions": [],
+ "comments": [],
+ "bookmarks": [],
+ "footnotes": [],
+ "endnotes": [],
+ "inline_shapes": [],
+ "shapes": [],
+ "content_controls": [
+  {
+   "type": 7,
+   "tag": "delivery:group",
+   "title": "Delivery",
+   "text": "Delivery to the north shed.\rPayment on delivery.",
+   "placeholder": false
+  },
+  {
+   "type": 1,
+   "tag": "delivery:payment",
+   "title": "Payment",
+   "text": "Payment",
+   "placeholder": false
+  }
+ ],
+ "styles": [
+  {
+   "name": "Based Bold",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Bold Grid",
+   "builtin": false,
+   "type": 3
+  },
+  {
+   "name": "Bold Note",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Default Paragraph Font",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footer",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Header",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 1",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 2",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 3",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 4",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 5",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 6",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 7",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 8",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 9",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Emphasis",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Intense Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "List Paragraph",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "No List",
+   "builtin": true,
+   "type": 4
+  },
+  {
+   "name": "Normal",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Placeholder Text",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Plain Note",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Slanted",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Strong Note",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Subtitle",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Table Normal",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Title",
+   "builtin": true,
+   "type": 1
+  }
+ ],
+ "accepted": {
+  "1": [
+   "Document defaults\rA wren sang in the reeds.\rA robin sang on the fence.\rA dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.\rA swift flew over the marsh.\rA coot dived by the reeds.\rA snipe rose from the grass.\rWren\r\u0007Robin\r\u0007\r\u0007Delivery to the north shed.\rPayment on delivery.\rThe survey ends here.\r\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 18,
+   "text": "Document defaults\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 18,
+   "end": 44,
+   "text": "A wren sang in the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 44,
+   "end": 71,
+   "text": "A robin sang on the fence.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 71,
+   "end": 102,
+   "text": "A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 102,
+   "end": 129,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 129,
+   "end": 160,
+   "text": "A heron stood in the shallows.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 160,
+   "end": 189,
+   "text": "A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 189,
+   "end": 216,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 216,
+   "end": 245,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 245,
+   "end": 250,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 250,
+   "end": 256,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 256,
+   "end": 257,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 257,
+   "end": 286,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 286,
+   "end": 310,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 310,
+   "end": 332,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 332,
+   "end": 333,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [],
+ "accepted_endnotes": [],
+ "accepted_tables": [
+  {
+   "rows": 1,
+   "columns": 2,
+   "nesting": 1,
+   "start": 245,
+   "end": 257,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 245,
+     "end": 250,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 250,
+     "end": 256,
+     "text": "Robin\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "rejected": {
+  "1": [
+   "Document defaults\rA wren sang in the reeds.\rA robin sang on the fence.\rA dunnock fed under the hedge.\rA teal rested on the pool.\rA heron stood in the shallows.\rA swift flew over the marsh.\rA coot dived by the reeds.\rA snipe rose from the grass.\rWren\r\u0007Robin\r\u0007\r\u0007Delivery to the north shed.\rPayment on delivery.\rThe survey ends here.\r\r"
+  ]
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 18,
+   "text": "Document defaults\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 18,
+   "end": 44,
+   "text": "A wren sang in the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 44,
+   "end": 71,
+   "text": "A robin sang on the fence.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 71,
+   "end": 102,
+   "text": "A dunnock fed under the hedge.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 102,
+   "end": 129,
+   "text": "A teal rested on the pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 129,
+   "end": 160,
+   "text": "A heron stood in the shallows.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": -1
+  },
+  {
+   "start": 160,
+   "end": 189,
+   "text": "A swift flew over the marsh.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 189,
+   "end": 216,
+   "text": "A coot dived by the reeds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 216,
+   "end": 245,
+   "text": "A snipe rose from the grass.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 245,
+   "end": 250,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 250,
+   "end": 256,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 256,
+   "end": 257,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 257,
+   "end": 286,
+   "text": "Delivery to the north shed.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 286,
+   "end": 310,
+   "text": "Payment on delivery.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 310,
+   "end": 332,
+   "text": "The survey ends here.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  },
+  {
+   "start": 332,
+   "end": 333,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": -1
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 1,
+   "columns": 2,
+   "nesting": 1,
+   "start": 245,
+   "end": 257,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 245,
+     "end": 250,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 250,
+     "end": 256,
+     "text": "Robin\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
+}

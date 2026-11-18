@@ -1,3 +1,4 @@
 * text=auto eol=lf
 *.docx binary
 *.png binary
+crates/nebu-docx/tests/xsd/*.xsd -text

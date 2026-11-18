@@ -27,15 +27,19 @@
 //! memory a file can ask for, and no input makes the engine panic.
 
 mod archive;
+pub mod content;
 mod cost;
 mod document;
 mod package;
 mod sha256;
 mod view;
+mod writer;
 pub mod xml;
 
+pub use content::{Content, ContentLimits};
 pub use document::{Document, Relationship, Target};
 pub use view::*;
+pub use writer::{Captions, Inserted, Place, Role, RoleSource, Roles, TableStyle, WriteOptions};
 
 /// Namespaces that callers of this crate meet.
 pub mod ns {
