@@ -1,10 +1,14 @@
-# tabellion
+# Tabellion
 
-tabellion builds and edits Word documents from R and Typst. It does not need
+<img align="right" src="assets/branding/tabellion-logo.webp" alt="Tabellion logo: a hedgehog with pencils among its quills stamps a sheet of paper tied with a ribbon" width="160" height="160">
+
+Tabellion builds and edits Word documents from R and Typst. It does not need
 Word, and it changes nothing in a document that it does not touch: every part
 and every XML node outside an edit keeps its exact bytes.
 
-tabellion is being rebuilt as a Rust engine with a command line and an R
+<br clear="right">
+
+Tabellion is being rebuilt as a Rust engine with a command line and an R
 package. [DESIGN.md](DESIGN.md) describes the whole tool. This repository
 holds the first part of it.
 
@@ -50,3 +54,5 @@ instance of its own and reports what Word makes of them. See DESIGN.md,
 ## Licence
 
 [GNU Affero General Public License, version 3](LICENSE).
+
+The logo is a stand-in sketch until a hand-painted one replaces it.
