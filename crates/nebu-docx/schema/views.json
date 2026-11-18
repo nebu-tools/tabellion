@@ -71,6 +71,12 @@
     },
     "numbering": {
       "$ref": "#/$defs/numbering"
+    },
+    "content_controls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/control"
+      }
     }
   },
   "required": [
@@ -1668,6 +1674,60 @@
       "required": [
         "definitions",
         "instances"
+      ],
+      "additionalProperties": false
+    },
+    "control": {
+      "description": "A content control with the text it holds, with revisions accepted.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "rich_text",
+            "plain_text",
+            "picture",
+            "date",
+            "combo_box",
+            "drop_down_list",
+            "check_box",
+            "building_block",
+            "group",
+            "repeating_section",
+            "repeating_section_item",
+            "citation",
+            "bibliography",
+            "equation"
+          ]
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placeholder": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "kind",
+        "tag",
+        "title",
+        "placeholder",
+        "text",
+        "location"
       ],
       "additionalProperties": false
     }

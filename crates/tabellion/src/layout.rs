@@ -69,14 +69,26 @@ pub(crate) fn columns(header: &[&str], rows: &[Vec<String>]) -> String {
             w[i] = w[i].max(chars(c));
         }
     }
-    // Columns before the last are capped, so the last keeps some room.
+    // Columns before the last are capped, and the widest of them shrink
+    // until the last has room for at least ten characters.
     let total = width();
     for x in w.iter_mut().take(n.saturating_sub(1)) {
         *x = (*x).min(40);
     }
-    let used: usize = w.iter().take(n.saturating_sub(1)).map(|x| x + 2).sum();
     if n > 0 {
-        w[n - 1] = w[n - 1].min(total.saturating_sub(used).max(10));
+        let used = |w: &[usize]| w.iter().take(n - 1).map(|x| x + 2).sum::<usize>();
+        while used(&w) + w[n - 1].min(10) > total {
+            let Some((i, _)) = w[..n - 1]
+                .iter()
+                .enumerate()
+                .filter(|(_, x)| **x > 4)
+                .max_by_key(|(_, x)| **x)
+            else {
+                break;
+            };
+            w[i] -= 1;
+        }
+        w[n - 1] = w[n - 1].min(total.saturating_sub(used(&w)));
     }
     let mut out = String::new();
     let mut line = |cells: Vec<String>| {

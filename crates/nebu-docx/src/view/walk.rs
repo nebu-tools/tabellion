@@ -136,15 +136,26 @@ enum Phase {
 struct OpenField {
     index: usize,
     phase: Phase,
-    /// `w:fldSimple`, closed by its element rather than a `fldChar`.
-    simple: bool,
-    code: String,
+    /// The code of a `w:fldSimple`. Its element ends it; a `fldChar`
+    /// does not.
+    simple: Option<String>,
+    /// Where the code of a complex field starts and ends in
+    /// [`State::codes`].
+    code_start: usize,
+    code_end: Option<usize>,
 }
 
 /// The walk's state, which a sink may read at every event.
 pub(crate) struct State {
     changes: Vec<Change>,
+    /// Open deletions and moves away, and open insertions and moves here.
+    removed_if_accepted: usize,
+    removed_if_rejected: usize,
     fields: Vec<OpenField>,
+    /// The codes of the open complex fields. A field's code is a range of
+    /// it, and a nested field's code lies inside the range of the code
+    /// that holds it, so nesting costs no copies.
+    codes: String,
     in_code: usize,
     next_field: usize,
     hidden: bool,
@@ -167,14 +178,8 @@ impl State {
     pub fn shown(&self, view: Revisions) -> bool {
         match view {
             Revisions::Current => true,
-            Revisions::Accepted => !self
-                .changes
-                .iter()
-                .any(|c| matches!(c.kind, RevisionKind::Deletion | RevisionKind::MoveFrom)),
-            Revisions::Rejected => !self
-                .changes
-                .iter()
-                .any(|c| matches!(c.kind, RevisionKind::Insertion | RevisionKind::MoveTo)),
+            Revisions::Accepted => self.removed_if_accepted == 0,
+            Revisions::Rejected => self.removed_if_rejected == 0,
         }
     }
 
@@ -209,38 +214,60 @@ impl State {
     pub fn code(&self) -> &str {
         self.fields
             .last()
-            .map(|f| f.code.as_str())
+            .map(|f| self.code_of(f))
             .unwrap_or_default()
     }
 
-    /// Adds code text to the innermost field and to each enclosing field
-    /// whose code holds it.
-    fn add_code(&mut self, text: &str) {
-        let mut it = self.fields.iter_mut().rev();
-        if let Some(f) = it.next() {
-            f.code.push_str(text);
-        }
-        for f in it {
-            if f.phase != Phase::Code {
-                break;
+    fn code_of<'s>(&'s self, f: &'s OpenField) -> &'s str {
+        match &f.simple {
+            Some(c) => c,
+            None => {
+                let end = f.code_end.unwrap_or(self.codes.len());
+                self.codes.get(f.code_start..end).unwrap_or_default()
             }
-            f.code.push_str(text);
         }
     }
 
-    /// Adds text to the code of the fields enclosing the innermost one, as
-    /// long as they are reading code.
-    fn add_outer_code(&mut self, text: &str) {
-        let n = self.fields.len();
-        if n < 2 {
-            return;
+    fn push_change(&mut self, c: Change) {
+        match c.kind {
+            RevisionKind::Deletion | RevisionKind::MoveFrom => self.removed_if_accepted += 1,
+            RevisionKind::Insertion | RevisionKind::MoveTo => self.removed_if_rejected += 1,
+            RevisionKind::Formatting => {}
         }
-        for f in self.fields[..n - 1].iter_mut().rev() {
-            if f.phase != Phase::Code {
-                break;
+        self.changes.push(c);
+    }
+
+    fn pop_change(&mut self) {
+        if let Some(c) = self.changes.pop() {
+            match c.kind {
+                RevisionKind::Deletion | RevisionKind::MoveFrom => self.removed_if_accepted -= 1,
+                RevisionKind::Insertion | RevisionKind::MoveTo => self.removed_if_rejected -= 1,
+                RevisionKind::Formatting => {}
             }
-            f.code.push_str(text);
         }
+    }
+
+    /// Ends the innermost field and tells the sink.
+    fn end_field(&mut self, sink: &mut impl Sink) -> Result<(), Error> {
+        let Some(f) = self.fields.pop() else {
+            return Ok(());
+        };
+        if f.phase == Phase::Code {
+            self.in_code -= 1;
+        }
+        sink.event(
+            self,
+            Event::FieldEnd {
+                index: f.index,
+                code: self.code_of(&f),
+            },
+        )?;
+        if self.fields.is_empty() {
+            self.codes.clear();
+        } else if self.innermost_in_code() {
+            self.codes.push('}');
+        }
+        Ok(())
     }
 
     /// True if the innermost field is reading its code.
@@ -257,7 +284,10 @@ impl State {
     fn new() -> State {
         State {
             changes: vec![],
+            removed_if_accepted: 0,
+            removed_if_rejected: 0,
             fields: vec![],
+            codes: String::new(),
             in_code: 0,
             next_field: 0,
             hidden: false,
@@ -401,17 +431,8 @@ pub(crate) fn walk(
         }
     }
     // Fields left open at the end of the story end there.
-    while let Some(f) = st.fields.pop() {
-        if f.phase == Phase::Code {
-            st.in_code -= 1;
-        }
-        sink.event(
-            &st,
-            Event::FieldEnd {
-                index: f.index,
-                code: &f.code,
-            },
-        )?;
+    while !st.fields.is_empty() {
+        st.end_field(sink)?;
     }
     Ok(st.next_field)
 }
@@ -422,22 +443,20 @@ fn leave(tree: &Tree, st: &mut State, f: &Frame, sink: &mut impl Sink) -> Result
         Leave::End(kind) => sink.event(st, Event::End(kind, f.node))?,
         Leave::Change => {
             sink.event(st, Event::End(Kind::Change, f.node))?;
-            st.changes.pop();
+            st.pop_change();
         }
         Leave::SimpleField => {
-            if let Some(i) = st.fields.iter().rposition(|o| o.simple) {
+            if st.fields.iter().any(|o| o.simple.is_some()) {
                 sink.event(st, Event::End(Kind::SimpleField, f.node))?;
-                let o = st.fields.remove(i);
-                if o.phase == Phase::Code {
-                    st.in_code -= 1;
+                // Complex fields that began inside the simple field and did
+                // not end there end with it.
+                while let Some(top) = st.fields.last() {
+                    let simple = top.simple.is_some();
+                    st.end_field(sink)?;
+                    if simple {
+                        break;
+                    }
                 }
-                sink.event(
-                    st,
-                    Event::FieldEnd {
-                        index: o.index,
-                        code: &o.code,
-                    },
-                )?;
             }
         }
         Leave::Run => {
@@ -634,7 +653,7 @@ fn start(
     Ok(match kind {
         Kind::Change => {
             let k = change_kind(tree, n)?.unwrap_or(RevisionKind::Insertion);
-            st.changes.push(Change { kind: k, node: n });
+            st.push_change(Change { kind: k, node: n });
             sink.event(st, Event::Start(Kind::Change, n))?;
             Leave::Change
         }
@@ -645,14 +664,19 @@ fn start(
                 .attribute(n, Some(W), "instr")?
                 .unwrap_or_default()
                 .into_owned();
-            let nested = format!("{{{code}}}");
+            // Nested in a code, it shows there as `{code}`; the brace that
+            // closes it comes when it ends.
+            if st.innermost_in_code() {
+                st.codes.push('{');
+                st.codes.push_str(&code);
+            }
             st.fields.push(OpenField {
                 index,
                 phase: Phase::Result,
-                simple: true,
-                code,
+                simple: Some(code),
+                code_start: 0,
+                code_end: None,
             });
-            st.add_outer_code(&nested);
             sink.event(st, Event::Start(Kind::SimpleField, n))?;
             Leave::SimpleField
         }
@@ -750,7 +774,7 @@ fn object(
                 // Text in a code is code; the result of a field nested in a
                 // code is neither code nor visible.
                 if st.innermost_in_code() {
-                    st.add_code(&s);
+                    st.codes.push_str(&s);
                     sink.event(st, Event::Code)?;
                 } else {
                     sink.event(st, Event::Text(&s))?;
@@ -761,11 +785,11 @@ fn object(
             let s = tree.text_content(n)?;
             // Word writes the result of a simple field nested in a code as
             // instrText inside the simple field.
-            if st.fields.last().is_some_and(|f| f.simple) {
+            if st.fields.last().is_some_and(|f| f.simple.is_some()) {
                 sink.event(st, Event::Text(&s))?;
             } else {
-                if !st.fields.is_empty() {
-                    st.add_code(&s);
+                if st.innermost_in_code() {
+                    st.codes.push_str(&s);
                 }
                 sink.event(st, Event::Code)?;
             }
@@ -800,43 +824,32 @@ fn object(
                 let index = st.next_field;
                 st.next_field += 1;
                 if st.innermost_in_code() {
-                    st.add_code("{");
+                    st.codes.push('{');
                 }
                 st.fields.push(OpenField {
                     index,
                     phase: Phase::Code,
-                    simple: false,
-                    code: String::new(),
+                    simple: None,
+                    code_start: st.codes.len(),
+                    code_end: None,
                 });
                 st.in_code += 1;
                 sink.event(st, Event::FieldBegin)?;
             }
             Some("separate") => {
+                let end = st.codes.len();
                 if let Some(f) = st.fields.last_mut()
-                    && !f.simple
+                    && f.simple.is_none()
                     && f.phase == Phase::Code
                 {
                     f.phase = Phase::Result;
+                    f.code_end = Some(end);
                     st.in_code -= 1;
                     sink.event(st, Event::FieldSeparate)?;
                 }
             }
-            Some("end") => {
-                if let Some(f) = st.fields.pop_if(|f| !f.simple) {
-                    if f.phase == Phase::Code {
-                        st.in_code -= 1;
-                    }
-                    if st.innermost_in_code() {
-                        st.add_code("}");
-                    }
-                    sink.event(
-                        st,
-                        Event::FieldEnd {
-                            index: f.index,
-                            code: &f.code,
-                        },
-                    )?;
-                }
+            Some("end") if st.fields.last().is_some_and(|f| f.simple.is_none()) => {
+                st.end_field(sink)?;
             }
             _ => {}
         },

@@ -177,56 +177,180 @@ Suite that apply to such a parser (XML 1.0 fifth edition and Namespaces
 
 No input may make the engine panic. Every malformed file gives an error
 that says what is wrong and where. Tests feed the engine truncated and
-damaged archives, zip bombs, deep nesting and malformed XML, and three fuzz
-targets in `fuzz/` run opening, parsing and random edit sequences on random
-bytes.
+damaged archives, zip bombs, deep nesting and malformed XML, and four fuzz
+targets in `fuzz/` run opening, parsing, random edit sequences and every
+view on random bytes.
 
 ### The document model
 
 The engine does not copy the document into a separate object model. It
-gives typed views over the tree and keeps everything else as it is.
+gives read-only views over the tree and keeps everything else as it is.
+Each item of a view says where it is (a block id, a part, a story) and
+gives what a reader needs (text, cells, codes, authors).
 
-- **Blocks.** `Document::blocks()` lists the top-level children of the body:
-  paragraphs, tables, block content controls, the final section properties,
-  and anything else (bookmarks between blocks, custom XML, `mc:AlternateContent`).
+- `Document::blocks()` lists the top-level children of the body: paragraphs,
+  tables, block content controls, the final section properties, bookmarks
+  between blocks, and anything else (custom XML, an element no view knows).
   Each block has an id. A paragraph with a `w14:paraId` gets `p:<paraId>`, a
   table `t:<paraId of its first paragraph>`; these survive a save by Word.
   Other blocks get `#<index>`, which holds only for the file they were read
-  from, so the operations format pairs such ids with the file's SHA-256.
-- **Paragraphs and runs.** A paragraph view gives its style, visible text
-  (no deleted text, no field codes), runs with their formatting, and the
-  inline objects between them: fields, footnote and endnote references,
-  drawings, hyperlinks, bookmarks, comment ranges, content controls, math.
-- **Tables.** A table view places cells on the grid, resolving `gridSpan`,
-  `vMerge`, `gridBefore` and `gridAfter`, so a reader gets rows and columns
-  as a person sees them, and a writer can address a cell by row and column.
-- **Images.** Inline and floating drawings, with their relationship, part,
-  size, alt text and description.
-- **Fields.** Complex fields (`fldChar` begin, separate, end, also nested and
-  split over runs) and simple fields (`fldSimple`), with code and result.
-- **Bookmarks, comments, footnotes, endnotes.** Bookmarks with their range;
-  comments with author, date, text and the range they mark; notes with their
-  content and the reference that calls them.
-- **Revisions.** Every `w:ins`, `w:del`, `w:moveFrom`, `w:moveTo` and the
-  property-change elements, with author, date and the text they affect.
-- **Styles.** Paragraph, character, table and numbering styles with id, name,
-  `basedOn`, outline level and numbering. A style is found by its `w:styleId`,
-  by its `w:name`, or by the name Word shows for a built-in style in another
-  language: Word stores built-in names in English (`heading 1`) whatever the
-  interface language, and the engine carries a table of localised names
-  (`Überschrift 1`, `Titre 1`) so that a user can write the name they see.
-- **Numbering.** Abstract definitions, instances, level overrides and
-  numbering styles, enough to compute the number Word shows for a
-  paragraph.
-- **Sections.** Page size, margins, columns, headers and footers per
-  section, and the usable text width that the writer needs for tables and
-  images.
+  from, so the operations format pairs such ids with the file's SHA-256
+  (`Document::sha256()`). Two blocks that share a paraId, which copying in
+  some editors produces, both get `#<index>`. A block gives its kind, style,
+  outline level, list, the text a reader sees and, for a paragraph, its
+  content.
+- A paragraph's content is a flat list: runs of text with their direct
+  formatting and the tracked change they are in, and the inline objects
+  between them. Fields, hyperlinks, content controls, bookmarks and comment
+  ranges come as a start and an end around their content; note references,
+  drawings, equations, breaks and unknown elements as single items. A flat
+  list needs no recursion to build, read or serialise, whatever the nesting.
+  The blocks give it for the paragraphs of the body's top level; paragraphs
+  in tables, block content controls and text boxes give their text through
+  those views, and their run-level content is not listed yet.
+- `Document::tables()` places cells on the grid, resolving `gridSpan`,
+  `vMerge`, `hMerge`, `gridBefore` and `gridAfter`. Each cell appears once
+  with its row, column and spans; `rows` gives the text of every grid
+  position, with `null` where a merged cell covers it. Nested tables are
+  tables of their own in the same flat list, with the cell that holds them,
+  and the cell lists their indexes. Rows deleted by a tracked change are
+  left out.
+- `Document::images()` lists inline and floating pictures, DrawingML and
+  VML, with their relationship, part or link, content type, size in points,
+  name, title and alternative text. Charts, shapes, SmartArt and text boxes
+  are drawings in the paragraph content; a text box's drawing carries its
+  text.
+- `Document::fields()` lists complex fields (`fldChar` begin, separate, end,
+  nested and split over runs and paragraphs) and simple fields
+  (`fldSimple`), with code and result and the field they are nested in. A
+  field nested in a code appears in that code as `{ code }`, as Word shows
+  it with field codes on.
+- The other lists give bookmarks with the text they enclose; comments with
+  author, initials, date, text, the text they are about, the comment they
+  answer (from `commentsExtended`) and whether they are resolved; notes with
+  their text, the number Word shows and the block that calls them, in the
+  order of their references; content controls with kind, tag, title, whether
+  they show their placeholder, and their text.
+- `Document::revisions()` lists every `w:ins`, `w:del`, `w:moveFrom`,
+  `w:moveTo`, the marks on paragraphs, rows and cells, and the property
+  changes (`rPrChange`, `pPrChange`, `tblPrChange`, `trPrChange`,
+  `tcPrChange`, `sectPrChange`), with author, date and the text they affect.
+  They are grouped as Word reports them: neighbours of one kind, author and
+  date with nothing between them are one revision, content inside a row
+  inserted or deleted as a whole belongs to the row's revision, and the
+  property changes of rows and cells belong to the change of their table.
+- `Document::styles()` gives paragraph, character, table and numbering
+  styles with id, stored name, the name Word shows in English, German and
+  French names for built-in styles, `basedOn`, `next`, linked style, outline
+  level and list, the last two through the styles a style is based on.
+  `Styles::find` takes an id, a stored name, the English name Word shows or
+  a German or French name, without case: Word stores built-in names in
+  English (`heading 1`) whatever the interface language, and Word shows
+  `Heading 1`, `Überschrift 1` or `Titre 1`.
+- `Document::numbering()` gives the abstract definitions with their levels
+  (start, format, text, style, restart, legal numbering), and instances with
+  their level overrides, as read. Computing the number Word shows for a list
+  paragraph needs these and the order of the paragraphs; it comes with the
+  field update, in a later change.
+- `Document::sections()` gives each section's page size and orientation,
+  margins, columns, the usable text width, how the section starts, the first
+  and last block, and its headers and footers by kind (default, first, even)
+  with their text, including those a section takes over from the one before.
 
 What the engine does not model it keeps. A view that meets an element it
-does not know treats it as an opaque inline or block object: it reports it,
-moves it with its paragraph, and never drops it. Edits refuse to cut through
-such objects. For example, a tracked replacement refuses to delete text that
-contains a field, a drawing or a note reference, and says so.
+does not know reports it as an opaque block or inline item with its name,
+and does not read its content; it never drops it from a listing. Edits
+refuse to cut through such objects. For example, a tracked replacement
+refuses to delete text that contains a field, a drawing or a note
+reference, and says so.
+
+#### One walk, one definition of visible text
+
+Every view comes from one walk over the stories: the body, headers and
+footers, footnotes, endnotes, comments, and the text boxes inside each of
+them, which are walked after the story that holds them. The walk tells the
+view collectors what it meets and keeps the state that decides what a
+reader sees:
+
+- field codes are not text; field results are, a field nested in a code
+  shows neither its code nor its result there;
+- hidden text (`w:vanish`, directly or through the character style, the
+  paragraph style or the document defaults) is not visible;
+- tracked changes follow a view of revisions: `accepted` (inserted text in,
+  deleted and moved-away text out), `rejected` (the other way round) or
+  `current` (everything the file holds). A deleted paragraph mark joins its
+  paragraph to the next one, and a deleted row leaves the table, under
+  `accepted`;
+- of `mc:AlternateContent`, the walk reads the branch Word takes: the first
+  `mc:Choice` whose required namespaces Word understands, else
+  `mc:Fallback`. The text in it is read once.
+
+Text, cells, bookmarks, comment anchors and field results all use this
+definition. Tabs and line breaks are `\t` and `\n`; a non-breaking hyphen
+is U+2011 and an optional hyphen U+00AD; a symbol (`w:sym`) is the code its
+font gives it.
+
+The document keeps what it read until an edit changes a tree or a part is
+added: each tree counts the edits that reach it, and the views are read
+again when a count differs. The first view costs one walk; the others are
+copies.
+
+The walk and the collectors use no recursion: they keep their own stacks,
+so a table nested two thousand deep or three thousand nested fields cost
+memory in proportion to the file and no call stack. Bookmarks, comment
+ranges, field results and field codes are ranges of one buffer and are cut
+out when they end, so ranges open at the same time cost no more than the
+text. All cuts of one reading together may hold no more than
+`Limits::max_total_size` bytes; a file that asks for more gives
+`Error::Limit`. A table with more grid positions than sixteen per cell (and
+more than 65,536 in all) is refused as `Error::Unsupported`. The views are
+read together, so such an error comes from every view of that file.
+
+#### The JSON shapes
+
+Every view serialises to one JSON shape, which the command line prints with
+`--json` and the R package returns. `crates/nebu-docx/schema/views.json`
+gives them as a JSON Schema, and a test validates every view of every
+corpus document against it, so a field the schema does not name fails the
+build. The output of one view is an object with the file's SHA-256 and one
+key named after the view:
+
+| Key | Items |
+| --- | --- |
+| `blocks` | `id`, `index`, `kind`, `style`, `style_name`, `level`, `numbering`, `text`, `element`, `control`, `content` |
+| `styles` | `id`, `name`, `display_name`, `local_names`, `kind`, `built_in`, `default`, `hidden`, `based_on`, `next`, `linked`, `outline_level`, `numbering` |
+| `tables` | `index`, `id`, `location`, `parent`, `style`, `row_count`, `column_count`, `cells`, `rows` |
+| `fields` | `index`, `kind`, `code`, `result`, `simple`, `parent`, `location` |
+| `revisions` | `index`, `kind`, `target`, `author`, `date`, `text`, `location` |
+| `comments` | `id`, `author`, `initials`, `date`, `text`, `anchor`, `parent`, `done`, `location` |
+| `notes` | `kind`, `id`, `number`, `text`, `location` |
+| `bookmarks` | `name`, `id`, `hidden`, `text`, `location` |
+| `images` | `index`, `placement`, `relationship`, `part`, `link`, `content_type`, `width`, `height`, `name`, `title`, `alt`, `location` |
+| `content_controls` | `kind`, `tag`, `title`, `placeholder`, `text`, `location` |
+| `sections` | `index`, `first_block`, `last_block`, `start`, `page_width`, `page_height`, `orientation`, `margins`, `columns`, `text_width`, `title_page`, `headers`, `footers` |
+| `numbering` | `definitions` (with `levels`) and `instances` (with `overrides`) |
+
+A `location` is the kind of story, the part and the block id. Lengths are
+points. An item of `content` has a `type`: `text`, `field_start`,
+`field_end`, `hyperlink_start`, `hyperlink_end`, `content_control_start`,
+`content_control_end`, `bookmark_start`, `bookmark_end`, `comment_start`,
+`comment_end`, `comment_reference`, `note_reference`, `drawing`, `math`,
+`break` or `opaque`. Names are plain English, not the file format's.
+
+#### The names of built-in styles
+
+The table of names in `crates/nebu-docx/src/view/names.rs` has 70 built-in
+styles: headings, title and subtitle, caption, notes, comments, header and
+footer, table of contents levels, lists, quotes, body text, the character
+styles for emphasis and references, and the common table and list styles.
+Each row gives the stored name, the English name Word shows, the German
+name and the French name. The stored and English names come from Word: the
+corpus readings record the names Word 365 shows, and a test checks them.
+The German and French names are those of Word 365 in German and in French,
+written down by hand; the Word used for the corpus has an English
+interface, so no test checks them against Word. A name that is wrong there
+is a bug in that table. Other built-in styles (those in a document's
+`w:latentStyles`) are found by their stored name.
 
 ### Writing content: the content model
 
@@ -293,15 +417,28 @@ let p = tree.parse_fragment("<w:p><w:r><w:t>Hello</w:t></w:r></w:p>", &[("w", ns
 tree.insert(body, 0, p[0])?;
 ```
 
-The document views and the writer add a handful of methods on top:
+The document views add a handful of methods on top, all read-only. Each
+returns owned values that serialise to the JSON shapes above:
 
 ```rust
-let blocks: Vec<BlockInfo> = doc.blocks()?;                // id, kind, style, level, text
-let place: BlockInfo = doc.locate(&"heading:Results".parse()?)?;
+let blocks: Vec<Block> = doc.blocks()?;                    // id, kind, style, level, text, content
+let place: Block = doc.locate(&"heading:Results".parse()?)?;
 //   Locator: Block(id) | Bookmark(name) | Heading(text) | Placeholder(name) | Text(s)
-let styles: &Styles = doc.styles()?;                       // resolve(name or id, kind)
+let styles: Styles = doc.styles()?;                         // get(id), find(name), find_kind(name, kind)
+let tables: Vec<Table> = doc.tables()?;                     // cells on the grid, nested tables flat
+let fields = doc.fields()?;      let revisions = doc.revisions()?;
+let comments = doc.comments()?;  let notes = doc.notes()?;
+let images = doc.images()?;      let bookmarks = doc.bookmarks()?;
+let controls = doc.content_controls()?;
+let sections = doc.sections()?;  let numbering = doc.numbering()?;
+let text: String = doc.text(&TextOptions { revisions: Revisions::Rejected, ..Default::default() })?;
+let sha: String = doc.sha256();                             // names the file #index ids belong to
+```
 
-let opts = WriteOptions { roles: Roles::detect(doc.styles()?), track: Some(Revision::now("Analyst")), table_styles };
+The writer adds:
+
+```rust
+let opts = WriteOptions { roles: Roles::detect(&doc.styles()?), track: Some(Revision::now("Analyst")), table_styles };
 doc.insert(Place::Replace(place.node), &blocks, &opts)?;   // Before, After, Replace, End
 
 revise::replace_in_paragraph(&mut doc, para, "old", "new", Some(&rev))?;
@@ -330,10 +467,11 @@ that cannot be read, a damaged archive, a file that is not a Word document,
 a missing part, a bad part name, an exceeded limit (with the `Limits` field
 to raise), malformed XML (with part, line and column), something not
 supported, an edit that would make the tree invalid, and a node handle from
-another tree. The document views
-add `ForeignRevision` (another author's pending change in the target, with
-the authors' names) and `Invalid` (a place that matches nothing or several
-blocks, an unknown label, a ragged table).
+another tree. The document views add `Invalid` (a place that matches
+nothing or several blocks, a locator or option that names nothing). The
+editing calls will add `ForeignRevision` (another author's pending change
+in the target, with the authors' names) and use `Invalid` for an unknown
+label and a ragged table.
 
 ## The command line
 
@@ -344,9 +482,10 @@ bindings return.
 
 ```sh
 # Look inside
-tabellion inspect report.docx                 # outline: headings, tables, figures with ids
+tabellion inspect report.docx                 # outline: headings, tables, figures with ids and captions, counts
 tabellion inspect report.docx blocks|styles|tables|fields|comments|revisions|images|bookmarks [--json]
-tabellion text report.docx                    # plain text, as a reader sees it
+tabellion inspect report.docx notes|sections|numbering|content-controls [--json]
+tabellion text report.docx [--revisions accepted|rejected|current] [--headers-footers] [--notes] [--comments] [--no-text-boxes]
 
 # Convert, both ways
 tabellion convert report.docx report.typ      # Word -> Typst, in the template's terms
@@ -382,6 +521,29 @@ tabellion fields in.docx out.docx             # update field results without Wor
 tabellion roundtrip in.docx out.docx          # proves byte identity
 tabellion bench in.docx --find … --with …
 ```
+
+`inspect` without a view prints an outline: the title, headings indented by
+level, tables with their caption and size, figures with their caption, each
+with its block id, and counts of tables, images, fields, revisions,
+comments, notes and bookmarks. A caption is the paragraph next to the table
+or figure that is in the Caption style or holds a `SEQ` field: before a
+table first, after a figure first. With a view it prints that view in
+aligned columns cut to the terminal's width (`COLUMNS`, else 100), or with
+`--json` in the documented shape.
+
+`text` prints paragraphs as lines and a table's rows as lines of
+tab-separated cells; a merged cell leaves the positions it covers empty,
+and a nested table's cells stand in the outer cell, separated by spaces.
+Text boxes follow the paragraph that holds them. `--headers-footers` puts a
+section's headers before it and its footers after it (the first page's
+first); `--notes` marks note references as `[1]` for footnotes and `[i]` for
+endnotes, as Word numbers them, and lists the notes at the end;
+`--comments` lists the comments at the end with the text they are about.
+
+Every command exits with 0 on success, 1 when `roundtrip` finds that the
+copy differs, 2 for a wrong command line, 3 when a file cannot be read or
+written or is not a document the engine can read, and 70 for an internal
+error. An error is one line on standard error, never a backtrace.
 
 `insert` takes the place in one of four forms: `--before PLACE`,
 `--after PLACE`, `--replace PLACE`, or `--at NAME` for a `{{NAME}}`
@@ -779,6 +941,61 @@ results that should show the time of opening, and `INCLUDETEXT` or
   second reader finds the files that only Word can open.
 - **Field results.** For documents where Word's results are known (stored
   from a Word run), the engine's field update must reproduce them exactly.
+- The views are compared with Word. `corpus/` holds documents with invented
+  content and, next to each, what Word reports about it (`NAME.word.json`).
+  The tests compare the views with those readings in CI, without Word: the
+  text of the body as stored, after accepting and after rejecting all
+  revisions; each table as rows of cell text, nested tables too; each
+  field's code and result in the body, the notes, headers and footers; each
+  revision with its kind, author and text; each comment with author,
+  initials, text, the text it is about and the comment it answers; each
+  bookmark's text; the notes; the headers and footers of each section; the
+  text of text boxes; pictures with alternative text, title and size;
+  content controls with kind, tag, title and placeholder; and the names of
+  the built-in styles in use. The corpus has a bird survey (merged cells
+  both ways, a nested table, a table of contents, `SEQ`, `REF`, `PAGE` and
+  nested `IF` fields, a field code split over runs, a field in a hyperlink,
+  footnotes and endnotes, an inline and a floating picture, a text box in
+  `mc:AlternateContent`, two sections with different headers and footers and
+  a first page of its own), a parts catalogue (insertions, deletions, a
+  move, formatting and paragraph changes, a deleted and an inserted table
+  row, by two invented authors; comments with replies; content controls of
+  every kind Word makes from its interface), a recipe collection in German
+  and one in French in built-in styles, a document from pandoc, and a
+  document written by hand for what Word does not write from its interface
+  (a field nested in a field code, hidden text, symbols, special hyphens,
+  breaks, a deleted paragraph mark, a choice of `mc:AlternateContent` that
+  Word does not understand, an ignorable element of an unknown namespace,
+  custom XML, smart tags, an equation, a group content control, a note with
+  its own mark, a legacy VML picture, and two paragraphs with one paraId).
+  `corpus/build.sh` makes each file and the readings; the Word documents are
+  made by `corpus/build/word.ps1` in a Word instance of its own, under the
+  invented names Wren Ashby and Pip Tanager. LibreOffice was not available
+  where the corpus was made, so it has no LibreOffice document yet.
+- Where the views report a document differently from Word on purpose, the
+  test normalises the difference and names it: Word writes control
+  characters for paragraph and cell ends, breaks, note and comment marks and
+  pictures, where the views write line ends and tabs, and nothing for a mark
+  or a picture; Word gives a symbol as `(`, the views the code its font
+  gives it; Word gives the letters of an equation in mathematical italic,
+  the views as stored; Word lists a hyperlink element as a `HYPERLINK`
+  field, the views as a hyperlink; Word counts a note with its own mark in
+  its index of notes, the views give such a note no number; and the text of
+  a nested table stands in the outer cell, separated by spaces, so that a
+  row stays one line.
+- A test reads every committed .docx and fails on a creator, last author,
+  company, manager, comment or revision author, initials or person outside a
+  fixed list of invented names, a template with a path, an identity provider
+  other than none, a revision session id that is not a number, and any
+  machine path in any part.
+- Every view of every corpus document is validated against
+  `crates/nebu-docx/schema/views.json`.
+- Tables nested 2,000 deep, 3,000 nested fields, content controls, revisions
+  and hyperlinks run on a thread with a 256 KiB stack; thousands of
+  bookmarks open at once meet `max_total_size`; an absurd `gridSpan`, broken
+  field structure, unknown elements and random bodies built from the
+  elements the walk knows give views or errors and never a panic, and the
+  blocks and the text agree on what a reader sees.
 
 ### With Word, where it is available
 
@@ -794,12 +1011,18 @@ on the Windows host. For each file it:
    failed;
 3. records pages, paragraphs, tables and their styles, the document's table
    styles with Word's visibility flag, revisions, footnotes, and every
-   field's code and result;
+   field's code and result; with `TABELLION_WORD_READ=1`, also a reading
+   of the whole document with all markup shown: the text of every story,
+   the headers and footers of each section, tables as cells, fields,
+   revisions, comments, bookmarks, notes, text boxes, pictures, content
+   controls and the styles in use, and the text and tables again after
+   accepting and after rejecting all revisions;
 4. updates all fields in all stories and records the results again, so the
    engine's results can be compared with Word's;
 5. saves the updated file, then accepts all revisions and saves, reopens,
    rejects all and saves, and optionally saves a PDF;
-6. quits its own Word and makes sure that process is gone.
+6. puts back the options it changed and quits its own Word, and makes sure
+   that process is gone.
 
 Two deliberately broken files show that step 2 works: malformed XML gives
 "Word experienced an error trying to open the file", and a table cell
@@ -844,7 +1067,8 @@ core of a current desktop:
 | Step | Target |
 | --- | --- |
 | Open and parse the main part | < 150 ms |
-| List blocks and styles | < 50 ms |
+| Read every view (one walk over all stories) | < 100 ms |
+| A view after the first | < 10 ms |
 | Write unchanged | < 10 ms |
 | One tracked replacement | < 20 ms |
 | Field update over the whole body | < 100 ms |
@@ -856,6 +1080,16 @@ same document with `read_docx` in 0.21 s and writes it with `print` in
 17.7 s, in R 4.6.1 on the same desktop, each the median of three runs timed
 with `system.time`. officer reads lazily and does neither tracked edits nor
 field updates, so only its read and write times compare.
+
+Measured on a Ryzen 9 5900X while other work kept the load average near 31
+on its 24 threads, each the median of five runs in one process
+(`cargo run --release -p nebu-docx --example views -- large.docx`):
+parsing the main part takes 70 to 115 ms, reading every view 63 to 77 ms,
+each later view under 5 ms, and the text alone 26 to 34 ms. From the
+command line, which also reads and decompresses the file, `tabellion
+inspect large.docx` takes 225 ms, `tabellion text large.docx` 163 ms and
+`tabellion inspect large.docx blocks --json` 157 ms, medians of fifteen
+runs. Parsing the XML is the largest part; the walk is the second.
 
 `tabellion bench` measures each step as the median of several runs in one
 process, reading the file from disk each time. CI runs it on the generated

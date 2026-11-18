@@ -68,6 +68,7 @@ body = "".join([
       + r(" and non") + "<w:r><w:noBreakHyphen/></w:r>" + r("breaking, opt")
       + "<w:r><w:softHyphen/></w:r>" + r("ional.") + "<w:r><w:tab/></w:r>" + r("After a tab.")
       + '<w:r><w:br/></w:r>' + r("After a line break."), "10000007"),
+    p(r("Before a page break.") + '<w:r><w:br w:type="page"/></w:r>' + r("After it."), "1000001D"),
     # The mark of this paragraph is deleted, so it joins the next one.
     p(r("Joined"), "10000008", f"<w:pPr><w:rPr><w:del w:id=\"901\" {AUTHOR}/></w:rPr></w:pPr>"),
     p(r(" together."), "10000009"),

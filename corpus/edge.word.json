@@ -2,7 +2,7 @@
  "word_version": "16.0",
  "stories": {
   "1": [
-   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
   ],
   "2": [
    "* Marked by hand.\r\u0002 Counted twice.\r"
@@ -236,7 +236,7 @@
  ],
  "accepted": {
   "1": [
-   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rJoined together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
   ],
   "2": [
    "* Marked by hand.\r\u0002 Counted twice.\r"
@@ -307,7 +307,7 @@
  ],
  "rejected": {
   "1": [
-   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rA legacy picture: \u0001\r"
   ],
   "2": [
    "* Marked by hand.\r\u0002 Counted twice.\r"

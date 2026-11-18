@@ -293,6 +293,16 @@ impl<'d> Reader<'d> {
         Ok(out)
     }
 
+    /// The stamp of the document's trees now.
+    pub fn stamp(&self) -> Vec<(u64, u64)> {
+        self.doc.stamp()
+    }
+
+    /// The views read before, if any.
+    pub fn cache(&self) -> Option<&'d super::Cache> {
+        self.doc.views.as_deref()
+    }
+
     /// The text the views may cut out of the stories, in bytes.
     fn budget(&self) -> u64 {
         self.doc.limits().max_total_size
@@ -341,19 +351,68 @@ impl<'d> Reader<'d> {
         Ok(sink.out.trim_end_matches('\n').to_string())
     }
 
-    pub fn blocks(&self) -> Result<Vec<Block>, Error> {
-        let main = self.main.clone();
-        let box_text = move |b: NodeId| -> Result<String, Error> {
-            let story = Story {
-                kind: StoryKind::TextBox,
-                part: main.clone(),
-                root: b,
-                id: None,
-            };
-            self.story_text(&story, Revisions::Accepted)
+    /// The text of a text box in the main part.
+    fn box_text(&self, b: NodeId) -> Result<String, Error> {
+        let story = Story {
+            kind: StoryKind::TextBox,
+            part: self.main.clone(),
+            root: b,
+            id: None,
         };
-        let mut sink = BlocksSink::new(self.common()?, &box_text);
-        self.run(&self.stories(true)?, false, &mut sink)?;
+        self.story_text(&story, Revisions::Accepted)
+    }
+
+    /// Reads every view in one walk over the stories.
+    pub fn read_all(&self) -> Result<Reading, Error> {
+        let box_text = |b: NodeId| self.box_text(b);
+        let mut all = All {
+            blocks: BlocksSink::new(self.common()?, &box_text),
+            tables: TablesSink::new(self.common()?),
+            fields: FieldsSink::new(self.common()?, self.budget()),
+            revisions: RevisionsSink::new(self.common()?),
+            marks: MarksSink::new(self.common()?, &self.content_types, self.budget()),
+        };
+        let mut fields = 0;
+        for s in self.stories(false)? {
+            let tree = self.tree(&s.part)?;
+            let rels = self.rels_of(&s.part);
+            all.enter(tree, s.kind, &s.part, None, rels);
+            fields = walk::walk(tree, s.root, &self.styles, fields, &mut all)?;
+            let mut queue: VecDeque<_> = all.take_boxes().into();
+            while let Some((b, block)) = queue.pop_front() {
+                all.enter(tree, StoryKind::TextBox, &s.part, block, rels);
+                fields = walk::walk(tree, b, &self.styles, fields, &mut all)?;
+                queue.extend(all.take_boxes());
+            }
+            all.marks.close_all()?;
+        }
+        let All {
+            blocks,
+            tables,
+            fields,
+            revisions,
+            marks,
+        } = all;
+        let blocks = self.blocks_from(blocks)?;
+        let comments = self.comments(&marks)?;
+        let notes = self.notes(&marks)?;
+        Ok(Reading {
+            blocks,
+            styles: self.styles.clone(),
+            tables: tables_from(tables),
+            fields: fields.fields.into_iter().flatten().collect(),
+            revisions: merge_revisions(revisions.done),
+            comments,
+            notes,
+            images: marks.images,
+            bookmarks: marks.bookmarks,
+            controls: marks.controls,
+            sections: self.sections()?,
+            numbering: self.numbering()?,
+        })
+    }
+
+    fn blocks_from(&self, mut sink: BlocksSink<'_>) -> Result<Vec<Block>, Error> {
         let ranges: HashMap<NodeId, (usize, usize)> = sink
             .text
             .blocks
@@ -424,9 +483,27 @@ impl<'d> Reader<'d> {
         }
         Ok(out)
     }
+}
 
+/// Every view of a document, read in one walk.
+pub(crate) struct Reading {
+    pub blocks: Vec<Block>,
+    pub styles: Styles,
+    pub tables: Vec<Table>,
+    pub fields: Vec<Field>,
+    pub revisions: Vec<Revision>,
+    pub comments: Vec<Comment>,
+    pub notes: Vec<Note>,
+    pub images: Vec<Image>,
+    pub bookmarks: Vec<Bookmark>,
+    pub controls: Vec<Control>,
+    pub sections: Vec<Section>,
+    pub numbering: Numbering,
+}
+
+impl Reading {
     pub fn locate(&self, locator: &Locator) -> Result<Block, Error> {
-        let blocks = self.blocks()?;
+        let blocks = &self.blocks;
         let found: Vec<&Block> = match locator {
             Locator::Block(id) => blocks.iter().filter(|b| b.id == *id).collect(),
             Locator::Heading(text) => blocks
@@ -445,8 +522,7 @@ impl<'d> Reader<'d> {
                 .filter(|b| b.text.contains(s.as_str()))
                 .collect(),
             Locator::Bookmark(name) => {
-                let marks = self.marks(true)?;
-                let Some(b) = marks.bookmarks.iter().find(|b| b.name == *name) else {
+                let Some(b) = self.bookmarks.iter().find(|b| b.name == *name) else {
                     return Err(Error::Invalid(format!(
                         "the document has no bookmark {name:?}"
                     )));
@@ -486,65 +562,87 @@ impl<'d> Reader<'d> {
             ))),
         }
     }
+}
 
-    pub fn tables(&self) -> Result<Vec<Table>, Error> {
-        let mut sink = TablesSink::new(self.common()?);
-        self.run(&self.stories(false)?, true, &mut sink)?;
-        let mut out: Vec<Table> = sink.tables.into_iter().flatten().collect();
-        // Indexes count skipped tables too; number the ones that remain.
-        let map: HashMap<usize, usize> =
-            out.iter().enumerate().map(|(i, t)| (t.index, i)).collect();
-        for t in &mut out {
-            t.index = map[&t.index];
-            if let Some(p) = &mut t.parent {
-                p.table = map.get(&p.table).copied().unwrap_or(p.table);
-            }
-            for c in &mut t.cells {
-                c.tables = c
-                    .tables
-                    .iter()
-                    .filter_map(|i| map.get(i).copied())
-                    .collect();
-            }
+/// The sinks of every view, fed from one walk.
+struct All<'r> {
+    blocks: BlocksSink<'r>,
+    tables: TablesSink<'r>,
+    fields: FieldsSink<'r>,
+    revisions: RevisionsSink<'r>,
+    marks: MarksSink<'r>,
+}
+
+impl<'r> All<'r> {
+    fn enter(
+        &mut self,
+        tree: &'r Tree,
+        story: StoryKind,
+        part: &str,
+        block: Option<String>,
+        rels: &'r HashMap<String, Rel>,
+    ) {
+        for c in [
+            self.blocks.common(),
+            self.tables.common(),
+            self.fields.common(),
+            self.revisions.common(),
+            self.marks.common(),
+        ] {
+            c.enter(tree, story, part, block.clone(), rels);
         }
-        Ok(out)
     }
 
-    pub fn fields(&self) -> Result<Vec<Field>, Error> {
-        let mut sink = FieldsSink::new(self.common()?, self.budget());
-        self.run(&self.stories(false)?, true, &mut sink)?;
-        Ok(sink.fields.into_iter().flatten().collect())
-    }
-
-    pub fn revisions(&self) -> Result<Vec<Revision>, Error> {
-        let mut sink = RevisionsSink::new(self.common()?);
-        self.run(&self.stories(false)?, true, &mut sink)?;
-        Ok(merge_revisions(sink.done))
-    }
-
-    fn marks(&self, main_only: bool) -> Result<MarksSink<'_>, Error> {
-        let mut sink = MarksSink::new(self.common()?, &self.content_types, self.budget());
-        for s in self.stories(main_only)? {
-            self.run(std::slice::from_ref(&s), true, &mut sink)?;
-            sink.close_all()?;
+    /// The text boxes met since the last call. Every sink sees them; one
+    /// list is kept.
+    fn take_boxes(&mut self) -> Vec<(NodeId, Option<String>)> {
+        for c in [
+            self.blocks.common(),
+            self.tables.common(),
+            self.fields.common(),
+            self.revisions.common(),
+        ] {
+            c.boxes.clear();
         }
-        Ok(sink)
+        std::mem::take(&mut self.marks.common().boxes)
     }
+}
 
-    pub fn images(&self) -> Result<Vec<Image>, Error> {
-        Ok(self.marks(false)?.images)
+impl walk::Sink for All<'_> {
+    fn event(&mut self, st: &walk::State, ev: walk::Event<'_>) -> Result<(), Error> {
+        // Blocks are the top level of the body only.
+        if self.marks.c.story == StoryKind::Main {
+            self.blocks.event(st, ev)?;
+        }
+        self.tables.event(st, ev)?;
+        self.fields.event(st, ev)?;
+        self.revisions.event(st, ev)?;
+        self.marks.event(st, ev)
     }
+}
 
-    pub fn content_controls(&self) -> Result<Vec<Control>, Error> {
-        Ok(self.marks(false)?.controls)
+fn tables_from(sink: TablesSink<'_>) -> Vec<Table> {
+    let mut out: Vec<Table> = sink.tables.into_iter().flatten().collect();
+    // Indexes count skipped tables too; number the ones that remain.
+    let map: HashMap<usize, usize> = out.iter().enumerate().map(|(i, t)| (t.index, i)).collect();
+    for t in &mut out {
+        t.index = map[&t.index];
+        if let Some(p) = &mut t.parent {
+            p.table = map.get(&p.table).copied().unwrap_or(p.table);
+        }
+        for c in &mut t.cells {
+            c.tables = c
+                .tables
+                .iter()
+                .filter_map(|i| map.get(i).copied())
+                .collect();
+        }
     }
+    out
+}
 
-    pub fn bookmarks(&self) -> Result<Vec<Bookmark>, Error> {
-        Ok(self.marks(false)?.bookmarks)
-    }
-
-    pub fn comments(&self) -> Result<Vec<Comment>, Error> {
-        let marks = self.marks(true)?;
+impl<'d> Reader<'d> {
+    fn comments(&self, marks: &MarksSink<'_>) -> Result<Vec<Comment>, Error> {
         let replies = self.replies()?;
         let mut out = vec![];
         for s in self.comment_stories()? {
@@ -617,8 +715,7 @@ impl<'d> Reader<'d> {
         Ok(out)
     }
 
-    pub fn notes(&self) -> Result<Vec<Note>, Error> {
-        let marks = self.marks(true)?;
+    fn notes(&self, marks: &MarksSink<'_>) -> Result<Vec<Note>, Error> {
         // The first reference to each note, and its position.
         let mut refs = HashMap::new();
         for (i, r) in marks.note_refs.iter().enumerate() {
@@ -658,7 +755,7 @@ impl<'d> Reader<'d> {
         Ok(out)
     }
 
-    pub fn numbering(&self) -> Result<Numbering, Error> {
+    fn numbering(&self) -> Result<Numbering, Error> {
         super::numbering::read(
             self.parts
                 .numbering
@@ -667,7 +764,7 @@ impl<'d> Reader<'d> {
         )
     }
 
-    pub fn sections(&self) -> Result<Vec<Section>, Error> {
+    fn sections(&self) -> Result<Vec<Section>, Error> {
         let t = self.tree(&self.main)?;
         let mut ends: Vec<(NodeId, Option<String>, Option<String>)> = vec![];
         let mut first: Option<String> = None;
@@ -828,15 +925,19 @@ impl<'d> Reader<'d> {
         Ok(t)
     }
 
-    pub fn text(&self, o: &TextOptions) -> Result<String, Error> {
+    /// The text with the options asked for. Sections, notes and comments
+    /// come from the reading.
+    pub fn text(
+        &self,
+        o: &TextOptions,
+        sections: &[Section],
+        notes: &[Note],
+        comments: &[Comment],
+    ) -> Result<String, Error> {
         let mut sink = TextSink::new(self.common()?, o.revisions, o.notes);
         self.run(&self.stories(true)?, false, &mut sink)?;
         let boxes = std::mem::take(&mut sink.c.boxes);
-        let sections = if o.headers_footers {
-            self.sections()?
-        } else {
-            vec![]
-        };
+        let sections = if o.headers_footers { sections } else { &[] };
         let mut out = String::new();
         let line = |out: &mut String, s: &str| {
             if !s.is_empty() {
@@ -857,14 +958,20 @@ impl<'d> Reader<'d> {
         let mut before: HashMap<&str, Vec<String>> = HashMap::new();
         let mut after: HashMap<&str, Vec<String>> = HashMap::new();
         let mut cache = HashMap::new();
-        for s in &sections {
+        for s in sections {
             for (header, list, at, map) in [
                 (true, &s.headers, &s.first_block, &mut before),
                 (false, &s.footers, &s.last_block, &mut after),
             ] {
                 let Some(at) = at else { continue };
-                for h in list {
-                    if h.kind == "default" || (h.kind == "first" && s.title_page) {
+                // The first page's header and footer, then the others'.
+                let kinds: &[&str] = if s.title_page {
+                    &["first", "default"]
+                } else {
+                    &["default"]
+                };
+                for k in kinds {
+                    for h in list.iter().filter(|h| h.kind == *k) {
                         let t = self.part_text(&h.part, header, o.revisions, &mut cache)?;
                         map.entry(at.as_str()).or_default().push(t);
                     }
@@ -897,7 +1004,6 @@ impl<'d> Reader<'d> {
             }
         }
         if o.notes {
-            let notes = self.notes()?;
             let numbered: Vec<&Note> = notes.iter().filter(|n| n.number.is_some()).collect();
             if !numbered.is_empty() {
                 out.push('\n');
@@ -911,26 +1017,23 @@ impl<'d> Reader<'d> {
                 }
             }
         }
-        if o.comments {
-            let comments = self.comments()?;
-            if !comments.is_empty() {
-                out.push('\n');
-                for c in comments {
-                    let about = c
-                        .anchor
-                        .as_deref()
-                        .map(|a| format!(" on \u{201C}{}\u{201D}", a.trim()))
-                        .unwrap_or_default();
-                    let verb = if c.parent.is_some() {
-                        "Reply"
-                    } else {
-                        "Comment"
-                    };
-                    line(
-                        &mut out,
-                        &format!("[{verb} by {}{about}] {}", c.author, c.text.trim()),
-                    );
-                }
+        if o.comments && !comments.is_empty() {
+            out.push('\n');
+            for c in comments {
+                let about = c
+                    .anchor
+                    .as_deref()
+                    .map(|a| format!(" on \u{201C}{}\u{201D}", a.trim()))
+                    .unwrap_or_default();
+                let verb = if c.parent.is_some() {
+                    "Reply"
+                } else {
+                    "Comment"
+                };
+                line(
+                    &mut out,
+                    &format!("[{verb} by {}{about}] {}", c.author, c.text.trim()),
+                );
             }
         }
         Ok(out)

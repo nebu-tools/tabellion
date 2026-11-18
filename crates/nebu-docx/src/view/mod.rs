@@ -774,80 +774,126 @@ impl std::str::FromStr for Locator {
     }
 }
 
+/// The views of a document as read, with the stamp of the trees they were
+/// read from.
+pub(crate) struct Cache {
+    stamp: Vec<(u64, u64)>,
+    reading: reader::Reading,
+}
+
 impl Document {
+    /// Every view, read in one walk on first use and kept until an edit
+    /// changes a tree or a part is added.
+    fn reading(&mut self) -> Result<&reader::Reading, Error> {
+        // The parts a reading needs were parsed when it was made, so an
+        // equal stamp means nothing changed since.
+        let stamp = self.stamp();
+        if self.views.as_ref().is_some_and(|c| c.stamp == stamp) {
+            return match &self.views {
+                Some(c) => Ok(&c.reading),
+                None => Err(Error::Invalid("the views could not be read".into())),
+            };
+        }
+        let r = reader::Reader::new(self)?;
+        let stamp = r.stamp();
+        let fresh = r.cache().is_some_and(|c| c.stamp == stamp);
+        if !fresh {
+            let reading = r.read_all()?;
+            self.views = Some(Box::new(Cache { stamp, reading }));
+        }
+        match &self.views {
+            Some(c) => Ok(&c.reading),
+            None => Err(Error::Invalid("the views could not be read".into())),
+        }
+    }
+
     /// The top-level blocks of the body with ids, kinds, styles, levels,
     /// text and the content of paragraphs.
     pub fn blocks(&mut self) -> Result<Vec<Block>, Error> {
-        reader::Reader::new(self)?.blocks()
+        Ok(self.reading()?.blocks.clone())
     }
 
     /// The one block a locator names. A locator that matches no block or
     /// several gives [`Error::Invalid`].
     pub fn locate(&mut self, locator: &Locator) -> Result<Block, Error> {
-        reader::Reader::new(self)?.locate(locator)
+        self.reading()?.locate(locator)
     }
 
     /// The styles.
     pub fn styles(&mut self) -> Result<Styles, Error> {
-        Ok(reader::Reader::new(self)?.styles.clone())
+        Ok(self.reading()?.styles.clone())
     }
 
     /// All tables of all stories, nested ones included, in reading order.
     pub fn tables(&mut self) -> Result<Vec<Table>, Error> {
-        reader::Reader::new(self)?.tables()
+        Ok(self.reading()?.tables.clone())
     }
 
     /// All fields of all stories, nested ones after the field that holds
     /// them.
     pub fn fields(&mut self) -> Result<Vec<Field>, Error> {
-        reader::Reader::new(self)?.fields()
+        Ok(self.reading()?.fields.clone())
     }
 
     /// All tracked changes of all stories.
     pub fn revisions(&mut self) -> Result<Vec<Revision>, Error> {
-        reader::Reader::new(self)?.revisions()
+        Ok(self.reading()?.revisions.clone())
     }
 
     /// The comments, replies after the comment they answer.
     pub fn comments(&mut self) -> Result<Vec<Comment>, Error> {
-        reader::Reader::new(self)?.comments()
+        Ok(self.reading()?.comments.clone())
     }
 
     /// The pictures of all stories.
     pub fn images(&mut self) -> Result<Vec<Image>, Error> {
-        reader::Reader::new(self)?.images()
+        Ok(self.reading()?.images.clone())
     }
 
     /// The bookmarks of all stories.
     pub fn bookmarks(&mut self) -> Result<Vec<Bookmark>, Error> {
-        reader::Reader::new(self)?.bookmarks()
+        Ok(self.reading()?.bookmarks.clone())
     }
 
     /// The content controls of all stories, an enclosing control before
     /// those it holds.
     pub fn content_controls(&mut self) -> Result<Vec<Control>, Error> {
-        reader::Reader::new(self)?.content_controls()
+        Ok(self.reading()?.controls.clone())
     }
 
     /// The footnotes, then the endnotes, without separators, each in the
     /// order of their references in the body.
     pub fn notes(&mut self) -> Result<Vec<Note>, Error> {
-        reader::Reader::new(self)?.notes()
+        Ok(self.reading()?.notes.clone())
     }
 
     /// The sections with their page setup, headers and footers.
     pub fn sections(&mut self) -> Result<Vec<Section>, Error> {
-        reader::Reader::new(self)?.sections()
+        Ok(self.reading()?.sections.clone())
     }
 
     /// The numbering definitions and instances.
     pub fn numbering(&mut self) -> Result<Numbering, Error> {
-        reader::Reader::new(self)?.numbering()
+        Ok(self.reading()?.numbering.clone())
     }
 
     /// The text as a reader sees it: paragraphs as lines, tables as lines
     /// of tab-separated cells.
     pub fn text(&mut self, options: &TextOptions) -> Result<String, Error> {
-        reader::Reader::new(self)?.text(options)
+        // Headers, notes and comments come from the reading; the body alone
+        // needs only its own walk.
+        let o = options;
+        if o.headers_footers || o.notes || o.comments {
+            self.reading()?;
+            let r = reader::Reader::new(self)?;
+            return match r.cache() {
+                Some(c) => {
+                    let c = &c.reading;
+                    r.text(o, &c.sections, &c.notes, &c.comments)
+                }
+                None => Err(Error::Invalid("the views could not be read".into())),
+            };
+        }
+        reader::Reader::new(self)?.text(o, &[], &[], &[])
     }
 }

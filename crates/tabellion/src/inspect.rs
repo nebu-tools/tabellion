@@ -18,9 +18,6 @@ pub(crate) fn run(file: &Path, view: Option<View>, json: bool) -> Result<(), Str
     let sha = doc.sha256();
     let Some(view) = view else {
         let text = outline(&mut doc, &name).map_err(fail)?;
-        if json {
-            return Err("--json needs a view: blocks, styles, tables, fields, comments, revisions, images, bookmarks, notes, sections or numbering".into());
-        }
         emit(&text);
         return Ok(());
     };
@@ -50,19 +47,29 @@ pub(crate) fn run(file: &Path, view: Option<View>, json: bool) -> Result<(), Str
         View::Notes => show!("notes", doc.notes(), notes_text),
         View::Sections => show!("sections", doc.sections(), sections_text),
         View::Numbering => show!("numbering", doc.numbering(), numbering_text),
+        View::ContentControls => show!("content_controls", doc.content_controls(), controls_text),
     }
     Ok(())
 }
 
-/// `{"sha256": …, "<view>": …}`, the shape the schema gives.
+/// `{"sha256": …, "<view>": …}`, the shape the schema gives, with fields
+/// in the order the views define them.
 fn to_json<T: Serialize>(key: &str, sha: &str, value: &T) -> String {
-    let mut map = serde_json::Map::new();
-    map.insert("sha256".into(), serde_json::Value::String(sha.into()));
-    map.insert(
-        key.into(),
-        serde_json::to_value(value).unwrap_or(serde_json::Value::Null),
-    );
-    let mut s = serde_json::to_string_pretty(&map).unwrap_or_default();
+    struct Wrapped<'a, T> {
+        key: &'a str,
+        sha: &'a str,
+        value: &'a T,
+    }
+    impl<T: Serialize> Serialize for Wrapped<'_, T> {
+        fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+            use serde::ser::SerializeMap;
+            let mut m = s.serialize_map(Some(2))?;
+            m.serialize_entry("sha256", self.sha)?;
+            m.serialize_entry(self.key, self.value)?;
+            m.end()
+        }
+    }
+    let mut s = serde_json::to_string_pretty(&Wrapped { key, sha, value }).unwrap_or_default();
     s.push('\n');
     s
 }
@@ -478,4 +485,25 @@ fn numbering_text(n: &nebu_docx::Numbering) -> String {
         out.push_str("No numbering.\n");
     }
     out
+}
+
+fn controls_text(controls: &[nebu_docx::Control]) -> String {
+    let rows: Vec<Vec<String>> = controls
+        .iter()
+        .map(|c| {
+            let kind = serde_json::to_value(c.control.kind).unwrap_or_default();
+            vec![
+                kind.as_str().unwrap_or_default().replace('_', " "),
+                opt(&c.control.tag),
+                opt(&c.control.title),
+                opt(&c.location.block),
+                if c.control.placeholder {
+                    format!("{} (placeholder)", c.text)
+                } else {
+                    c.text.clone()
+                },
+            ]
+        })
+        .collect();
+    columns(&["KIND", "TAG", "TITLE", "BLOCK", "TEXT"], &rows)
 }

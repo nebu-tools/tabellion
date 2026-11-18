@@ -113,6 +113,18 @@ impl Package {
         })
     }
 
+    /// What the parsed trees and the list of parts are now. Equal stamps
+    /// mean that nothing was edited or added in between.
+    pub(crate) fn stamp(&self) -> Vec<(u64, u64)> {
+        let mut out = vec![(self.entries.len() as u64, 0)];
+        for e in &self.entries {
+            if let Body::Xml(t) = &e.body {
+                out.push(t.stamp());
+            }
+        }
+        out
+    }
+
     /// The limits the package was opened with.
     pub(crate) fn limits(&self) -> &Limits {
         &self.limits

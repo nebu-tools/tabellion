@@ -6,7 +6,7 @@ mod layout;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use nebu_docx::{Document, Revisions, TextOptions};
 
 /// Exit codes. Usage errors exit with 2, from the argument parser.
@@ -94,6 +94,7 @@ pub(crate) enum View {
     Notes,
     Sections,
     Numbering,
+    ContentControls,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
@@ -162,6 +163,19 @@ fn main() -> ExitCode {
         eprintln!("tabellion: internal error{place}; please report it");
     }));
     let cli = Cli::parse();
+    if let Command::Inspect {
+        view: None,
+        json: true,
+        ..
+    } = &cli.command
+    {
+        Cli::command()
+            .error(
+                clap::error::ErrorKind::MissingRequiredArgument,
+                "--json prints one view; name it, for example `inspect FILE blocks --json`",
+            )
+            .exit();
+    }
     let run = || -> Result<bool, String> {
         match &cli.command {
             Command::Inspect { file, view, json } => inspect::run(file, *view, *json).map(|_| true),

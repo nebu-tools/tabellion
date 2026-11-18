@@ -4,7 +4,7 @@
 #   corpus/build.sh word     # the Word-made documents, in a Word of its own
 #   corpus/build.sh pandoc   # the pandoc-made document
 #   corpus/build.sh edge     # the hand-written document of edge cases
-#   corpus/build.sh read     # Word's readings of every document
+#   corpus/build.sh read [FILE...]  # Word's readings of every document, or of some
 #
 # The Word steps run from WSL against the Word on the Windows host. They
 # work in a fresh directory under the Windows %TEMP% and remove it after.
@@ -55,10 +55,11 @@ edge_doc() {
 }
 
 read_all() {
-  local out
+  local out files
   out=$(mktemp -d)
-  TABELLION_WORD_READ=1 "$here/../tools/word/check.sh" "$out" "$here"/*.docx >/dev/null
-  for f in "$here"/*.docx; do
+  if [ $# -gt 0 ]; then files=("$@"); else files=("$here"/*.docx); fi
+  TABELLION_WORD_READ=1 "$here/../tools/word/check.sh" "$out" "${files[@]}" >/dev/null
+  for f in "${files[@]}"; do
     local stem
     stem=$(basename "$f" .docx)
     python3 "$here/build/reading.py" "$out/$stem.json" > "$here/$stem.word.json"
@@ -70,6 +71,6 @@ case ${1:-} in
   word) word ;;
   pandoc) pandoc_doc ;;
   edge) edge_doc ;;
-  read) read_all ;;
+  read) shift; read_all "$@" ;;
   *) echo "usage: corpus/build.sh word|pandoc|edge|read" >&2; exit 2 ;;
 esac

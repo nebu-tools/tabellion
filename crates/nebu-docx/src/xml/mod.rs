@@ -265,6 +265,9 @@ pub struct Tree {
     /// The limits the tree was made with. They bound it for its whole life:
     /// every node it allocates and every edit that deepens it.
     limits: Limits,
+    /// Counts the edits that reached the document, so that what was read
+    /// from the tree can tell whether it is still current.
+    edits: u64,
 }
 
 impl Clone for Tree {
@@ -280,6 +283,7 @@ impl Clone for Tree {
             uri_index: self.uri_index.clone(),
             encoding: self.encoding,
             limits: self.limits.clone(),
+            edits: self.edits,
         }
     }
 }
@@ -317,6 +321,7 @@ impl Tree {
             uri_index: HashMap::new(),
             encoding,
             limits: limits.clone(),
+            edits: 0,
         };
         t.intern_uri(XML_NS);
         t.intern_uri(XMLNS_NS);
@@ -404,6 +409,12 @@ impl Tree {
                 out
             }
         }
+    }
+
+    /// The tree's identity and the number of edits made to it: equal
+    /// stamps mean the same, unchanged tree.
+    pub(crate) fn stamp(&self) -> (u64, u64) {
+        (self.id, self.edits)
     }
 
     /// True if an edit reached the document since it was parsed.
@@ -1304,6 +1315,7 @@ impl Tree {
     /// ancestor that is already marked has marked ancestors, so the walk
     /// stops there.
     fn touch(&mut self, i: Ix, flag: u8) {
+        self.edits += 1;
         self.n_mut(i).flags |= flag;
         let mut cur = self.n(i).parent;
         while let Some(c) = cur {

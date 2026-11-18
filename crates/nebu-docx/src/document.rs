@@ -67,6 +67,8 @@ fn xml_char(c: char) -> bool {
 pub struct Document {
     package: Package,
     main: String,
+    /// The views as last read.
+    pub(crate) views: Option<Box<crate::view::Cache>>,
 }
 
 impl std::fmt::Debug for Document {
@@ -123,6 +125,7 @@ impl Document {
         let mut doc = Document {
             package,
             main: String::new(),
+            views: None,
         };
         let rels = doc.relationships("")?;
         let Some(rel) = rels
@@ -193,6 +196,11 @@ impl Document {
     /// hex. A `#<index>` block id holds for this file only.
     pub fn sha256(&self) -> String {
         crate::sha256::hex(self.package.source_bytes())
+    }
+
+    /// The stamp of the parsed trees and the list of parts.
+    pub(crate) fn stamp(&self) -> Vec<(u64, u64)> {
+        self.package.stamp()
     }
 
     /// The limits the document was opened with.
