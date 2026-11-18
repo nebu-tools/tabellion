@@ -1217,6 +1217,31 @@ fn the_corpus_has_the_cases_it_claims() {
             .any(|r| r.kind == RevisionKind::MoveTo)
     );
     assert!(parts.comments().iter().any(|c| c.parent.is_some()));
+    // A note reference in a text box, which Word drops: no number, and the
+    // body's notes keep theirs.
+    let box_note = edge
+        .notes()
+        .iter()
+        .find(|n| n.text == "Noted in the box.")
+        .unwrap();
+    assert_eq!(box_note.number, None);
+    assert_eq!(
+        box_note.location.as_ref().map(|l| l.story),
+        Some(StoryKind::TextBox)
+    );
+    // Toggle properties in the document defaults, and a group content
+    // control that Word made.
+    let mut d = open("defaults.docx");
+    let styles = String::from_utf8(d.read_part("word/styles.xml").unwrap()).unwrap();
+    assert!(
+        styles.contains("<w:rPrDefault><w:rPr><w:rFonts")
+            && styles.contains("<w:b/><w:bCs/><w:i/>")
+    );
+    let defaults = d.views().unwrap();
+    assert!(defaults.content_controls().iter().any(|c| {
+        c.control.kind == ContentControlKind::Group
+            && c.control.tag.as_deref() == Some("delivery:group")
+    }));
     // Nested fields and a field whose result spans paragraphs.
     let birds = b.views().unwrap();
     assert!(

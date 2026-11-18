@@ -470,9 +470,11 @@ proptest! {
                 Block::Heading { level, content, .. } => {
                     let want = plain(content);
                     let want = want.trim_end_matches('\n');
+                    let name = format!("Heading {level}");
                     prop_assert!(
-                        v.blocks().iter().any(|x| x.level == Some(*level) && x.text == want),
-                        "no heading {} {:?}", level, want
+                        v.blocks().iter().any(|x| x.level == Some(*level) && x.text == want
+                            && x.style_name.as_deref() == Some(name.as_str())),
+                        "no heading {} {:?} in its style", level, want
                     );
                 }
                 Block::Table(t) => {

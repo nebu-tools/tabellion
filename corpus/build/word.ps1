@@ -423,8 +423,8 @@ function Changes {
 
 function Defaults {
   # Toggle properties in the document defaults. Word's own "Set As
-  # Default" puts bold and italic into the Normal style, not into
-  # w:docDefaults, so the script makes the document in Word, adds bold and
+  # Default" puts bold and italic into the Normal style and leaves
+  # w:docDefaults alone, so the script makes the document in Word, adds bold and
   # italic to the defaults of its styles part, and has Word open the file
   # and save it again: the file is Word's, its defaults are not ones Word's
   # interface makes.
