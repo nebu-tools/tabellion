@@ -1,0 +1,1268 @@
+{
+ "word_version": "16.0",
+ "stories": {
+  "1": [
+   "Field notes with changes\rThe heron fed at the east pool and the reed beds.\rSightings\rBird\r\u0007Site\r\u0007Count\r\u0007\r\u0007Heron\r\u0007East pool\r\u00072\r\u0007\r\u0007Coot\u0007Reed beds\u00075\r\u0007\u0007\rThe weir was in flood on the first visit.\rObserver: Wren Ashby.\rCounts are pairs.\u0002\r\r"
+  ],
+  "2": [
+   "\u0002 Seen from the hide at dawn.\r"
+  ],
+  "4": [
+   "Both from the dawn visit.\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "Field notes, summerspring\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "Draft copy for the group\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Field notes with changes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 75,
+   "text": "The heron fed at the east pool and the reed beds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 75,
+   "end": 85,
+   "text": "Sightings\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 85,
+   "end": 90,
+   "text": "Bird\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 90,
+   "end": 95,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 95,
+   "end": 101,
+   "text": "Count\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 101,
+   "end": 102,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 102,
+   "end": 108,
+   "text": "Heron\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 108,
+   "end": 118,
+   "text": "East pool\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 118,
+   "end": 120,
+   "text": "2\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 120,
+   "end": 121,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 121,
+   "end": 128,
+   "text": "Coot\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 128,
+   "end": 138,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 138,
+   "end": 142,
+   "text": "5\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 142,
+   "end": 143,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 143,
+   "end": 144,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 144,
+   "end": 188,
+   "text": "The weir was in flood on the first visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 188,
+   "end": 212,
+   "text": "Observer: Wren Ashby.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 212,
+   "end": 231,
+   "text": "Counts are pairs.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 231,
+   "end": 232,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "Field notes, summerspring\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "Draft copy for the group\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "rows": 3,
+   "columns": 3,
+   "nesting": 1,
+   "start": 85,
+   "end": 143,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 85,
+     "end": 90,
+     "text": "Bird\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 90,
+     "end": 95,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 95,
+     "end": 101,
+     "text": "Count\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 102,
+     "end": 108,
+     "text": "Heron\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 108,
+     "end": 118,
+     "text": "East pool\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "start": 118,
+     "end": 120,
+     "text": "2\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 121,
+     "end": 128,
+     "text": "Coot\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 128,
+     "end": 138,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "start": 138,
+     "end": 142,
+     "text": "5\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "fields": [],
+ "revisions": [
+  {
+   "story": 1,
+   "type": 2,
+   "author": "Pip Tanager",
+   "text": "east pool and the ",
+   "format": ""
+  },
+  {
+   "story": 1,
+   "type": 1,
+   "author": "Wren Ashby",
+   "text": " and the reed beds",
+   "format": ""
+  },
+  {
+   "story": 2,
+   "type": 2,
+   "author": "Pip Tanager",
+   "text": "Seen ",
+   "format": ""
+  },
+  {
+   "story": 2,
+   "type": 1,
+   "author": "Wren Ashby",
+   "text": " at dawn",
+   "format": ""
+  },
+  {
+   "story": 7,
+   "type": 1,
+   "author": "Wren Ashby",
+   "text": "summer",
+   "format": ""
+  },
+  {
+   "story": 7,
+   "type": 2,
+   "author": "Wren Ashby",
+   "text": "spring",
+   "format": ""
+  },
+  {
+   "story": 9,
+   "type": 1,
+   "author": "Wren Ashby",
+   "text": "copy ",
+   "format": ""
+  }
+ ],
+ "comments": [
+  {
+   "index": 1,
+   "author": "Pip Tanager",
+   "initials": "PT",
+   "text": "Both from the dawn visit.",
+   "scope": "Heron\r\u0007East pool",
+   "parent": null,
+   "done": false
+  }
+ ],
+ "bookmarks": [],
+ "footnotes": [
+  {
+   "index": 1,
+   "text": "Seen from the hide at dawn."
+  }
+ ],
+ "endnotes": [],
+ "inline_shapes": [],
+ "shapes": [],
+ "content_controls": [
+  {
+   "type": 9,
+   "tag": "note:row",
+   "title": "Sighting row",
+   "text": "Coot\u0007Reed beds\u00075",
+   "placeholder": false
+  },
+  {
+   "type": 0,
+   "tag": "note:block",
+   "title": "Paragraph note",
+   "text": "The weir was in flood on the first visit.",
+   "placeholder": false
+  },
+  {
+   "type": 1,
+   "tag": "note:words",
+   "title": "Observer",
+   "text": "Wren Ashby",
+   "placeholder": false
+  }
+ ],
+ "styles": [
+  {
+   "name": "Comment Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Comment Subject",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Comment Text",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Default Paragraph Font",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footer",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Footnote Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footnote Text",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Header",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 1",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 2",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 3",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 4",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 5",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 6",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 7",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 8",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 9",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Emphasis",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Intense Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Intense Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "List Paragraph",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "No List",
+   "builtin": true,
+   "type": 4
+  },
+  {
+   "name": "Normal",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Placeholder Text",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Quote",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Subtitle",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Table Normal",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Title",
+   "builtin": true,
+   "type": 1
+  }
+ ],
+ "accepted": {
+  "1": [
+   "Field notes with changes\rThe heron fed at the reed beds.\rSightings\rBird\r\u0007Site\r\u0007Count\r\u0007\r\u0007Heron\r\u0007East pool\r\u00072\r\u0007\r\u0007Coot\u0007Reed beds\u00075\r\u0007\u0007\rThe weir was in flood on the first visit.\rObserver: Wren Ashby.\rCounts are pairs.\u0002\r\r"
+  ],
+  "2": [
+   "\u0002 from the hide at dawn.\r"
+  ],
+  "4": [
+   "Both from the dawn visit.\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "Field notes, summer\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "Draft copy for the group\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Field notes with changes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 57,
+   "text": "The heron fed at the reed beds.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 57,
+   "end": 67,
+   "text": "Sightings\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 67,
+   "end": 72,
+   "text": "Bird\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 72,
+   "end": 77,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 77,
+   "end": 83,
+   "text": "Count\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 83,
+   "end": 84,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 84,
+   "end": 90,
+   "text": "Heron\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 90,
+   "end": 100,
+   "text": "East pool\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 100,
+   "end": 102,
+   "text": "2\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 102,
+   "end": 103,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 103,
+   "end": 110,
+   "text": "Coot\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 110,
+   "end": 120,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 120,
+   "end": 124,
+   "text": "5\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 124,
+   "end": 125,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 125,
+   "end": 126,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 126,
+   "end": 170,
+   "text": "The weir was in flood on the first visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 170,
+   "end": 194,
+   "text": "Observer: Wren Ashby.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 194,
+   "end": 213,
+   "text": "Counts are pairs.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 213,
+   "end": 214,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "Field notes, summer\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "Draft copy for the group\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [
+  {
+   "index": 1,
+   "text": "from the hide at dawn."
+  }
+ ],
+ "accepted_endnotes": [],
+ "accepted_tables": [
+  {
+   "rows": 3,
+   "columns": 3,
+   "nesting": 1,
+   "start": 67,
+   "end": 125,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 67,
+     "end": 72,
+     "text": "Bird\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 72,
+     "end": 77,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 77,
+     "end": 83,
+     "text": "Count\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 84,
+     "end": 90,
+     "text": "Heron\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 90,
+     "end": 100,
+     "text": "East pool\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "start": 100,
+     "end": 102,
+     "text": "2\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 103,
+     "end": 110,
+     "text": "Coot\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 110,
+     "end": 120,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "start": 120,
+     "end": 124,
+     "text": "5\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "rejected": {
+  "1": [
+   "Field notes with changes\rThe heron fed at the east pool.\rSightings\rBird\r\u0007Site\r\u0007Count\r\u0007\r\u0007Heron\r\u0007East pool\r\u00072\r\u0007\r\u0007Coot\u0007Reed beds\u00075\r\u0007\u0007\rThe weir was in flood on the first visit.\rObserver: Wren Ashby.\rCounts are pairs.\u0002\r\r"
+  ],
+  "2": [
+   "\u0002 Seen from the hide.\r"
+  ],
+  "4": [
+   "Both from the dawn visit.\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "Field notes, spring\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "Draft for the group\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 25,
+   "text": "Field notes with changes\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 25,
+   "end": 57,
+   "text": "The heron fed at the east pool.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 57,
+   "end": 67,
+   "text": "Sightings\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 67,
+   "end": 72,
+   "text": "Bird\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 72,
+   "end": 77,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 77,
+   "end": 83,
+   "text": "Count\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 83,
+   "end": 84,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 84,
+   "end": 90,
+   "text": "Heron\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 90,
+   "end": 100,
+   "text": "East pool\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 100,
+   "end": 102,
+   "text": "2\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 102,
+   "end": 103,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 103,
+   "end": 110,
+   "text": "Coot\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 110,
+   "end": 120,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 120,
+   "end": 124,
+   "text": "5\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 124,
+   "end": 125,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 125,
+   "end": 126,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 126,
+   "end": 170,
+   "text": "The weir was in flood on the first visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 170,
+   "end": 194,
+   "text": "Observer: Wren Ashby.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 194,
+   "end": 213,
+   "text": "Counts are pairs.\u0002\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 213,
+   "end": 214,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 3,
+   "columns": 3,
+   "nesting": 1,
+   "start": 67,
+   "end": 125,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 67,
+     "end": 72,
+     "text": "Bird\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 72,
+     "end": 77,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 77,
+     "end": 83,
+     "text": "Count\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 84,
+     "end": 90,
+     "text": "Heron\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 90,
+     "end": 100,
+     "text": "East pool\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 3,
+     "start": 100,
+     "end": 102,
+     "text": "2\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 1,
+     "start": 103,
+     "end": 110,
+     "text": "Coot\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 2,
+     "start": 110,
+     "end": 120,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 3,
+     "column": 3,
+     "start": 120,
+     "end": 124,
+     "text": "5\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
+}

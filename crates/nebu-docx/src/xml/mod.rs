@@ -265,6 +265,9 @@ pub struct Tree {
     /// The limits the tree was made with. They bound it for its whole life:
     /// every node it allocates and every edit that deepens it.
     limits: Limits,
+    /// Counts the edits that reached the document, so that what was read
+    /// from the tree can tell whether it is still current.
+    edits: u64,
 }
 
 impl Clone for Tree {
@@ -280,6 +283,7 @@ impl Clone for Tree {
             uri_index: self.uri_index.clone(),
             encoding: self.encoding,
             limits: self.limits.clone(),
+            edits: self.edits,
         }
     }
 }
@@ -317,6 +321,7 @@ impl Tree {
             uri_index: HashMap::new(),
             encoding,
             limits: limits.clone(),
+            edits: 0,
         };
         t.intern_uri(XML_NS);
         t.intern_uri(XMLNS_NS);
@@ -404,6 +409,12 @@ impl Tree {
                 out
             }
         }
+    }
+
+    /// The tree's identity and the number of edits made to it: equal
+    /// stamps mean the same, unchanged tree.
+    pub(crate) fn stamp(&self) -> (u64, u64) {
+        (self.id, self.edits)
     }
 
     /// True if an edit reached the document since it was parsed.
@@ -551,6 +562,32 @@ impl Tree {
                     .map(|a| chars::decode(&tag[a.value], true))
             }
         })
+    }
+
+    /// The namespace a prefix is bound to at an element, by its own
+    /// declarations and those of its ancestors. An empty prefix asks for
+    /// the default namespace. `None` if the prefix is not bound there.
+    pub fn namespace_of_prefix(&self, id: NodeId, prefix: &str) -> Result<Option<&str>, Error> {
+        let mut i = self.ix(id)?;
+        loop {
+            if let Data::Element(e) = &self.n(i).data
+                && let Some(s) = e.scope
+            {
+                let u = self.lookup(s, prefix).flatten();
+                return Ok(u.map(|u| &*self.uris[u as usize]));
+            }
+            match self.n(i).parent {
+                Some(p) => i = p,
+                None => return Ok((prefix == "xml").then_some(XML_NS)),
+            }
+        }
+    }
+
+    /// The `k`-th child, counting from 0. Lets a walk over the tree keep a
+    /// position without collecting the children.
+    pub(crate) fn child_at(&self, id: NodeId, k: usize) -> Option<NodeId> {
+        let i = self.ix(id).ok()?;
+        self.n(i).children.get(k).map(|&c| self.handle(c))
     }
 
     /// The attributes of an element in source order, without namespace
@@ -912,6 +949,7 @@ impl Tree {
 
     /// The node at an index that this tree handed out itself.
     fn n(&self, i: Ix) -> &Node {
+        crate::cost::tick(1);
         &self.nodes[i as usize]
     }
 
@@ -1278,6 +1316,7 @@ impl Tree {
     /// ancestor that is already marked has marked ancestors, so the walk
     /// stops there.
     fn touch(&mut self, i: Ix, flag: u8) {
+        self.edits += 1;
         self.n_mut(i).flags |= flag;
         let mut cur = self.n(i).parent;
         while let Some(c) = cur {

@@ -1,0 +1,1759 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/nebu-tools/tabellion/crates/nebu-docx/schema/views.json",
+  "title": "Tabellion document views",
+  "description": "The JSON of one view, as `tabellion inspect FILE VIEW --json` prints it and the R package returns it: the file's SHA-256 and one key named after the view.",
+  "type": "object",
+  "properties": {
+    "sha256": {
+      "type": "string",
+      "description": "The SHA-256 of the file, in lower-case hex. A #index block id holds for this file only."
+    },
+    "blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/block"
+      }
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/style"
+      }
+    },
+    "tables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/table"
+      }
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "comments": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/comment"
+      }
+    },
+    "revisions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/revision"
+      }
+    },
+    "images": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/image"
+      }
+    },
+    "bookmarks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/bookmark"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/note"
+      }
+    },
+    "sections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/section"
+      }
+    },
+    "numbering": {
+      "$ref": "#/$defs/numbering"
+    },
+    "content_controls": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/control"
+      }
+    }
+  },
+  "required": [
+    "sha256"
+  ],
+  "minProperties": 2,
+  "maxProperties": 2,
+  "additionalProperties": false,
+  "$defs": {
+    "location": {
+      "description": "Where an item is: the kind of story, the part, and the id of the top-level block of the body that holds it (main story and its text boxes only).",
+      "type": "object",
+      "properties": {
+        "story": {
+          "enum": [
+            "main",
+            "header",
+            "footer",
+            "footnote",
+            "endnote",
+            "comment",
+            "text_box"
+          ]
+        },
+        "part": {
+          "type": "string"
+        },
+        "block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "story",
+        "part",
+        "block"
+      ],
+      "additionalProperties": false
+    },
+    "numbering_ref": {
+      "description": "A list a paragraph or style belongs to.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "level": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "id",
+        "level"
+      ],
+      "additionalProperties": false
+    },
+    "format": {
+      "description": "Direct formatting of a run; a property that is not set comes from styles. Size is in points.",
+      "type": "object",
+      "properties": {
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "strike": {
+          "type": "boolean"
+        },
+        "double_strike": {
+          "type": "boolean"
+        },
+        "superscript": {
+          "type": "boolean"
+        },
+        "subscript": {
+          "type": "boolean"
+        },
+        "small_caps": {
+          "type": "boolean"
+        },
+        "all_caps": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "style": {
+          "type": "string"
+        },
+        "underline": {
+          "type": "string"
+        },
+        "font": {
+          "type": "string"
+        },
+        "size": {
+          "type": "number"
+        },
+        "color": {
+          "type": "string"
+        },
+        "highlight": {
+          "type": "string"
+        }
+      },
+      "required": [],
+      "additionalProperties": false
+    },
+    "change": {
+      "description": "A tracked change that text is in.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "insertion",
+            "deletion",
+            "move_from",
+            "move_to",
+            "formatting"
+          ]
+        },
+        "author": {
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "author",
+        "date"
+      ],
+      "additionalProperties": false
+    },
+    "content_control": {
+      "description": "A content control's kind, tag and title.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "rich_text",
+            "plain_text",
+            "picture",
+            "date",
+            "combo_box",
+            "drop_down_list",
+            "check_box",
+            "building_block",
+            "group",
+            "repeating_section",
+            "repeating_section_item",
+            "citation",
+            "bibliography",
+            "equation"
+          ]
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placeholder": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "tag",
+        "title",
+        "placeholder"
+      ],
+      "additionalProperties": false
+    },
+    "inline": {
+      "description": "One item of a paragraph's content.",
+      "oneOf": [
+        {
+          "description": "Text of one run, deleted and hidden text included.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "text"
+            },
+            "text": {
+              "type": "string"
+            },
+            "format": {
+              "$ref": "#/$defs/format"
+            },
+            "toggles": {
+              "description": "The toggle properties that are on after the style cascade; hidden text is text a reader does not see.",
+              "type": "array",
+              "items": {
+                "enum": [
+                  "bold",
+                  "bold_complex",
+                  "italic",
+                  "italic_complex",
+                  "all_caps",
+                  "small_caps",
+                  "strike",
+                  "double_strike",
+                  "outline",
+                  "shadow",
+                  "emboss",
+                  "imprint",
+                  "hidden"
+                ]
+              }
+            },
+            "revision": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/$defs/change"
+                }
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "text",
+            "format",
+            "toggles",
+            "revision"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The result of a field begins.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "field_start"
+            },
+            "field": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "code": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "field",
+            "code"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The result of a field ends.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "field_end"
+            },
+            "field": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "field"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A hyperlink begins.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "hyperlink_start"
+            },
+            "target": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "anchor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "target",
+            "anchor"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A hyperlink ends.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "hyperlink_end"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A content control begins.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "content_control_start"
+            },
+            "kind": {
+              "enum": [
+                "rich_text",
+                "plain_text",
+                "picture",
+                "date",
+                "combo_box",
+                "drop_down_list",
+                "check_box",
+                "building_block",
+                "group",
+                "repeating_section",
+                "repeating_section_item",
+                "citation",
+                "bibliography",
+                "equation"
+              ]
+            },
+            "tag": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "title": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "placeholder": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "tag",
+            "title",
+            "placeholder"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A content control ends.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "content_control_end"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A bookmark begins.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "bookmark_start"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A bookmark ends.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "bookmark_end"
+            },
+            "name": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "name"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The text a comment is about begins.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "comment_start"
+            },
+            "comment": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "comment"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The text a comment is about ends.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "comment_end"
+            },
+            "comment": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "comment"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The mark of a comment.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "comment_reference"
+            },
+            "comment": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "comment"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "The mark that calls a note.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "note_reference"
+            },
+            "note": {
+              "enum": [
+                "footnote",
+                "endnote"
+              ]
+            },
+            "id": {
+              "type": "string"
+            },
+            "number": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          "required": [
+            "type",
+            "note",
+            "id",
+            "number"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A picture, chart, shape or text box.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "drawing"
+            },
+            "kind": {
+              "enum": [
+                "picture",
+                "chart",
+                "diagram",
+                "shape",
+                "text_box",
+                "group",
+                "canvas",
+                "ink",
+                "object",
+                "other"
+              ]
+            },
+            "placement": {
+              "enum": [
+                "inline",
+                "floating"
+              ]
+            },
+            "image": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            },
+            "alt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "text": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "kind",
+            "placement",
+            "image",
+            "alt",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "An equation.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "math"
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "A page or column break.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "break"
+            },
+            "kind": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "description": "An element the views do not know.",
+          "type": "object",
+          "properties": {
+            "type": {
+              "const": "opaque"
+            },
+            "element": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "element"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "block": {
+      "description": "A top-level block of the body.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "description": "A block id: p: or t: and eight capital hexadecimal digits, or # and an index.",
+          "type": "string"
+        },
+        "shared_para_id": {
+          "description": "True if another block of the body has the same w14:paraId, so that this one has a #index id.",
+          "type": "boolean"
+        },
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "enum": [
+            "paragraph",
+            "table",
+            "content_control",
+            "section",
+            "bookmark",
+            "other"
+          ]
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "numbering": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/numbering_ref"
+            }
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "element": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "control": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/content_control"
+            }
+          ]
+        },
+        "content": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/inline"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "shared_para_id",
+        "index",
+        "kind",
+        "style",
+        "style_name",
+        "level",
+        "numbering",
+        "text",
+        "element",
+        "control",
+        "content"
+      ],
+      "additionalProperties": false
+    },
+    "local_name": {
+      "description": "A built-in style's name in another language.",
+      "type": "object",
+      "properties": {
+        "language": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "language",
+        "name"
+      ],
+      "additionalProperties": false
+    },
+    "style": {
+      "description": "A style.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "display_name": {
+          "type": "string"
+        },
+        "local_names": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/local_name"
+          }
+        },
+        "kind": {
+          "enum": [
+            "paragraph",
+            "character",
+            "table",
+            "numbering"
+          ]
+        },
+        "built_in": {
+          "type": "boolean"
+        },
+        "default": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "based_on": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "next": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "linked": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "outline_level": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1
+        },
+        "numbering": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/numbering_ref"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "display_name",
+        "local_names",
+        "kind",
+        "built_in",
+        "default",
+        "hidden",
+        "based_on",
+        "next",
+        "linked",
+        "outline_level",
+        "numbering"
+      ],
+      "additionalProperties": false
+    },
+    "cell_ref": {
+      "description": "A cell of a table: the table's index, row and grid column from 0.",
+      "type": "object",
+      "properties": {
+        "table": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "row": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "table",
+        "row",
+        "column"
+      ],
+      "additionalProperties": false
+    },
+    "cell": {
+      "description": "A cell, once, with its place on the grid.",
+      "type": "object",
+      "properties": {
+        "row": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "column": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "row_span": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "column_span": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "tables": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "required": [
+        "row",
+        "column",
+        "row_span",
+        "column_span",
+        "text",
+        "tables"
+      ],
+      "additionalProperties": false
+    },
+    "table": {
+      "description": "A table on its grid.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        },
+        "parent": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/cell_ref"
+            }
+          ]
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "row_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "column_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cells": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/cell"
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      },
+      "required": [
+        "index",
+        "id",
+        "location",
+        "parent",
+        "style",
+        "row_count",
+        "column_count",
+        "cells",
+        "rows"
+      ],
+      "additionalProperties": false
+    },
+    "field": {
+      "description": "A field.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "type": "string"
+        },
+        "code": {
+          "type": "string"
+        },
+        "result": {
+          "type": "string"
+        },
+        "simple": {
+          "type": "boolean"
+        },
+        "parent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "code",
+        "result",
+        "simple",
+        "parent",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "revision": {
+      "description": "A tracked change.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "kind": {
+          "enum": [
+            "insertion",
+            "deletion",
+            "move_from",
+            "move_to",
+            "formatting"
+          ]
+        },
+        "target": {
+          "enum": [
+            "text",
+            "paragraph_mark",
+            "row",
+            "cell",
+            "run",
+            "paragraph",
+            "table",
+            "section"
+          ]
+        },
+        "author": {
+          "type": "string"
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "index",
+        "kind",
+        "target",
+        "author",
+        "date",
+        "text",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "comment": {
+      "description": "A comment.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "author": {
+          "type": "string"
+        },
+        "initials": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "date": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": "string"
+        },
+        "anchor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "parent": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "done": {
+          "type": "boolean"
+        },
+        "location": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/location"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "author",
+        "initials",
+        "date",
+        "text",
+        "anchor",
+        "parent",
+        "done",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "note": {
+      "description": "A footnote or endnote.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "footnote",
+            "endnote"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "number": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "text": {
+          "type": "string"
+        },
+        "location": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/location"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "number",
+        "text",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "bookmark": {
+      "description": "A bookmark.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "name",
+        "id",
+        "hidden",
+        "text",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "image": {
+      "description": "A picture. Width and height are in points.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "placement": {
+          "enum": [
+            "inline",
+            "floating"
+          ]
+        },
+        "relationship": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "part": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "link": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "width": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "height": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alt": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "index",
+        "placement",
+        "relationship",
+        "part",
+        "link",
+        "content_type",
+        "width",
+        "height",
+        "name",
+        "title",
+        "alt",
+        "location"
+      ],
+      "additionalProperties": false
+    },
+    "header_footer": {
+      "description": "A header or footer of a section.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "default",
+            "first",
+            "even"
+          ]
+        },
+        "part": {
+          "type": "string"
+        },
+        "inherited": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "part",
+        "inherited",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "margins": {
+      "description": "Page margins in points.",
+      "type": "object",
+      "properties": {
+        "top": {
+          "type": "number"
+        },
+        "right": {
+          "type": "number"
+        },
+        "bottom": {
+          "type": "number"
+        },
+        "left": {
+          "type": "number"
+        },
+        "header": {
+          "type": "number"
+        },
+        "footer": {
+          "type": "number"
+        },
+        "gutter": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "top",
+        "right",
+        "bottom",
+        "left",
+        "header",
+        "footer",
+        "gutter"
+      ],
+      "additionalProperties": false
+    },
+    "section": {
+      "description": "A section. Lengths are in points.",
+      "type": "object",
+      "properties": {
+        "index": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "first_block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "last_block": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "start": {
+          "enum": [
+            "next_page",
+            "continuous",
+            "even_page",
+            "odd_page",
+            "next_column"
+          ]
+        },
+        "page_width": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "page_height": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "orientation": {
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "margins": {
+          "$ref": "#/$defs/margins"
+        },
+        "columns": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "text_width": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "title_page": {
+          "type": "boolean"
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/header_footer"
+          }
+        },
+        "footers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/header_footer"
+          }
+        }
+      },
+      "required": [
+        "index",
+        "first_block",
+        "last_block",
+        "start",
+        "page_width",
+        "page_height",
+        "orientation",
+        "margins",
+        "columns",
+        "text_width",
+        "title_page",
+        "headers",
+        "footers"
+      ],
+      "additionalProperties": false
+    },
+    "numbering_level": {
+      "description": "One level of a list definition.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "format": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "text": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "restart_after": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "legal": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "level",
+        "start",
+        "format",
+        "text",
+        "style",
+        "restart_after",
+        "legal"
+      ],
+      "additionalProperties": false
+    },
+    "numbering_definition": {
+      "description": "A list definition.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "kind": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "uses_style": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "levels": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/numbering_level"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "kind",
+        "style",
+        "uses_style",
+        "levels"
+      ],
+      "additionalProperties": false
+    },
+    "level_override": {
+      "description": "A change an instance makes to a level.",
+      "type": "object",
+      "properties": {
+        "level": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "start": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "definition": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/numbering_level"
+            }
+          ]
+        }
+      },
+      "required": [
+        "level",
+        "start",
+        "definition"
+      ],
+      "additionalProperties": false
+    },
+    "numbering_instance": {
+      "description": "A list instance.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "definition": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "overrides": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/level_override"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "definition",
+        "overrides"
+      ],
+      "additionalProperties": false
+    },
+    "numbering": {
+      "description": "The lists of a document.",
+      "type": "object",
+      "properties": {
+        "definitions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/numbering_definition"
+          }
+        },
+        "instances": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/numbering_instance"
+          }
+        }
+      },
+      "required": [
+        "definitions",
+        "instances"
+      ],
+      "additionalProperties": false
+    },
+    "control": {
+      "description": "A content control with the text it holds, with revisions accepted.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "rich_text",
+            "plain_text",
+            "picture",
+            "date",
+            "combo_box",
+            "drop_down_list",
+            "check_box",
+            "building_block",
+            "group",
+            "repeating_section",
+            "repeating_section_item",
+            "citation",
+            "bibliography",
+            "equation"
+          ]
+        },
+        "tag": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "placeholder": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        },
+        "location": {
+          "$ref": "#/$defs/location"
+        }
+      },
+      "required": [
+        "kind",
+        "tag",
+        "title",
+        "placeholder",
+        "text",
+        "location"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

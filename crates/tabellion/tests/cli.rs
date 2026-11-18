@@ -44,10 +44,204 @@ fn roundtrip_reports_a_file_it_cannot_read() {
         .arg(dir.path().join("out.docx"))
         .output()
         .unwrap();
-    assert_eq!(o.status.code(), Some(2));
+    assert_eq!(o.status.code(), Some(3));
     let stderr = String::from_utf8(o.stderr).unwrap();
     assert!(
         stderr.starts_with("tabellion: ") && stderr.contains("not a readable .docx file"),
         "{stderr}"
+    );
+}
+
+fn corpus(name: &str) -> String {
+    format!("{}/../../corpus/{name}", env!("CARGO_MANIFEST_DIR"))
+}
+
+fn run(args: &[&str]) -> (Option<i32>, String, String) {
+    let o = tabellion().args(args).output().unwrap();
+    (
+        o.status.code(),
+        String::from_utf8(o.stdout).unwrap(),
+        String::from_utf8(o.stderr).unwrap(),
+    )
+}
+
+#[test]
+fn inspect_prints_an_outline() {
+    let (code, out, err) = run(&["inspect", &corpus("birds.docx")]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(
+        out.starts_with("birds.docx: 27 blocks in 2 sections\n"),
+        "{out}"
+    );
+    let line = |kind: &str, text: &str| {
+        out.lines()
+            .any(|l| l.starts_with(kind) && l.ends_with(text))
+    };
+    assert!(line("heading 1", "Survey sites"));
+    assert!(line("table", "Table 1: Sites, visits and counts (5 × 4)"));
+    assert!(line("figure", "Figure 1: A wren at the north site"));
+    assert!(out.ends_with(
+        "2 tables, 2 images, 13 fields, 0 revisions, 0 comments, 1 footnote, 1 endnote, 5 bookmarks\n"
+    ), "{out}");
+}
+
+#[test]
+fn every_view_prints_as_text_and_as_json() {
+    let views = [
+        "blocks",
+        "styles",
+        "tables",
+        "fields",
+        "comments",
+        "revisions",
+        "images",
+        "bookmarks",
+        "notes",
+        "sections",
+        "numbering",
+        "content-controls",
+    ];
+    for doc in ["parts.docx", "birds.docx", "edge.docx"] {
+        for v in views {
+            let (code, out, err) = run(&["inspect", &corpus(doc), v]);
+            assert_eq!(code, Some(0), "{doc} {v}: {err}");
+            assert!(!out.is_empty(), "{doc} {v}");
+            let (code, out, err) = run(&["inspect", &corpus(doc), v, "--json"]);
+            assert_eq!(code, Some(0), "{doc} {v}: {err}");
+            let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+            let key = v.replace('-', "_");
+            assert_eq!(json["sha256"].as_str().unwrap().len(), 64);
+            assert!(!json[&key].is_null(), "{doc} {v}");
+        }
+    }
+}
+
+#[test]
+fn text_output_fits_the_terminal() {
+    let o = tabellion()
+        .args(["inspect", &corpus("parts.docx"), "revisions"])
+        .env("COLUMNS", "60")
+        .output()
+        .unwrap();
+    let out = String::from_utf8(o.stdout).unwrap();
+    assert!(out.lines().all(|l| l.chars().count() <= 60), "{out}");
+}
+
+#[test]
+fn text_follows_the_view_of_revisions() {
+    let row = "S-1\tSeal kit\t9.50";
+    let (_, accepted, _) = run(&["text", &corpus("parts.docx")]);
+    let (_, rejected, _) = run(&["text", &corpus("parts.docx"), "--revisions", "rejected"]);
+    let (_, current, _) = run(&["text", &corpus("parts.docx"), "--revisions", "current"]);
+    assert!(!accepted.contains(row) && rejected.contains(row) && current.contains(row));
+    assert!(accepted.contains("The P-100 pump quietly moves"));
+    assert!(rejected.contains("The P-100 pump moves"));
+}
+
+#[test]
+fn text_adds_headers_notes_and_comments_on_request() {
+    let (_, plain, _) = run(&["text", &corpus("birds.docx")]);
+    assert!(!plain.contains("Alder Marshes survey: methods"));
+    let (_, full, _) = run(&[
+        "text",
+        &corpus("birds.docx"),
+        "--headers-footers",
+        "--notes",
+    ]);
+    assert!(
+        full.starts_with("Breeding bird survey, first page\n"),
+        "{full}"
+    );
+    assert!(
+        full.contains("Page 1\nAlder Marshes survey: methods\n\nMethods\n"),
+        "{full}"
+    );
+    assert!(full.contains("Wrens sang at every site[1], and reed warblers at two[i]."));
+    assert!(full.contains("[1] Counted from song between 05:00 and 08:00."));
+    let (_, c, _) = run(&["text", &corpus("parts.docx"), "--comments"]);
+    assert!(
+        c.contains(
+            "[Reply by Pip Tanager on \u{201C}P-100\u{201D}] Yes, until the end of the year."
+        ),
+        "{c}"
+    );
+    let (_, no_boxes, _) = run(&["text", &corpus("birds.docx"), "--no-text-boxes"]);
+    assert!(plain.contains("Field note:") && !no_boxes.contains("Field note:"));
+}
+
+#[test]
+fn bad_input_gives_one_line_and_a_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let bad = dir.path().join("bad.docx");
+    std::fs::write(&bad, b"PK\x03\x04 not really").unwrap();
+    for args in [
+        vec!["inspect".to_string(), bad.display().to_string()],
+        vec!["text".to_string(), bad.display().to_string()],
+        vec![
+            "inspect".to_string(),
+            dir.path().join("missing.docx").display().to_string(),
+            "blocks".into(),
+        ],
+    ] {
+        let o = tabellion().args(&args).output().unwrap();
+        assert_eq!(o.status.code(), Some(3), "{args:?}");
+        let err = String::from_utf8(o.stderr).unwrap();
+        assert_eq!(err.lines().count(), 1, "{err}");
+        assert!(
+            err.starts_with("tabellion: ") && !err.contains("panicked"),
+            "{err}"
+        );
+    }
+    let (code, _, err) = run(&["inspect", &corpus("parts.docx"), "--json"]);
+    assert_eq!(code, Some(2), "{err}");
+    let (code, _, _) = run(&["inspect", &corpus("parts.docx"), "chapters"]);
+    assert_eq!(code, Some(2));
+}
+
+#[test]
+fn a_wrong_command_line_gives_a_hint_on_standard_error() {
+    for args in [
+        vec!["inspect"],
+        vec!["inspect", "x.docx", "chapters"],
+        vec!["text", "x.docx", "--revisions", "some"],
+        vec!["frobnicate"],
+    ] {
+        let (code, out, err) = run(&args);
+        assert_eq!(code, Some(2), "{args:?}");
+        assert!(out.is_empty(), "{args:?}: {out}");
+        assert!(err.starts_with("error: "), "{args:?}: {err}");
+        assert!(
+            err.contains("Usage: tabellion") || err.contains("[possible values: "),
+            "{args:?}: {err}"
+        );
+        assert!(
+            err.ends_with("For more information, try '--help'.\n"),
+            "{args:?}: {err}"
+        );
+        assert!(err.lines().count() > 1, "{args:?}: {err}");
+    }
+}
+
+#[test]
+fn a_file_that_cannot_be_read_gives_one_line_on_standard_error() {
+    let (code, out, err) = run(&["text", "no/such/file.docx"]);
+    assert_eq!(code, Some(3));
+    assert!(out.is_empty());
+    assert_eq!(err.lines().count(), 1, "{err}");
+    assert!(
+        err.starts_with("tabellion: cannot read no/such/file.docx"),
+        "{err}"
+    );
+}
+
+#[test]
+fn inspect_names_blocks_that_share_a_paragraph_id() {
+    let (code, out, err) = run(&["inspect", &corpus("edge.docx")]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(
+        out.contains(
+            "2 blocks share a paragraph id with another block and are numbered instead: #"
+        ),
+        "{out}"
     );
 }

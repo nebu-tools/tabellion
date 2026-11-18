@@ -1,6 +1,6 @@
 # Fuzz targets
 
-Three targets for [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz),
+Four targets for [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz),
 which needs a nightly toolchain:
 
 - `open` feeds any bytes to `Document::from_bytes`, then reads every part,
@@ -15,6 +15,14 @@ which needs a nightly toolchain:
   what the tree reports, and every node no edit touched must keep its bytes.
   The checks are those of the property tests, in
   `crates/nebu-docx/tests/support/edits.rs`.
+- `views` reads every view of `nebu-docx`, the text with every option and
+  every kind of locator. An even first byte makes the rest a file to open;
+  an odd one makes it XML for the body of the sample template, with the
+  usual prefixes bound. Nothing may panic, and the blocks' text must be the
+  text of the document, white space aside.
+
+`fuzz/Cargo.lock` is committed, so a fuzz build uses the versions it was
+tested with.
 
 ```sh
 cd fuzz
@@ -22,4 +30,6 @@ cargo +nightly fuzz run xml -- -max_total_time=600
 cargo +nightly fuzz run edit -- -max_total_time=600
 mkdir -p corpus/open && cp ../samples/report-template.docx corpus/open/
 cargo +nightly fuzz run open -- -max_total_time=600
+mkdir -p corpus/views && for f in ../corpus/*.docx; do { printf '\0'; cat "$f"; } > "corpus/views/$(basename "$f")"; done
+cargo +nightly fuzz run views -- -max_total_time=600
 ```

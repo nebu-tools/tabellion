@@ -1,0 +1,2346 @@
+{
+ "word_version": "16.0",
+ "stories": {
+  "1": [
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rMore tables, controls and styles\rSite\u0007Reed beds\u000712\u0007\r\u0007\r\u00079\u0007\r\u0007\rBeside a box. \rWren\r\u00074\r\u0007\r\u0007Robin\u00072\u0007\u0007\rBold through a chain.\rBold off in a heading.\rBold table, bold paragraph.\u0007\u0007Bold table, plain paragraph.\u0007\u0007\rA legacy picture: \u0001\r"
+  ],
+  "2": [
+   "* Marked by hand.\r\u0002 Counted twice.\r"
+  ],
+  "5": [
+   "Box text, read once.\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "paragraphs": [
+  {
+   "start": 0,
+   "end": 39,
+   "text": "Edge cases of the Alder Marshes survey\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 46,
+   "text": "Fields\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 46,
+   "end": 105,
+   "text": "The sum is right.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 105,
+   "end": 132,
+   "text": "Nothing follows: .\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 132,
+   "end": 137,
+   "text": "Text\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 165,
+   "text": "Seen and seen again.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 165,
+   "end": 233,
+   "text": "Tick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 233,
+   "end": 264,
+   "text": "Before a page break.\fAfter it.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 264,
+   "end": 271,
+   "text": "Joined\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 271,
+   "end": 282,
+   "text": " together.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 282,
+   "end": 297,
+   "text": "Fallback text.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 297,
+   "end": 312,
+   "text": "Before. After.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 312,
+   "end": 327,
+   "text": "In custom XML.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 327,
+   "end": 344,
+   "text": "Near Alder weir.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 344,
+   "end": 360,
+   "text": "Pairs: 𝑎+𝑏=𝑐\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 9999999
+  },
+  {
+   "start": 360,
+   "end": 372,
+   "text": "First half,\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 372,
+   "end": 385,
+   "text": "second half.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 385,
+   "end": 395,
+   "text": "Twin one.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 395,
+   "end": 405,
+   "text": "Twin two.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 405,
+   "end": 429,
+   "text": "A direct outline level.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 429,
+   "end": 479,
+   "text": "A note with its own mark* and one with a number\u0002.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 479,
+   "end": 499,
+   "text": "Tables and controls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 499,
+   "end": 504,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 504,
+   "end": 510,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 510,
+   "end": 518,
+   "text": "Dunnock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 518,
+   "end": 519,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 519,
+   "end": 531,
+   "text": "Middle only\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 531,
+   "end": 532,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 532,
+   "end": 533,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 533,
+   "end": 569,
+   "text": "Visit on Click to enter the day.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 569,
+   "end": 596,
+   "text": "Second line of the visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 596,
+   "end": 629,
+   "text": "More tables, controls and styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 629,
+   "end": 634,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 634,
+   "end": 644,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 644,
+   "end": 647,
+   "text": "12\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 647,
+   "end": 648,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 648,
+   "end": 649,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 649,
+   "end": 651,
+   "text": "9\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 651,
+   "end": 652,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 652,
+   "end": 653,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 653,
+   "end": 669,
+   "text": "Beside a box. \r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 669,
+   "end": 674,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 674,
+   "end": 676,
+   "text": "4\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 676,
+   "end": 677,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 677,
+   "end": 684,
+   "text": "Robin\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 684,
+   "end": 689,
+   "text": "2\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 689,
+   "end": 690,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 690,
+   "end": 691,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 691,
+   "end": 713,
+   "text": "Bold through a chain.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 713,
+   "end": 736,
+   "text": "Bold off in a heading.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 736,
+   "end": 764,
+   "text": "Bold table, bold paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 764,
+   "end": 765,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 765,
+   "end": 794,
+   "text": "Bold table, plain paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 794,
+   "end": 795,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 795,
+   "end": 796,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 796,
+   "end": 816,
+   "text": "A legacy picture: \u0001\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "tables": [
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 499,
+   "end": 532,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 499,
+     "end": 504,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 504,
+     "end": 510,
+     "text": "Robin\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 510,
+     "end": 518,
+     "text": "Dunnock\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 519,
+     "end": 531,
+     "text": "Middle only\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 629,
+   "end": 652,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 629,
+     "end": 634,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 634,
+     "end": 644,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 644,
+     "end": 647,
+     "text": "12\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 649,
+     "end": 651,
+     "text": "9\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 2,
+   "nesting": 1,
+   "start": 669,
+   "end": 690,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 669,
+     "end": 674,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 674,
+     "end": 676,
+     "text": "4\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 677,
+     "end": 684,
+     "text": "Robin\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 684,
+     "end": 689,
+     "text": "2\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 1,
+   "nesting": 1,
+   "start": 736,
+   "end": 795,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 736,
+     "end": 764,
+     "text": "Bold table, bold paragraph.\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 765,
+     "end": 794,
+     "text": "Bold table, plain paragraph.\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "fields": [
+  {
+   "story": 1,
+   "type": 7,
+   "code": " IF \u0013 = 2 + 2 \u0015 = 4 \"right\" \"wrong\" ",
+   "result": "right"
+  },
+  {
+   "story": 1,
+   "type": 34,
+   "code": " = 2 + 2 ",
+   "result": "4"
+  },
+  {
+   "story": 1,
+   "type": 33,
+   "code": " PAGE ",
+   "result": null
+  }
+ ],
+ "revisions": [
+  {
+   "story": 1,
+   "type": 2,
+   "author": "Wren Ashby",
+   "text": "\r",
+   "format": ""
+  }
+ ],
+ "comments": [],
+ "bookmarks": [
+  {
+   "name": "two_paragraphs",
+   "story": 1,
+   "text": "First half,\rsecond half."
+  }
+ ],
+ "footnotes": [
+  {
+   "index": 1,
+   "text": "Marked by hand."
+  },
+  {
+   "index": 2,
+   "text": "Counted twice."
+  }
+ ],
+ "endnotes": [],
+ "inline_shapes": [
+  {
+   "type": 3,
+   "alt": "A bird shape drawn the old way",
+   "title": null,
+   "width": 48,
+   "height": 32.25
+  }
+ ],
+ "shapes": [
+  {
+   "type": 17,
+   "alt": "",
+   "title": "",
+   "width": 100,
+   "height": 40,
+   "text": "Box text, read once.\r"
+  }
+ ],
+ "content_controls": [
+  {
+   "type": 7,
+   "tag": "visit:group",
+   "title": "Visit",
+   "text": "Visit on Click to enter the day.\rSecond line of the visit.",
+   "placeholder": false
+  },
+  {
+   "type": 1,
+   "tag": "visit:day",
+   "title": "Day",
+   "text": "Click to enter the day.",
+   "placeholder": true
+  },
+  {
+   "type": 0,
+   "tag": "visit:row",
+   "title": "Row",
+   "text": "Robin\r\u00072",
+   "placeholder": false
+  },
+  {
+   "type": 1,
+   "tag": "visit:cell",
+   "title": "Cell",
+   "text": "2",
+   "placeholder": false
+  }
+ ],
+ "styles": [
+  {
+   "name": "Bold Base",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Bold Child",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Bold Para",
+   "builtin": false,
+   "type": 1
+  },
+  {
+   "name": "Bold Table",
+   "builtin": false,
+   "type": 3
+  },
+  {
+   "name": "Default Paragraph Font",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footer",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Footnote Reference",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Footnote Text",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Header",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Heading 1",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "No List",
+   "builtin": true,
+   "type": 4
+  },
+  {
+   "name": "Normal",
+   "builtin": true,
+   "type": 1
+  },
+  {
+   "name": "Not Bold",
+   "builtin": false,
+   "type": 2
+  },
+  {
+   "name": "Placeholder Text",
+   "builtin": true,
+   "type": 2
+  },
+  {
+   "name": "Table Grid",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Table Normal",
+   "builtin": true,
+   "type": 3
+  },
+  {
+   "name": "Title",
+   "builtin": true,
+   "type": 1
+  }
+ ],
+ "accepted": {
+  "1": [
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rMore tables, controls and styles\rSite\u0007Reed beds\u000712\u0007\r\u0007\r\u00079\u0007\r\u0007\rBeside a box. \rWren\r\u00074\r\u0007\r\u0007Robin\u00072\u0007\u0007\rBold through a chain.\rBold off in a heading.\rBold table, bold paragraph.\u0007\u0007Bold table, plain paragraph.\u0007\u0007\rA legacy picture: \u0001\r"
+  ],
+  "2": [
+   "* Marked by hand.\r\u0002 Counted twice.\r"
+  ],
+  "5": [
+   "Box text, read once.\r"
+  ],
+  "6": [
+   "\r"
+  ],
+  "7": [
+   "\r"
+  ],
+  "8": [
+   "\r"
+  ],
+  "9": [
+   "\r"
+  ],
+  "10": [
+   "\r"
+  ],
+  "11": [
+   "\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "accepted_paragraphs": [
+  {
+   "start": 0,
+   "end": 39,
+   "text": "Edge cases of the Alder Marshes survey\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 46,
+   "text": "Fields\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 46,
+   "end": 105,
+   "text": "The sum is right.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 105,
+   "end": 132,
+   "text": "Nothing follows: .\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 132,
+   "end": 137,
+   "text": "Text\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 165,
+   "text": "Seen and seen again.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 165,
+   "end": 233,
+   "text": "Tick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 233,
+   "end": 264,
+   "text": "Before a page break.\fAfter it.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 264,
+   "end": 281,
+   "text": "Joined together.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 281,
+   "end": 296,
+   "text": "Fallback text.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 296,
+   "end": 311,
+   "text": "Before. After.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 311,
+   "end": 326,
+   "text": "In custom XML.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 326,
+   "end": 343,
+   "text": "Near Alder weir.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 343,
+   "end": 359,
+   "text": "Pairs: 𝑎+𝑏=𝑐\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 9999999
+  },
+  {
+   "start": 359,
+   "end": 371,
+   "text": "First half,\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 371,
+   "end": 384,
+   "text": "second half.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 384,
+   "end": 394,
+   "text": "Twin one.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 394,
+   "end": 404,
+   "text": "Twin two.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 404,
+   "end": 428,
+   "text": "A direct outline level.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 428,
+   "end": 478,
+   "text": "A note with its own mark* and one with a number\u0002.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 478,
+   "end": 498,
+   "text": "Tables and controls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 498,
+   "end": 503,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 503,
+   "end": 509,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 509,
+   "end": 517,
+   "text": "Dunnock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 517,
+   "end": 518,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 518,
+   "end": 530,
+   "text": "Middle only\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 530,
+   "end": 531,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 531,
+   "end": 532,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 532,
+   "end": 568,
+   "text": "Visit on Click to enter the day.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 568,
+   "end": 595,
+   "text": "Second line of the visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 595,
+   "end": 628,
+   "text": "More tables, controls and styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 628,
+   "end": 633,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 633,
+   "end": 643,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 643,
+   "end": 646,
+   "text": "12\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 646,
+   "end": 647,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 647,
+   "end": 648,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 648,
+   "end": 650,
+   "text": "9\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 650,
+   "end": 651,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 651,
+   "end": 652,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 652,
+   "end": 668,
+   "text": "Beside a box. \r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 668,
+   "end": 673,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 673,
+   "end": 675,
+   "text": "4\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 675,
+   "end": 676,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 676,
+   "end": 683,
+   "text": "Robin\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 683,
+   "end": 688,
+   "text": "2\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 688,
+   "end": 689,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 689,
+   "end": 690,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 690,
+   "end": 712,
+   "text": "Bold through a chain.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 712,
+   "end": 735,
+   "text": "Bold off in a heading.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 735,
+   "end": 763,
+   "text": "Bold table, bold paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 763,
+   "end": 764,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 764,
+   "end": 793,
+   "text": "Bold table, plain paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 793,
+   "end": 794,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 794,
+   "end": 795,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 795,
+   "end": 815,
+   "text": "A legacy picture: \u0001\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "accepted_sections": [
+  {
+   "index": 1,
+   "headers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ],
+   "footers": [
+    {
+     "kind": 1,
+     "exists": true,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 2,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    },
+    {
+     "kind": 3,
+     "exists": false,
+     "linked": false,
+     "text": "\r",
+     "fields": []
+    }
+   ]
+  }
+ ],
+ "accepted_footnotes": [
+  {
+   "index": 1,
+   "text": "Marked by hand."
+  },
+  {
+   "index": 2,
+   "text": "Counted twice."
+  }
+ ],
+ "accepted_endnotes": [],
+ "accepted_tables": [
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 498,
+   "end": 531,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 498,
+     "end": 503,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 503,
+     "end": 509,
+     "text": "Robin\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 509,
+     "end": 517,
+     "text": "Dunnock\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 518,
+     "end": 530,
+     "text": "Middle only\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 628,
+   "end": 651,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 628,
+     "end": 633,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 633,
+     "end": 643,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 643,
+     "end": 646,
+     "text": "12\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 648,
+     "end": 650,
+     "text": "9\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 2,
+   "nesting": 1,
+   "start": 668,
+   "end": 689,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 668,
+     "end": 673,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 673,
+     "end": 675,
+     "text": "4\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 676,
+     "end": 683,
+     "text": "Robin\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 683,
+     "end": 688,
+     "text": "2\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 1,
+   "nesting": 1,
+   "start": 735,
+   "end": 794,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 735,
+     "end": 763,
+     "text": "Bold table, bold paragraph.\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 764,
+     "end": 793,
+     "text": "Bold table, plain paragraph.\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ],
+ "rejected": {
+  "1": [
+   "Edge cases of the Alder Marshes survey\rFields\rThe sum is right.\rNothing follows: .\rText\rSeen and seen again.\rTick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\rBefore a page break.\fAfter it.\rJoined\r together.\rFallback text.\rBefore. After.\rIn custom XML.\rNear Alder weir.\rPairs: 𝑎+𝑏=𝑐\rFirst half,\rsecond half.\rTwin one.\rTwin two.\rA direct outline level.\rA note with its own mark* and one with a number\u0002.\rTables and controls\rWren\r\u0007Robin\r\u0007Dunnock\r\u0007\r\u0007Middle only\r\u0007\r\u0007\rVisit on Click to enter the day.\rSecond line of the visit.\rMore tables, controls and styles\rSite\u0007Reed beds\u000712\u0007\r\u0007\r\u00079\u0007\r\u0007\rBeside a box. \rWren\r\u00074\r\u0007\r\u0007Robin\u00072\u0007\u0007\rBold through a chain.\rBold off in a heading.\rBold table, bold paragraph.\u0007\u0007Bold table, plain paragraph.\u0007\u0007\rA legacy picture: \u0001\r"
+  ],
+  "2": [
+   "* Marked by hand.\r\u0002 Counted twice.\r"
+  ],
+  "5": [
+   "Box text, read once.\r"
+  ],
+  "12": [
+   "\u0003\r"
+  ],
+  "13": [
+   "\u0004\r"
+  ],
+  "15": [
+   "\u0003\r"
+  ],
+  "16": [
+   "\u0004\r"
+  ]
+ },
+ "rejected_paragraphs": [
+  {
+   "start": 0,
+   "end": 39,
+   "text": "Edge cases of the Alder Marshes survey\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 39,
+   "end": 46,
+   "text": "Fields\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 46,
+   "end": 105,
+   "text": "The sum is right.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 105,
+   "end": 132,
+   "text": "Nothing follows: .\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 132,
+   "end": 137,
+   "text": "Text\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 137,
+   "end": 165,
+   "text": "Seen and seen again.\r",
+   "table": false,
+   "hidden": 9999999,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 165,
+   "end": 233,
+   "text": "Tick( and non\u001ebreaking, opt\u001fional.\tAfter a tab.\u000bAfter a line break.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 233,
+   "end": 264,
+   "text": "Before a page break.\fAfter it.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 264,
+   "end": 271,
+   "text": "Joined\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 271,
+   "end": 282,
+   "text": " together.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 282,
+   "end": 297,
+   "text": "Fallback text.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 297,
+   "end": 312,
+   "text": "Before. After.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 312,
+   "end": 327,
+   "text": "In custom XML.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 327,
+   "end": 344,
+   "text": "Near Alder weir.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 344,
+   "end": 360,
+   "text": "Pairs: 𝑎+𝑏=𝑐\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 9999999
+  },
+  {
+   "start": 360,
+   "end": 372,
+   "text": "First half,\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 372,
+   "end": 385,
+   "text": "second half.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 385,
+   "end": 395,
+   "text": "Twin one.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 395,
+   "end": 405,
+   "text": "Twin two.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 405,
+   "end": 429,
+   "text": "A direct outline level.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 429,
+   "end": 479,
+   "text": "A note with its own mark* and one with a number\u0002.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 479,
+   "end": 499,
+   "text": "Tables and controls\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 499,
+   "end": 504,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 504,
+   "end": 510,
+   "text": "Robin\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 510,
+   "end": 518,
+   "text": "Dunnock\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 518,
+   "end": 519,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 519,
+   "end": 531,
+   "text": "Middle only\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 531,
+   "end": 532,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 532,
+   "end": 533,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 533,
+   "end": 569,
+   "text": "Visit on Click to enter the day.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 569,
+   "end": 596,
+   "text": "Second line of the visit.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 596,
+   "end": 629,
+   "text": "More tables, controls and styles\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 629,
+   "end": 634,
+   "text": "Site\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 634,
+   "end": 644,
+   "text": "Reed beds\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 644,
+   "end": 647,
+   "text": "12\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 647,
+   "end": 648,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 648,
+   "end": 649,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 649,
+   "end": 651,
+   "text": "9\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 651,
+   "end": 652,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 652,
+   "end": 653,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 653,
+   "end": 669,
+   "text": "Beside a box. \r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 669,
+   "end": 674,
+   "text": "Wren\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 674,
+   "end": 676,
+   "text": "4\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 676,
+   "end": 677,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 677,
+   "end": 684,
+   "text": "Robin\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 684,
+   "end": 689,
+   "text": "2\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 689,
+   "end": 690,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 690,
+   "end": 691,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 691,
+   "end": 713,
+   "text": "Bold through a chain.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 713,
+   "end": 736,
+   "text": "Bold off in a heading.\r",
+   "table": false,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 736,
+   "end": 764,
+   "text": "Bold table, bold paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 764,
+   "end": 765,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 765,
+   "end": 794,
+   "text": "Bold table, plain paragraph.\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": -1,
+   "italic": 0
+  },
+  {
+   "start": 794,
+   "end": 795,
+   "text": "\r\u0007",
+   "table": true,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 795,
+   "end": 796,
+   "text": "\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  },
+  {
+   "start": 796,
+   "end": 816,
+   "text": "A legacy picture: \u0001\r",
+   "table": false,
+   "hidden": 0,
+   "bold": 0,
+   "italic": 0
+  }
+ ],
+ "rejected_tables": [
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 499,
+   "end": 532,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 499,
+     "end": 504,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 504,
+     "end": 510,
+     "text": "Robin\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 510,
+     "end": 518,
+     "text": "Dunnock\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 519,
+     "end": 531,
+     "text": "Middle only\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 3,
+   "nesting": 1,
+   "start": 629,
+   "end": 652,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 629,
+     "end": 634,
+     "text": "Site\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 634,
+     "end": 644,
+     "text": "Reed beds\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 3,
+     "start": 644,
+     "end": 647,
+     "text": "12\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 649,
+     "end": 651,
+     "text": "9\r\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 2,
+   "nesting": 1,
+   "start": 669,
+   "end": 690,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 669,
+     "end": 674,
+     "text": "Wren\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 1,
+     "column": 2,
+     "start": 674,
+     "end": 676,
+     "text": "4\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 677,
+     "end": 684,
+     "text": "Robin\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 2,
+     "start": 684,
+     "end": 689,
+     "text": "2\u0007",
+     "tables": []
+    }
+   ]
+  },
+  {
+   "rows": 2,
+   "columns": 1,
+   "nesting": 1,
+   "start": 736,
+   "end": 795,
+   "cells": [
+    {
+     "row": 1,
+     "column": 1,
+     "start": 736,
+     "end": 764,
+     "text": "Bold table, bold paragraph.\r\u0007",
+     "tables": []
+    },
+    {
+     "row": 2,
+     "column": 1,
+     "start": 765,
+     "end": 794,
+     "text": "Bold table, plain paragraph.\r\u0007",
+     "tables": []
+    }
+   ]
+  }
+ ]
+}
