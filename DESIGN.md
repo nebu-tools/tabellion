@@ -779,13 +779,19 @@ On the largest template the current `fetch` downloads (114 pages, 1.8 MB
 `document.xml`), the whole cycle of open, tracked replacement, field update
 and write takes about 55 ms.
 
-For comparison, the current R code on the same machine takes 6.4 s to read
-and parse that template and 10.8 s for one tracked caption edit, and on the
-generated document about a minute to read and parse and close to a minute
-for one tracked cell edit. officer (read_docx and print) is measured as a
-reference; it does neither tracked edits nor field updates, so only its read
-and write times compare. The comparison script calls the old R code and
-stays with the private pack, since the old code goes away.
+For comparison, on the same machine:
+
+| Tool and step | Largest real template | Generated document |
+| --- | --- | --- |
+| Current R code: read and parse | 6.5 s | 54 s |
+| Current R code: one tracked edit (read, edit, fields, write) | 11.9 s (caption) | 61 s (table cell) |
+| officer: `read_docx` | 0.15 s | 0.16 s |
+| officer: `print` (write) | 4.4 s | 18.3 s |
+| tabellion: open, tracked edit, field update, write | 0.055 s | 0.17 s |
+
+officer reads lazily and does neither tracked edits nor field updates, so only
+its read and write times compare. The script that times the old R code calls
+that code and stays with the private pack, since the old code goes away.
 
 `tabellion bench` measures each step as the median of several runs in one
 process, reading the file from disk each time. CI runs it on the generated
