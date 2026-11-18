@@ -216,7 +216,7 @@ enum Encoding {
     Utf16 { big_endian: bool, bom: bool },
 }
 
-/// A parsed XML part. See the [module documentation](self).
+/// A parsed XML part. The [`xml`](self) page explains how it keeps bytes.
 #[derive(Debug, Clone)]
 pub struct Tree {
     bufs: Vec<Box<str>>,
