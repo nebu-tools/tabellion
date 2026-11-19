@@ -320,6 +320,25 @@ fn insert_takes_typst_tables() {
 }
 
 #[test]
+fn insert_takes_typst_math() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let typ = dir.path().join("math.typ");
+    std::fs::write(&typ, "The value $x + 1$ grows.\n\n$ E = m c^2 $\n").unwrap();
+    let (out_s, typ_s) = (out.display().to_string(), typ.display().to_string());
+    let (code, stdout, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("inserted 2 blocks"), "{stdout}");
+    let (_, text, _) = run(&["text", &out_s]);
+    assert!(text.contains("The value x+1 grows."), "{text}");
+    // A table call has no math form.
+    std::fs::write(&typ, "$table(columns: 1, [a])$\n").unwrap();
+    let (code, _, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(3), "{err}");
+    assert!(err.contains("has no Word form"), "{err}");
+}
+
+#[test]
 fn insert_takes_typst_rowspan_tables() {
     // A rowspan covering trailing rows lists the covered rows empty,
     // so the document opens.
