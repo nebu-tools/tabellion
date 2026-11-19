@@ -18,6 +18,8 @@ use typst_syntax::{DiagSpanKind, Source, ast, ast::AstNode};
 mod table;
 use table::{convert_tableish, is_tableish};
 mod figure;
+mod math;
+mod symbols;
 
 /// What is wrong with Typst source.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -87,7 +89,7 @@ fn syntax_error(source: &Source, e: &typst_syntax::SyntaxDiagnostic) -> Error {
 }
 
 /// The line where a node stands, 1-based.
-fn line_of(cx: &Cx, span: typst_syntax::Span) -> usize {
+pub(crate) fn line_of(cx: &Cx, span: typst_syntax::Span) -> usize {
     cx.source
         .find(span)
         .map(|n| n.range().start)
@@ -279,7 +281,25 @@ pub(crate) fn convert_flow(
             ast::Expr::Label(_) => {
                 return Err(unsupported(cx, exprs[i], "a label outside a heading"));
             }
+            ast::Expr::Equation(eq) if eq.block() => {
+                flush(&mut para, &mut blocks, trim_end);
+                // A label follows the equation, past any spaces.
+                let mut j = i + 1;
+                while matches!(exprs.get(j), Some(ast::Expr::Space(_))) {
+                    j += 1;
+                }
+                let mut label = None;
+                if let Some(ast::Expr::Label(l)) = exprs.get(j) {
+                    label = Some(l.get().to_string());
+                    i = j;
+                }
+                blocks.push(Block::Equation {
+                    math: math::convert_equation(cx, eq)?,
+                    label,
+                });
+            }
             ast::Expr::Ref(_)
+            | ast::Expr::Equation(_)
             | ast::Expr::Link(_)
             | ast::Expr::Text(_)
             | ast::Expr::Escape(_)
@@ -500,6 +520,19 @@ fn inline_into(
             }
             out.push(Inline::Reference {
                 label: r.target().to_string(),
+            });
+            Ok(false)
+        }
+        ast::Expr::Equation(eq) => {
+            if eq.block() {
+                return Err(unsupported(
+                    cx,
+                    ast::Expr::Equation(eq),
+                    &format!("a display equation inside {ctx}"),
+                ));
+            }
+            out.push(Inline::Math {
+                math: math::convert_equation(cx, eq)?,
             });
             Ok(false)
         }
@@ -749,7 +782,7 @@ fn content_styled_plain(content: &[Inline]) -> bool {
 }
 
 /// A short name for an error message.
-fn describe(expr: ast::Expr) -> String {
+pub(crate) fn describe(expr: ast::Expr) -> String {
     match expr {
         ast::Expr::Heading(_) => "a heading".to_string(),
         ast::Expr::ListItem(_) => "a list".to_string(),
@@ -794,6 +827,21 @@ mod tests {
 
     fn blocks(source: &str) -> Vec<Block> {
         parse(source).unwrap().blocks
+    }
+
+    #[test]
+    fn dbg_group() {
+        for src in [
+            "Intro\n\n$frac([mat(a)], [2])$\n",
+            "Intro\n\n$frac([a + mat(b)], [2])$\n",
+        ] {
+            eprintln!(
+                "=== {src:?} => {:?}",
+                crate::parse(src)
+                    .map(|_| "OK")
+                    .map_err(|e| format!("{e:?}"))
+            );
+        }
     }
 
     #[test]
@@ -858,7 +906,6 @@ mod tests {
     fn rejects_what_has_no_word_form() {
         for (source, what) in [
             ("#grid(columns: 2, [a])\n", "`#grid`"),
-            ("$x + y$\n", "math"),
             ("#image()\n", "an image without a file"),
             ("#let x = 1\n", "code"),
         ] {
