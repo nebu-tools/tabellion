@@ -27,15 +27,20 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
-      # extendr links R, so the Windows test build needs R present.
-      - uses: r-lib/actions/setup-r@v2
-        if: matrix.os == 'windows-2025'
-        with:
-          r-version: release
       - run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
+      # tabellion-r links R, and R ships no MSVC import library, so its
+      # test binary cannot link on Windows. Its logic is covered on the
+      # other runners and by the R job; Windows R support (Makevars.win)
+      # is a follow-up.
       - run: cargo test --all-targets
+        if: matrix.os != 'windows-2025'
+      - run: cargo test --workspace --exclude tabellion-r --all-targets
+        if: matrix.os == 'windows-2025'
+      - run: cargo test --doc --workspace --exclude tabellion-r
+        if: matrix.os == 'windows-2025'
       - run: cargo test --doc
+        if: matrix.os != 'windows-2025'
 
   r:
     # The R package: install and check it on Linux.
