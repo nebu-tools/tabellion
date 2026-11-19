@@ -163,3 +163,26 @@ add_table <- function(doc, data, caption = NULL, label = NULL) {
   .Call("wrap__doc_add_table", doc, data, caption, label, PACKAGE = "tabellion")
   invisible(doc)
 }
+
+#' Add a picture at the end.
+#'
+#' The picture is scaled down to the text width when it is wider;
+#' otherwise it keeps its size. A caption stands below the picture;
+#' a label needs one to number.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @param path Path to a PNG, JPEG, GIF or SVG file.
+#' @param caption The caption text after the label and number, or `NULL`.
+#' @param label A label that cross-references name; needs a caption, or
+#'   `NULL`.
+#' @param alt Alternative text for the picture, or `NULL`.
+#' @return The document, invisibly.
+#' @export
+add_image <- function(doc, path, caption = NULL, label = NULL, alt = NULL) {
+  if (length(path) != 1L || is.na(path) || !file.exists(path)) {
+    stop("add_image: no such image file", call. = FALSE)
+  }
+  bytes <- readBin(path, "raw", n = file.info(path)$size)
+  .Call("wrap__doc_add_image", doc, bytes, caption, label, alt, PACKAGE = "tabellion")
+  invisible(doc)
+}
