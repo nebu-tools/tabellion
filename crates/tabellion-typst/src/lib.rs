@@ -15,6 +15,9 @@ use nebu_docx::content::{Block, Content, Inline, LinkTarget, List, ListItem, Mar
 use thiserror::Error;
 use typst_syntax::{DiagSpanKind, Source, ast, ast::AstNode};
 
+mod table;
+use table::{convert_tableish, is_tableish};
+
 /// What is wrong with Typst source.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum Error {
@@ -59,8 +62,8 @@ pub fn parse(source: &str) -> Result<Content, Error> {
 }
 
 /// What the converter knows: the source, for line numbers.
-struct Cx<'a> {
-    source: &'a Source,
+pub(crate) struct Cx<'a> {
+    pub(crate) source: &'a Source,
 }
 
 /// A syntax error with its line.
@@ -93,9 +96,14 @@ fn line_of(cx: &Cx, span: typst_syntax::Span) -> usize {
 }
 
 /// An unsupported construct at this expression.
-fn unsupported(cx: &Cx, at: ast::Expr, what: &str) -> Error {
+pub(crate) fn unsupported(cx: &Cx, at: ast::Expr, what: &str) -> Error {
+    unsupported_at(cx, at.span(), what)
+}
+
+/// An unsupported construct at a span.
+pub(crate) fn unsupported_at(cx: &Cx, span: typst_syntax::Span, what: &str) -> Error {
     Error::Unsupported {
-        line: line_of(cx, at.span()),
+        line: line_of(cx, span),
         what: what.to_string(),
     }
 }
@@ -128,14 +136,18 @@ fn trim_trailing_space(inlines: &mut Vec<Inline>) {
     }
 }
 
-/// Block positions: headings, lists, page breaks and paragraphs of
-/// inlines. Trailing source whitespace is trimmed only at the top
-/// level, where a paragraph, heading or list item ends: an inline
-/// group keeps its boundary spaces for the enclosing line. Also
-/// reports whether source whitespace leads: a group starting in
+/// Block positions: headings, lists, page breaks, tables and
+/// paragraphs of inlines. Trailing source whitespace is trimmed only
+/// at the top level, where a paragraph, heading or list item ends: an
+/// inline group keeps its boundary spaces for the enclosing line.
+/// Also reports whether source whitespace leads: a group starting in
 /// whitespace passes one collapsed space to the enclosing line, so a
 /// paragraph never starts padded and duplicate spaces collapse.
-fn convert_flow(cx: &Cx, exprs: &[ast::Expr], trim_end: bool) -> Result<(Vec<Block>, bool), Error> {
+pub(crate) fn convert_flow(
+    cx: &Cx,
+    exprs: &[ast::Expr],
+    trim_end: bool,
+) -> Result<(Vec<Block>, bool), Error> {
     let mut blocks = Vec::new();
     let mut para: Vec<Inline> = Vec::new();
     let mut leading_space = false;
@@ -189,6 +201,24 @@ fn convert_flow(cx: &Cx, exprs: &[ast::Expr], trim_end: bool) -> Result<(Vec<Blo
             ast::Expr::FuncCall(call) if is_pagebreak(call) => {
                 flush(&mut para, &mut blocks, trim_end);
                 blocks.push(Block::PageBreak);
+            }
+            ast::Expr::FuncCall(call) if is_tableish(call) => {
+                flush(&mut para, &mut blocks, trim_end);
+                let mut block = convert_tableish(cx, call)?;
+                // A label follows the table, past any spaces.
+                let mut j = i + 1;
+                while matches!(exprs.get(j), Some(ast::Expr::Space(_))) {
+                    j += 1;
+                }
+                if let (Some(ast::Expr::Label(l)), Block::Table(table)) = (exprs.get(j), &mut block)
+                {
+                    if table.label.is_some() {
+                        return Err(unsupported(cx, exprs[j], "two labels for a table"));
+                    }
+                    table.label = Some(l.get().to_string());
+                    i = j;
+                }
+                blocks.push(block);
             }
             ast::Expr::Raw(raw) if raw.block() => {
                 flush(&mut para, &mut blocks, trim_end);
@@ -340,8 +370,9 @@ fn convert_item(cx: &Cx, body: ast::Markup) -> Result<ListItem, Error> {
     Ok(ListItem { content, list })
 }
 
-/// The inlines of markup with marks on top.
-fn inline_markup(
+/// The inlines of markup with marks on top. True when leading
+/// whitespace is still owed to the enclosing line.
+pub(crate) fn inline_markup(
     cx: &Cx,
     body: ast::Markup,
     out: &mut Vec<Inline>,
@@ -678,6 +709,7 @@ fn describe(expr: ast::Expr) -> String {
         ast::Expr::TermItem(_) => "a term list".to_string(),
         ast::Expr::Equation(_) => "math".to_string(),
         ast::Expr::Math(_) => "math".to_string(),
+        ast::Expr::Parbreak(_) => "a paragraph break".to_string(),
         ast::Expr::Raw(raw) if raw.block() => "a code block".to_string(),
         ast::Expr::FuncCall(call) => match call.callee() {
             ast::Expr::Ident(ident) => format!("`#{}`", ident.as_str()),
@@ -777,8 +809,8 @@ mod tests {
     #[test]
     fn rejects_what_has_no_word_form() {
         for (source, what) in [
-            ("#table(columns: 2, [a])\n", "`#table`"),
-            ("#figure([hi])\n", "`#figure`"),
+            ("#grid(columns: 2, [a])\n", "`#grid`"),
+            ("#figure(image(\"pic.png\"))\n", "a figure around `#image`"),
             ("$x + y$\n", "math"),
             ("#image(\"pic.png\")\n", "`#image`"),
             ("#let x = 1\n", "code"),

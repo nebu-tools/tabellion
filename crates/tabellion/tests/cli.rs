@@ -295,6 +295,47 @@ fn insert_takes_typst_source() {
 }
 
 #[test]
+fn insert_takes_typst_tables() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let typ = dir.path().join("tab.typ");
+    std::fs::write(
+        &typ,
+        "= Results\n\n#table(columns: 2, table.header([Site], [Pairs]), [North], [12])\n",
+    )
+    .unwrap();
+    let (out_s, typ_s) = (out.display().to_string(), typ.display().to_string());
+    let (code, stdout, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("inserted 2 blocks"), "{stdout}");
+    let (_, text, _) = run(&["text", &out_s]);
+    for line in ["Results", "Site\tPairs", "North\t12"] {
+        assert!(text.contains(line), "{line}: {text}");
+    }
+    // A grid has no table form.
+    std::fs::write(&typ, "#grid(columns: 2, [a])\n").unwrap();
+    let (code, _, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(3), "{err}");
+    assert!(err.contains("has no Word form"), "{err}");
+}
+
+#[test]
+fn insert_takes_typst_rowspan_tables() {
+    // A rowspan covering trailing rows lists the covered rows empty,
+    // so the document opens.
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let typ = dir.path().join("span.typ");
+    std::fs::write(&typ, "#table(columns: 1, table.cell(rowspan: 2)[A])\n").unwrap();
+    let (out_s, typ_s) = (out.display().to_string(), typ.display().to_string());
+    let (code, stdout, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("inserted 1 block"), "{stdout}");
+    let (_, text, _) = run(&["text", &out_s]);
+    assert!(text.contains("A\n"), "{text}");
+}
+
+#[test]
 fn insert_takes_a_place_and_reports_errors_with_a_status() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.docx");
