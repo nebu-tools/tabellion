@@ -131,6 +131,17 @@ enum Command {
         #[arg(long, value_enum, default_value = "csv")]
         format: TableFormat,
     },
+    /// Write each embedded picture to a file of its own.
+    ///
+    /// One file per image in document order, named after the part that
+    /// holds it. Linked pictures have no bytes to write and are
+    /// skipped. Refuses to overwrite existing files.
+    Images {
+        /// The document to read.
+        file: PathBuf,
+        /// The directory to write into, made when missing.
+        dir: PathBuf,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -338,6 +349,141 @@ fn tables(file: &Path, dir: &Path, format: TableFormat) -> Result<bool, String> 
     Ok(true)
 }
 
+fn images(file: &Path, dir: &Path) -> Result<bool, String> {
+    let mut doc = open(file)?;
+    let parts: Vec<Option<String>> = doc
+        .views()
+        .map_err(|e| format!("{}: {e}", file.display()))?
+        .images()
+        .iter()
+        .map(|image| image.part.clone())
+        .collect();
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot write {}: {e}", dir.display()))?;
+    let mut count = 0;
+    let mut skipped = 0;
+    let mut used = std::collections::HashSet::new();
+    for part in &parts {
+        let Some(part) = part else {
+            skipped += 1;
+            continue;
+        };
+        let base =
+            safe_name(part).ok_or_else(|| format!("{part}: refusing to write unsafe file name"))?;
+        let mut name = base.clone();
+        let mut n = 2;
+        while !used.insert(name.clone()) {
+            name = numbered_name(&base, n);
+            n += 1;
+        }
+        let path = dir.join(name);
+        let bytes = doc
+            .read_part(part)
+            .map_err(|e| format!("{}: {e}", file.display()))?;
+        std::fs::File::create_new(&path)
+            .and_then(|mut f| {
+                use std::io::Write;
+                f.write_all(&bytes)
+            })
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    format!("{}: file exists, refusing to overwrite", path.display())
+                } else {
+                    format!("cannot write {}: {e}", path.display())
+                }
+            })?;
+        count += 1;
+    }
+    let mut line = format!(
+        "{}: wrote {count} {}",
+        dir.display(),
+        if count == 1 { "image" } else { "images" }
+    );
+    if skipped > 0 {
+        line += &format!(
+            ", skipped {skipped} linked {}",
+            if skipped == 1 { "image" } else { "images" }
+        );
+    }
+    println!("{line}");
+    Ok(true)
+}
+
+/// The file name for a package part: its last segment, when that is a
+/// single safe file name on the host. The package layer already refuses
+/// `.` and `..` segments, backslashes and control characters at open;
+/// colons stay possible there and would misbehave on Windows, where a
+/// drive-prefixed name makes `Path::join` discard the output directory.
+/// Windows also reserves device names with or without an extension and
+/// normalizes trailing spaces and dots, so those are refused too.
+fn safe_name(part: &str) -> Option<String> {
+    let base = part.rsplit('/').next()?;
+    if base.is_empty() || base == "." || base == ".." {
+        return None;
+    }
+    if base.contains(['/', '\\', ':', '\0']) {
+        return None;
+    }
+    if base.ends_with(' ') || base.ends_with('.') {
+        return None;
+    }
+    let stem = base.split('.').next().unwrap_or(base);
+    // Windows ignores spaces before the extension when matching.
+    let stem = stem.trim_end_matches(' ');
+    if is_windows_device_name(stem) {
+        return None;
+    }
+    Some(base.to_string())
+}
+
+/// True for the basenames Windows reserves, with or without an
+/// extension, compared without case. That includes the superscript
+/// `COM¹`–`COM³` and `LPT¹`–`LPT³`, which `to_ascii_uppercase` leaves
+/// intact for an exact match.
+fn is_windows_device_name(stem: &str) -> bool {
+    matches!(
+        stem.to_ascii_uppercase().as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "COM¹"
+            | "COM²"
+            | "COM³"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+            | "LPT¹"
+            | "LPT²"
+            | "LPT³"
+    )
+}
+
+/// A distinct file name with the same extension: `photo-2.png` for the
+/// second `photo.png`.
+fn numbered_name(base: &str, n: u32) -> String {
+    match base.rsplit_once('.') {
+        Some((stem, ext)) if !stem.is_empty() && !ext.is_empty() => {
+            format!("{stem}-{n}.{ext}")
+        }
+        _ => format!("{base}-{n}"),
+    }
+}
+
 fn roundtrip(input: &Path, output: &Path) -> Result<bool, String> {
     let before =
         std::fs::read(input).map_err(|e| format!("cannot read {}: {e}", input.display()))?;
@@ -420,6 +566,7 @@ fn main() -> ExitCode {
             }
             Command::Roundtrip { input, output } => roundtrip(input, output),
             Command::Fields { input, output } => fields(input, output),
+            Command::Images { file, dir } => images(file, dir),
             Command::Tables { file, dir, format } => tables(file, dir, *format),
             Command::Insert {
                 input,
@@ -452,5 +599,64 @@ fn main() -> ExitCode {
             ExitCode::from(FAILED)
         }
         Err(_) => ExitCode::from(INTERNAL),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{numbered_name, safe_name};
+    use std::collections::HashSet;
+
+    #[test]
+    fn file_names_stay_in_the_output_directory() {
+        assert_eq!(
+            safe_name("word/media/image1.png").as_deref(),
+            Some("image1.png")
+        );
+        assert_eq!(safe_name("image.png").as_deref(), Some("image.png"));
+        assert_eq!(safe_name("a/b").as_deref(), Some("b"));
+        assert_eq!(safe_name("COM10.png").as_deref(), Some("COM10.png"));
+        assert_eq!(safe_name("LPT10.png").as_deref(), Some("LPT10.png"));
+        assert_eq!(safe_name("console.png").as_deref(), Some("console.png"));
+        assert_eq!(safe_name(".NUL").as_deref(), Some(".NUL"));
+        for bad in [
+            "",
+            "word/media/",
+            ".",
+            "..",
+            "word/media/a:b.png",
+            "a\\b.png",
+            "photo.png ",
+            "photo.",
+            "NUL.png",
+            "com1.png",
+            "LPT9.dat",
+            "com¹.png",
+            "LPT³.dat",
+            "NUL .png",
+        ] {
+            assert_eq!(safe_name(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn repeated_names_gain_a_number_before_the_extension() {
+        assert_eq!(numbered_name("image1.png", 2), "image1-2.png");
+        assert_eq!(numbered_name("no-ext", 3), "no-ext-3");
+        assert_eq!(numbered_name(".png", 2), ".png-2");
+        // The loop from `images`: first use keeps the base name.
+        let mut used = HashSet::new();
+        let mut next = |base: &str| {
+            let mut name = base.to_string();
+            let mut n = 2;
+            while !used.insert(name.clone()) {
+                name = numbered_name(base, n);
+                n += 1;
+            }
+            name
+        };
+        assert_eq!(next("image1.png"), "image1.png");
+        assert_eq!(next("image1.png"), "image1-2.png");
+        assert_eq!(next("image1.png"), "image1-3.png");
     }
 }
