@@ -294,7 +294,7 @@ pub(crate) fn convert_flow(
                     i = j;
                 }
                 blocks.push(Block::Equation {
-                    math: math::convert_equation(cx, eq)?,
+                    math: math::convert_equation(cx, eq, true)?,
                     label,
                 });
             }
@@ -532,7 +532,7 @@ fn inline_into(
                 ));
             }
             out.push(Inline::Math {
-                math: math::convert_equation(cx, eq)?,
+                math: math::convert_equation(cx, eq, false)?,
             });
             Ok(false)
         }
