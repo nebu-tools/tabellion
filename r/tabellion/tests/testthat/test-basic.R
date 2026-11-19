@@ -41,6 +41,20 @@ test_that("a document round-trips through R", {
   expect_identical(tail(split, 1), "second")
 })
 
+test_that("field results refresh after edits", {
+  src <- testthat::test_path("fixtures", "report-template.docx")
+  skip_if(!file.exists(src), "sample document is missing")
+  doc <- open_docx(src)
+  sites <- data.frame(site = c("A", "B"), count = c(3, NA))
+  doc <- add_table(doc, sites, caption = "Counts.", label = "tab-counts")
+  before <- docx_text(doc)
+  expect_true(any(grepl("Table [0-9]+: Counts\\.", before)))
+  # A refresh on fresh results changes nothing and keeps the handle.
+  doc <- update_fields(doc)
+  expect_s3_class(doc, "tabellion_doc")
+  expect_identical(docx_text(doc), before)
+})
+
 test_that("missing files and bad content are R errors", {
   expect_error(open_docx(file.path("no", "such.docx")))
   src <- testthat::test_path("fixtures", "report-template.docx")

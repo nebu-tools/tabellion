@@ -77,6 +77,20 @@ docx_text <- function(doc) {
   strsplit(.Call("wrap__doc_text", doc, PACKAGE = "tabellion"), "\n", fixed = TRUE)[[1]]
 }
 
+#' Recompute a document's field results.
+#'
+#' Recomputes `SEQ` fields and bare `REF` fields (those without switches)
+#' in the document body. Other field results, including page numbers,
+#' dates, and `REF` fields with switches, are left unchanged.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @return The document, invisibly.
+#' @export
+update_fields <- function(doc) {
+  .Call("wrap__doc_update_fields", doc, PACKAGE = "tabellion")
+  invisible(doc)
+}
+
 #' Add a paragraph at the end.
 #'
 #' @param doc A document handle, as [`open_docx()`] makes.

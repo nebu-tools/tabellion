@@ -110,6 +110,12 @@ pub fn docx_tables(doc: &mut Document) -> Fallible<Vec<TableGrid>> {
         .collect())
 }
 
+/// Recomputes every `SEQ` and bare `REF` result in the body.
+/// Reports how many distinct fields changed.
+pub fn refresh_fields(doc: &mut Document) -> Fallible<usize> {
+    Ok(doc.update_fields()?)
+}
+
 /// The text a reader sees, one line per paragraph.
 pub fn docx_text(doc: &mut Document) -> Fallible<String> {
     Ok(doc.views()?.text(&TextOptions::default()))
@@ -377,6 +383,14 @@ fn doc_tables(doc: Robj) -> Fallible<Robj> {
     Ok(List::from_values(frames).into())
 }
 
+/// Recomputes `SEQ` and cross-reference results after edits that
+/// change numbering.
+#[extendr]
+fn doc_update_fields(doc: Robj) -> Fallible<()> {
+    refresh_fields(&mut checked_handle(&doc)?.borrow_mut())?;
+    Ok(())
+}
+
 extendr_module! {
     mod tabellion;
     fn doc_open;
@@ -387,6 +401,7 @@ extendr_module! {
     fn doc_add_typst;
     fn doc_add_table;
     fn doc_tables;
+    fn doc_update_fields;
 }
 
 #[cfg(test)]
@@ -453,6 +468,24 @@ mod tests {
             ],
             "{grid:?}"
         );
+    }
+
+    #[test]
+    fn refreshes_field_results() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        let headers = vec!["site".to_string()];
+        let columns = vec![vec![Some("A".to_string())]];
+        add_table(&mut doc, &headers, &columns, Some("Counts."), Some("tab-counts")).unwrap();
+        // The writer numbers captions at insert, so a refresh finds
+        // nothing stale but still reads every field cleanly.
+        let changed = refresh_fields(&mut doc).unwrap();
+        assert_eq!(changed, 0);
+        let text = docx_text(&mut doc).unwrap();
+        assert!(text.contains("Table 1: Counts."), "{text}");
     }
 
     #[test]
