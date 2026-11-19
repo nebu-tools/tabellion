@@ -90,3 +90,49 @@ add_typst <- function(doc, source) {
   .Call("wrap__doc_add_typst", doc, source, PACKAGE = "tabellion")
   invisible(doc)
 }
+
+#' Add a data frame as a table at the end.
+#'
+#' The column names become the header row, which repeats on each page.
+#' Columns keep their order; every value becomes text, and missing
+#' values stay empty.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @param data A data frame with at least one column. Columns become
+#'   text with `as.character()`: each column must yield one string per
+#'   row, so nested data frames are rejected. Columns with their own
+#'   `as.character` methods are taken at face value.
+#' @param caption The caption text after the label and number, or `NULL`.
+#' @param label A label that cross-references name; needs a caption, or
+#'   `NULL`.
+#' @return The document, invisibly.
+#' @export
+add_table <- function(doc, data, caption = NULL, label = NULL) {
+  stopifnot(is.data.frame(data))
+  # Name offenders for display, falling back to positions: names can be
+  # missing or blank, and NULL names must not bypass the guards.
+  describe <- function(i) {
+    nm <- names(data)[i]
+    if (length(nm) == 0L || is.na(nm) || nm == "") paste0("column ", i) else nm
+  }
+  nested <- which(vapply(data, is.data.frame, logical(1)))
+  if (length(nested)) {
+    stop(
+      "add_table: nested data-frame column(s) have no single row text: ",
+      paste(vapply(nested, describe, character(1)), collapse = ", "),
+      call. = FALSE
+    )
+  }
+  coerced <- lapply(data, as.character)
+  changed <- which(lengths(coerced) != nrow(data))
+  if (length(changed)) {
+    stop(
+      "add_table: as.character() changes the length of column(s): ",
+      paste(vapply(changed, describe, character(1)), collapse = ", "),
+      call. = FALSE
+    )
+  }
+  data[] <- coerced
+  .Call("wrap__doc_add_table", doc, data, caption, label, PACKAGE = "tabellion")
+  invisible(doc)
+}
