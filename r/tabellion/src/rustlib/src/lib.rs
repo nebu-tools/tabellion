@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use extendr_api::prelude::*;
 use extendr_ffi::{R_ExternalPtrProtected, R_ExternalPtrTag, R_SetExternalPtrProtected};
-use nebu_docx::content::{Block, Cell, Inline, Row, Table};
+use nebu_docx::content::{Block, Cell, Image, Inline, Row, Table};
 use nebu_docx::{BlockKind, Document, Place, TextOptions, WriteOptions};
 use thiserror::Error;
 
@@ -108,6 +108,33 @@ pub fn docx_tables(doc: &mut Document) -> Fallible<Vec<TableGrid>> {
             rows: table.rows.clone(),
         })
         .collect())
+}
+
+/// Appends a picture from its bytes, captioned when asked. Without a
+/// caption the picture stands in a paragraph of its own; a label needs
+/// a caption to number. Reports how many nodes were written.
+pub fn add_image(
+    doc: &mut Document,
+    bytes: &[u8],
+    caption: Option<&str>,
+    label: Option<&str>,
+    alt: Option<&str>,
+) -> Fallible<usize> {
+    if label.is_some() && caption.is_none() {
+        return Err(Error::Docx("a label needs a caption to number".to_string()));
+    }
+    let mut image = Image::new(bytes.to_vec());
+    image.alt = alt.map(str::to_string);
+    let block = match caption {
+        Some(text) => Block::Figure {
+            image,
+            caption: vec![Inline::text(text)],
+            label: label.map(str::to_string),
+        },
+        None => Block::Image { image },
+    };
+    let done = doc.insert(Place::End, &[block], &WriteOptions::default())?;
+    Ok(done.nodes.iter().map(Vec::len).sum())
 }
 
 /// Recomputes every `SEQ` and bare `REF` result in the body.
@@ -383,6 +410,24 @@ fn doc_tables(doc: Robj) -> Fallible<Robj> {
     Ok(List::from_values(frames).into())
 }
 
+/// Appends a picture from its bytes, captioned when asked.
+#[extendr]
+fn doc_add_image(
+    doc: Robj,
+    bytes: &[u8],
+    caption: Option<&str>,
+    label: Option<&str>,
+    alt: Option<&str>,
+) -> Fallible<i32> {
+    Ok(add_image(
+        &mut checked_handle(&doc)?.borrow_mut(),
+        bytes,
+        caption,
+        label,
+        alt,
+    )? as i32)
+}
+
 /// Recomputes `SEQ` and cross-reference results after edits that
 /// change numbering.
 #[extendr]
@@ -401,6 +446,7 @@ extendr_module! {
     fn doc_add_typst;
     fn doc_add_table;
     fn doc_tables;
+    fn doc_add_image;
     fn doc_update_fields;
 }
 
@@ -493,6 +539,40 @@ mod tests {
         assert_eq!(changed, 0);
         let text = docx_text(&mut doc).unwrap();
         assert!(text.contains("Table 1: Counts."), "{text}");
+    }
+
+    #[test]
+    fn appends_pictures_with_captions() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let png = root
+            .ancestors()
+            .nth(4)
+            .expect("the workspace root")
+            .join("samples")
+            .join("wren.png");
+        let bytes = std::fs::read(png).expect("the sample picture");
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, sample()).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        assert!(add_image(&mut doc, &bytes, None, None, None).is_ok());
+        assert!(
+            add_image(
+                &mut doc,
+                &bytes,
+                Some("A wren."),
+                Some("fig-wren"),
+                Some("A wren")
+            )
+            .is_ok()
+        );
+        let text = docx_text(&mut doc).unwrap();
+        assert!(text.contains("Figure 1: A wren."), "{text}");
+        // A label needs a caption, and unknown bytes are no picture.
+        let err = add_image(&mut doc, &bytes, None, Some("fig-wren"), None).unwrap_err();
+        assert!(matches!(err, Error::Docx(_)), "{err:?}");
+        let err = add_image(&mut doc, b"not a picture", None, None, None).unwrap_err();
+        assert!(matches!(err, Error::Docx(_)), "{err:?}");
     }
 
     #[test]
