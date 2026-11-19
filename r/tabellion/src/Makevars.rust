@@ -1,0 +1,41 @@
+# Shared Cargo build rules for the Rust engine, included by Makevars and
+# Makevars.win. In the repository the package builds against the Cargo
+# workspace; in a release tarball it builds offline from the vendored
+# sources (see tools/stage-r.sh).
+CARGO ?= cargo
+CARGO_JOBS ?= 2
+CARGO_TARGET_DIR_LOCAL = rustlib/target
+
+ifneq ($(wildcard rust/vendor.tar.xz rust/vendor),)
+CARGO_RELEASE_ENV = CARGO_NET_OFFLINE=true
+CARGO_RELEASE_FLAGS = --locked --offline -j $(CARGO_JOBS)
+endif
+
+.PHONY: all cargo-force
+all: $(SHLIB)
+
+$(SHLIB): $(RUSTLIB)
+
+# Remade by make itself when missing: R CMD SHLIB does not run configure.
+Makevars.platform:
+	cd .. && sh ./configure
+
+$(RUSTLIB): cargo-force
+	@set -e; \
+	rustc --version; \
+	if [ -f rust/vendor.tar.xz ] || [ -d rust/vendor ]; then \
+	    if [ ! -d rust/vendor ]; then \
+	        rm -rf rust/vendor.tmp; mkdir -p rust/vendor.tmp; \
+	        tar -xJf rust/vendor.tar.xz -C rust/vendor.tmp; \
+	        mv rust/vendor.tmp/vendor rust/vendor; rmdir rust/vendor.tmp; \
+	    fi; \
+	    mkdir -p .cargo; \
+	    cp rust/vendor-config.toml .cargo/config.toml; \
+	elif [ -d rust/local ]; then \
+	    printf '%s\n' 'Release staging is missing the Cargo vendor archive.' >&2; \
+	    exit 1; \
+	fi
+	$(RUST_PREPARE)
+	R_HOME="$(R_HOME)" $(CARGO_RELEASE_ENV) $(RUST_BUILD_ENV) \
+	    "$(CARGO)" build --release --lib $(CARGO_RELEASE_FLAGS) $(RUST_TARGET_FLAG) \
+	    --manifest-path rustlib/Cargo.toml --target-dir "$(CARGO_TARGET_DIR_LOCAL)"

@@ -4,3 +4,20 @@ if ! command -v cargo >/dev/null 2>&1; then
     printf '%s\n' 'Cargo and a Rust toolchain are required to build tabellion.' >&2
     exit 1
 fi
+# R links the static archive; the system libraries around it differ by
+# platform, so configure writes them into a generated include instead of
+# GNU make conditionals. Windows does not use this file: Makevars.win
+# carries its own link line.
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*)
+    printf '# Windows flags live in Makevars.win, which does not use this file.\n' > src/Makevars.platform
+    ;;
+Darwin)
+    # As in rextendr's Unix template: the archive alone links, R's own
+    # flags cover the rest.
+    printf 'PKG_LIBS = $(RUSTLIB)\n' > src/Makevars.platform
+    ;;
+*)
+    printf 'PKG_LIBS = $(RUSTLIB) -lgcc_s -lutil -lrt -lpthread -lm -ldl\n' > src/Makevars.platform
+    ;;
+esac

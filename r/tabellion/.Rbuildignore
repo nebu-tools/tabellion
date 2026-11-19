@@ -1,4 +1,7 @@
 ^src/rustlib/target$
+^src/\.cargo$
+^src/rust/vendor$
+^src/Makevars\.platform$
 \.so$
 \.o$
 symbols\.rds$
