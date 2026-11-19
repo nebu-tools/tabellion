@@ -177,6 +177,29 @@ enum Command {
         #[arg(long, value_name = "FILE")]
         file: PathBuf,
     },
+    /// Replace literal text wherever a reader sees it.
+    ///
+    /// Every occurrence of the find text is replaced in each paragraph of
+    /// every story but comments: the body with its tables and text boxes,
+    /// headers and footers, footnotes and endnotes. Runs keep their
+    /// formatting. A paragraph that refuses — a match inside a field, a
+    /// hyperlink or another object — aborts the command and names every
+    /// refused paragraph, and nothing is written.
+    Replace {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// The literal text to find.
+        #[arg(long, value_name = "TEXT")]
+        find: String,
+        /// The literal replacement; empty deletes the matches.
+        #[arg(long, value_name = "TEXT")]
+        with: String,
+        /// Only paragraphs of the block the locator names.
+        #[arg(long, value_name = "LOCATOR")]
+        block: Option<String>,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -637,6 +660,145 @@ fn replace_image(input: &Path, output: &Path, target: &str, file: &Path) -> Resu
     Ok(true)
 }
 
+/// Where a paragraph is, for a refusal that names it. `shared` tells
+/// that its block holds more than one swept paragraph — the cells of
+/// one table, or the paragraphs of one content control — so the
+/// location also names the paragraph and two refusals there do not
+/// read the same.
+fn describe(paragraph: &nebu_docx::Paragraph, shared: bool) -> String {
+    use nebu_docx::StoryKind;
+    if paragraph.location.story == StoryKind::Main {
+        return match (paragraph.location.block, shared) {
+            (Some(b), true) => format!("{b} paragraph {}", paragraph.index),
+            (Some(b), false) => b.to_string(),
+            (None, _) => format!("#{}", paragraph.index),
+        };
+    }
+    let story = match paragraph.location.story {
+        StoryKind::Header => "header",
+        StoryKind::Footer => "footer",
+        StoryKind::Footnote => "footnote",
+        StoryKind::Endnote => "endnote",
+        StoryKind::TextBox => "text box",
+        StoryKind::Comment | StoryKind::Main => "paragraph",
+    };
+    format!("{story} {}", paragraph.index)
+}
+
+/// How many swept paragraphs each body block holds. A block with more
+/// than one gets per-paragraph locations, so refusals there stay
+/// distinct even when the block is not a table.
+fn block_counts(
+    targets: &[nebu_docx::Paragraph],
+) -> std::collections::HashMap<Option<nebu_docx::BlockId>, usize> {
+    use nebu_docx::StoryKind;
+    let mut counts = std::collections::HashMap::new();
+    for p in targets {
+        if p.location.story == StoryKind::Main {
+            *counts.entry(p.location.block).or_default() += 1;
+        }
+    }
+    counts
+}
+
+/// The obstruction an error names, without its sentence.
+fn short(error: &nebu_docx::Error) -> String {
+    let message = error.to_string();
+    let what = message
+        .strip_prefix("cannot replace text that contains ")
+        .unwrap_or(&message);
+    what.strip_prefix("an ")
+        .or_else(|| what.strip_prefix("a "))
+        .unwrap_or(what)
+        .to_string()
+}
+
+/// `1 occurrence` or `2 occurrences`.
+fn count(word: &str, n: usize) -> String {
+    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+}
+
+fn replace_text(
+    input: &Path,
+    output: &Path,
+    find: &str,
+    with: &str,
+    block: Option<&str>,
+) -> Result<bool, String> {
+    use nebu_docx::{BlockId, Locator, StoryKind, revise};
+    revise::validate(find, with).map_err(|e| format!("{}: {e}", input.display()))?;
+    let mut doc = open(input)?;
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    // The paragraphs to sweep: every story but comments, or the block
+    // the locator names.
+    let wanted: Option<BlockId> = block
+        .map(|l| {
+            l.parse::<Locator>()
+                .map_err(|e: nebu_docx::Error| format!("{}: {e}", input.display()))
+        })
+        .transpose()?
+        .map(|locator| {
+            doc.views()
+                .map_err(at)?
+                .locate(&locator)
+                .map(|b| b.id)
+                .map_err(at)
+        })
+        .transpose()?;
+    let targets: Vec<nebu_docx::Paragraph> = doc
+        .views()
+        .map_err(at)?
+        .paragraphs()
+        .iter()
+        .filter(|p| p.location.story != StoryKind::Comment)
+        .filter(|p| wanted.is_none_or(|b| p.location.block == Some(b)))
+        .cloned()
+        .collect();
+    // Every refusal is collected before anything is reported, so one
+    // message names them all; nothing is saved unless all can be. The
+    // counts come from the initial snapshot, so locations stay stable
+    // across the sweep's edits and restores.
+    let counts = block_counts(&targets);
+    let mut occurrences = 0usize;
+    let mut changed = 0usize;
+    let mut refused: Vec<String> = Vec::new();
+    for p in &targets {
+        let shared = p.location.story == StoryKind::Main
+            && counts.get(&p.location.block).is_some_and(|&n| n > 1);
+        match revise::replace_in_paragraph(&mut doc, p.node, find, with) {
+            Ok(0) => {}
+            Ok(n) => {
+                occurrences += n;
+                changed += 1;
+            }
+            Err(e) => refused.push(format!("{} ({})", describe(p, shared), short(&e))),
+        }
+    }
+    if !refused.is_empty() {
+        return Err(format!(
+            "{}: refused {}: {}",
+            input.display(),
+            count("paragraph", refused.len()),
+            refused.join(", ")
+        ));
+    }
+    if occurrences == 0 {
+        return Err(match block {
+            Some(b) => format!("{}: no occurrences of {find:?} in {b}", input.display()),
+            None => format!("{}: no occurrences of {find:?}", input.display()),
+        });
+    }
+    doc.save(output).map_err(|e| e.to_string())?;
+    let scope = block.map(|b| format!(" in {b}")).unwrap_or_default();
+    println!(
+        "{}: replaced {find:?} with {with:?}{scope} ({} in {})",
+        output.display(),
+        count("occurrence", occurrences),
+        count("paragraph", changed),
+    );
+    Ok(true)
+}
+
 /// The file name for a package part: its last segment, when that is a
 /// single safe file name on the host. The package layer already refuses
 /// `.` and `..` segments, backslashes and control characters at open;
@@ -809,6 +971,13 @@ fn main() -> ExitCode {
                 target,
                 csv,
             } => replace_table(input, output, target, csv),
+            Command::Replace {
+                input,
+                output,
+                find,
+                with,
+                block,
+            } => replace_text(input, output, find, with, block.as_deref()),
             Command::Insert {
                 input,
                 output,
@@ -845,8 +1014,48 @@ fn main() -> ExitCode {
 
 #[cfg(test)]
 mod tests {
-    use super::{numbered_name, safe_name};
+    use super::{block_counts, describe, numbered_name, safe_name};
     use std::collections::HashSet;
+
+    /// Paragraphs for location tests, with nodes from a parsed tree.
+    /// Two share one block without cells, as a content control holds
+    /// them; the third stands alone.
+    fn located() -> Vec<nebu_docx::Paragraph> {
+        use nebu_docx::{BlockId, Location, Paragraph, StoryKind};
+        let tree = nebu_docx::xml::Tree::parse("<p/>").unwrap();
+        let node = tree.root_element();
+        let para = |index: usize, block: Option<BlockId>| Paragraph {
+            index,
+            location: Location {
+                story: StoryKind::Main,
+                part: "word/document.xml".into(),
+                block,
+            },
+            cell: None,
+            style: None,
+            style_name: None,
+            text: String::new(),
+            content: vec![],
+            node,
+        };
+        let shared = Some(BlockId::Index(4));
+        vec![
+            para(3, shared),
+            para(7, shared),
+            para(9, Some(BlockId::Paragraph(1))),
+        ]
+    }
+
+    #[test]
+    fn shared_blocks_name_each_paragraph() {
+        let targets = located();
+        let counts = block_counts(&targets);
+        let shared =
+            |p: &nebu_docx::Paragraph| counts.get(&p.location.block).is_some_and(|&n| n > 1);
+        assert_eq!(describe(&targets[0], shared(&targets[0])), "#4 paragraph 3");
+        assert_eq!(describe(&targets[1], shared(&targets[1])), "#4 paragraph 7");
+        assert_eq!(describe(&targets[2], shared(&targets[2])), "p:00000001");
+    }
 
     #[test]
     fn file_names_stay_in_the_output_directory() {
