@@ -78,6 +78,28 @@ struct Piece {
     blocked: Option<&'static str>,
 }
 
+/// Checks the replacement strings before a sweep: the find text must
+/// not be empty, and neither string may hold a tab, a line ending or a
+/// character XML cannot write. The messages name `--find` or `--with`,
+/// so a caller sweeping many paragraphs reports one diagnostic for an
+/// argument no paragraph can take.
+pub fn validate(find: &str, with: &str) -> Result<(), Error> {
+    if find.is_empty() {
+        return Err(Error::Invalid("cannot replace an empty string".to_string()));
+    }
+    for (flag, s) in [("--find", find), ("--with", with)] {
+        if let Some(c) = s.chars().find(|c| *c == '\t' || *c == '\n' || *c == '\r') {
+            return Err(Error::Invalid(format!(
+                "cannot replace across {c:?} in {flag}: tabs and line ends are not text a run holds"
+            )));
+        }
+        if let Err(e) = crate::xml::chars::check_chars(s) {
+            return Err(Error::Invalid(format!("cannot use {flag} text: {e}")));
+        }
+    }
+    Ok(())
+}
+
 /// Replaces every non-overlapping occurrence of `find` with `with` in
 /// the text of one paragraph and reports how many it replaced.
 ///
@@ -95,18 +117,7 @@ pub fn replace_in_paragraph(
     find: &str,
     with: &str,
 ) -> Result<usize, Error> {
-    if find.is_empty() {
-        return Err(Error::Invalid("cannot replace an empty string".to_string()));
-    }
-    if let Some(c) = find
-        .chars()
-        .chain(with.chars())
-        .find(|c| *c == '\t' || *c == '\n' || *c == '\r')
-    {
-        return Err(Error::Invalid(format!(
-            "cannot replace across {c:?}: tabs and line ends are not text a run holds"
-        )));
-    }
+    validate(find, with)?;
     let stories = place::stories(doc)?;
     let Some((part, _)) = stories
         .iter()

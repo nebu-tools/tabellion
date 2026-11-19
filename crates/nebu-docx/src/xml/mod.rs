@@ -43,7 +43,7 @@
 //! # Ok::<(), nebu_docx::Error>(())
 //! ```
 
-mod chars;
+pub(crate) mod chars;
 mod parse;
 mod write;
 

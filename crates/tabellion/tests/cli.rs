@@ -1242,3 +1242,316 @@ fn image_refuses_a_paragraph_with_a_vml_picture_too() {
     assert!(stderr.contains("more than one picture"), "{stderr}");
     assert!(!out.exists());
 }
+
+const REPLACE_JSON: &str = r#"{"blocks": [
+    {"type": "paragraph", "content": [{"type": "text", "text": "A draft plan"}]},
+    {"type": "paragraph", "content": [{"type": "text", "text": "Another draft, two drafts"}]},
+    {"type": "table", "rows": [
+        {"cells": [{"content": [{"type": "paragraph", "content": [{"type": "text", "text": "draft tally"}]}]}]}
+    ]}
+]}"#;
+
+/// A document with findable text in two paragraphs and a table cell.
+fn drafted_doc(dir: &std::path::Path) -> std::path::PathBuf {
+    let template = dir.join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.join("draft.json");
+    std::fs::write(&content, REPLACE_JSON).unwrap();
+    let drafted = dir.join("drafted.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        drafted.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    drafted
+}
+
+#[test]
+fn replace_swaps_text_across_paragraphs_and_cells() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("replaced.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // Two paragraphs change; the fourth match is a substring of "drafts".
+    assert!(
+        stdout.contains(r#"replaced "draft" with "final" (4 occurrences in 3 paragraphs)"#),
+        "{stdout}"
+    );
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("A final plan"), "{text}");
+    assert!(text.contains("Another final, two finals"), "{text}");
+    let back = dir.path().join("back");
+    let (code, _, stderr) = run(&["tables", out.to_str().unwrap(), back.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let bytes = std::fs::read(back.join("table-1.csv")).unwrap();
+    assert!(String::from_utf8(bytes).unwrap().contains("final tally"));
+}
+
+/// The id of the block whose text holds the needle.
+fn block_with(doc: &str, needle: &str) -> String {
+    let (code, out, err) = run(&["inspect", doc, "blocks", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let json: serde_json::Value = serde_json::from_str(&out).unwrap();
+    json["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["text"].as_str().is_some_and(|t| t.contains(needle)))
+        .and_then(|b| b["id"].as_str())
+        .expect("a block holds the text")
+        .to_string()
+}
+
+#[test]
+fn replace_scopes_to_the_named_block() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let id = block_with(drafted.to_str().unwrap(), "Another draft");
+    let out = dir.path().join("replaced.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--block",
+        &id,
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains(&format!(
+            r#"replaced "draft" with "final" in {id} (2 occurrences in 1 paragraph)"#
+        )),
+        "{stdout}"
+    );
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("Another final, two finals"), "{text}");
+    assert!(text.contains("A draft plan"), "{text}");
+}
+
+#[test]
+fn replace_refuses_and_writes_nothing() {
+    let dir = tempfile::tempdir().unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.path().join("field.json");
+    std::fs::write(
+        &content,
+        r#"{"blocks": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "plain draft here"}]},
+            {"type": "table", "rows": [{"cells": [
+                {"content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF a \\h", "result": "draft"},
+                    {"type": "text", "text": " A"}
+                ]}]},
+                {"content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF b \\h", "result": "draft"},
+                    {"type": "text", "text": " B"}
+                ]}]}
+            ]}]}
+        ]}"#,
+    )
+    .unwrap();
+    let doc = dir.path().join("fielded.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        doc.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    // The body paragraph succeeds, then both cells refuse: the sweep
+    // lists each refusal distinctly instead of stopping at the first.
+    assert!(stderr.contains("refused 2 paragraphs"), "{stderr}");
+    let listed = stderr
+        .split_once("refused 2 paragraphs: ")
+        .expect("the refusals")
+        .1;
+    let mut entries: Vec<&str> = listed.split(", ").collect();
+    assert_eq!(entries.len(), 2, "{stderr}");
+    assert!(entries.iter().all(|e| e.contains("(field)")), "{stderr}");
+    entries.sort_unstable();
+    entries.dedup();
+    assert_eq!(entries.len(), 2, "distinct paragraphs: {stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_names_the_flag_for_bad_arguments() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    // A line ending in --with is an argument no paragraph can take: one
+    // diagnostic, not one refusal per paragraph.
+    for (flag, value) in [("--find", "dra\tft"), ("--with", "fin\nal")] {
+        let out = dir.path().join("out.docx");
+        let (code, _, stderr) = run(&[
+            "replace",
+            drafted.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--find",
+            if flag == "--find" { value } else { "draft" },
+            "--with",
+            if flag == "--with" { value } else { "final" },
+        ]);
+        assert_eq!(code, Some(3), "{stderr}");
+        assert!(stderr.contains(flag), "{stderr}");
+        assert!(!stderr.contains("refused"), "{stderr}");
+        assert!(!out.exists());
+    }
+    // A character XML cannot write names --with too.
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "a\x01b",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("--with"), "{stderr}");
+    assert!(stderr.contains("U+0001"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_reports_no_occurrences() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "nightingale",
+        "--with",
+        "thrush",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(
+        stderr.contains(r#"no occurrences of "nightingale""#),
+        "{stderr}"
+    );
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_rejects_an_empty_find() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "",
+        "--with",
+        "final",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(
+        stderr.contains("cannot replace an empty string"),
+        "{stderr}"
+    );
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_deletes_with_an_empty_with() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("deleted.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft ",
+        "--with",
+        "",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("(2 occurrences in 2 paragraphs)"),
+        "{stdout}"
+    );
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("A plan"), "{text}");
+}
+
+#[test]
+fn replace_sweeps_headers_and_leaves_comments_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    // "Marshes" stands once in the body and twice in headers.
+    let out = dir.path().join("headers.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        &corpus("birds.docx"),
+        out.to_str().unwrap(),
+        "--find",
+        "Marshes",
+        "--with",
+        "Fens",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("(3 occurrences in 3 paragraphs)"),
+        "{stdout}"
+    );
+    let (_, text, _) = run(&["text", out.to_str().unwrap(), "--headers-footers"]);
+    assert_eq!(text.matches("Fens").count(), 3, "{text}");
+    // "Both" stands only in a comment of changes.docx ("dawn" also
+    // stands in a footnote's insertion): nothing to replace. The source
+    // comment still holds the word, so the check cannot pass vacuously.
+    let (code, out, err) = run(&["inspect", &corpus("changes.docx"), "comments", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(out.contains("Both"), "{out}");
+    let silent = dir.path().join("silent.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        &corpus("changes.docx"),
+        silent.to_str().unwrap(),
+        "--find",
+        "Both",
+        "--with",
+        "Each",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains(r#"no occurrences of "Both""#), "{stderr}");
+    assert!(!silent.exists());
+}
