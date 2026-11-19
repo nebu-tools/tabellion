@@ -6,7 +6,7 @@ mod support;
 
 use std::path::Path;
 
-use nebu_docx::content::{Block, Image, Inline};
+use nebu_docx::content::{Block, Cell, Image, Inline, Row, Table};
 use nebu_docx::{
     BlockKind, Content, Document, Error, Locator, Place, Role, RoleSource, StoryKind, TableStyle,
     WriteOptions,
@@ -759,4 +759,440 @@ fn roles_can_be_chosen_and_say_where_they_came_from() {
     );
     let e = doc.insert(Place::End, &c.blocks, &opts).unwrap_err();
     assert!(e.to_string().contains("chosen for captions"), "{e}");
+}
+
+#[test]
+fn overlapping_places_in_one_batch_are_an_error() {
+    let mut doc = Document::from_bytes(corpus("birds.docx")).unwrap();
+    let before = doc.to_bytes().unwrap();
+    let (table, inner) = {
+        let v = doc.views().unwrap();
+        let t = v
+            .blocks()
+            .iter()
+            .find(|b| b.kind == BlockKind::Table)
+            .unwrap();
+        let p = v
+            .paragraphs()
+            .iter()
+            .find(|p| p.location.block == Some(t.id))
+            .unwrap();
+        (t.node, p.node)
+    };
+    let one = content(json!([{"type": "paragraph", "content": ["beside."]}]));
+    let two = content(json!([{"type": "paragraph", "content": ["instead."]}]));
+    let e = doc
+        .insert_all(
+            &[
+                (Place::Replace(table), one.blocks.as_slice()),
+                (Place::Before(inner), two.blocks.as_slice()),
+            ],
+            &WriteOptions::default(),
+        )
+        .unwrap_err();
+    assert!(e.to_string().contains("overlap"), "{e}");
+    // The failure left the document as it was.
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[test]
+fn a_reference_to_a_stale_caption_matches_what_the_caption_says() {
+    // A caption whose cached number is stale keeps its bytes; a reference
+    // written after it shows the kept number, not a recalculated one.
+    let c = content(
+        json!([{"type": "table", "caption": ["Dry"], "label": "tab-dry",
+        "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["x"]}]}]}]}]),
+    );
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // Age the cached result: Table 1 becomes Table 7 in the bytes.
+    let bytes = doc.to_bytes().unwrap();
+    let mut files = support::entries(&bytes);
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let mut xml = String::from_utf8(files[i].1.clone()).unwrap();
+    let mark = xml.find("_Ref_tab-dry").expect("the label bookmark");
+    let at = mark + xml[mark..].find(">1</w:t>").expect("the cached number");
+    assert!(xml[mark..at].contains("SEQ"), "no SEQ field before {at}");
+    xml.replace_range(at + 1..at + 2, "7");
+    files[i].1 = xml.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    assert!(
+        doc.views()
+            .unwrap()
+            .paragraphs()
+            .iter()
+            .any(|p| p.text == "Table 7: Dry"),
+        "the caption is not stale"
+    );
+    let c = content(
+        json!([{"type": "paragraph", "content": ["See ", {"type": "reference", "label": "tab-dry"}, "."]}]),
+    );
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let reference = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("tab-dry"))
+        .unwrap();
+    assert_eq!(reference.result, "Table 7", "{reference:?}");
+}
+
+#[test]
+fn after_a_section_break_the_next_section_sizes_what_is_written() {
+    // The first paragraph ends a wide section; what is written after it
+    // stands in the sample's own narrower one.
+    let mut xml =
+        String::from_utf8(support::entry(&support::sample(), "word/document.xml")).unwrap();
+    let start = xml.rfind("<w:sectPr").expect("the final section");
+    let end = xml[start..].find("</w:sectPr>").expect("its end") + "</w:sectPr>".len();
+    let section = xml[start..start + end].to_string();
+    let pg = section.find("<w:pgSz").expect("a page size");
+    let wstart = section[pg..].find("w:w=\"").unwrap() + pg + 5;
+    let wend = section[wstart..].find('"').unwrap() + wstart;
+    let wide: i64 = section[wstart..wend].parse().unwrap();
+    let mut wide_section = section.clone();
+    wide_section.replace_range(wstart..wend, &(wide + 7200).to_string());
+    let first_close = xml.find("</w:pPr>").expect("a paragraph style");
+    xml.insert_str(first_close, &wide_section);
+    let mut files = support::entries(&support::sample());
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    files[i].1 = xml.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    let (narrow, first) = {
+        let v = doc.views().unwrap();
+        assert_eq!(v.sections().len(), 2, "one break, two sections");
+        let wide = v.sections()[0].text_width.unwrap();
+        let narrow = v.sections()[1].text_width.unwrap();
+        assert!(wide - narrow > 100.0, "{wide} against {narrow}");
+        (narrow, v.blocks()[0].node)
+    };
+    let big =
+        content(json!([{"type": "image", "image": {"data": support::base64(&png(4000, 1000))}}]));
+    doc.insert(Place::After(first), &big.blocks, &WriteOptions::default())
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let images = doc.views().unwrap().images();
+    assert_eq!(images.len(), 1);
+    assert!(
+        (images[0].width.unwrap() - narrow).abs() < 0.1,
+        "{} against {narrow}",
+        images[0].width.unwrap()
+    );
+}
+
+#[test]
+fn replacing_a_caption_by_nothing_renumbers_the_later_ones() {
+    // A table before the one birds.docx has makes it Table 2; deleting the
+    // new caption by replacing it with nothing makes it Table 1 again.
+    let c = content(
+        json!([{"type": "table", "caption": ["Weather"], "label": "tab-weather",
+        "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["dry"]}]}]}]}]),
+    );
+    let mut doc = Document::from_bytes(corpus("birds.docx")).unwrap();
+    let first = at(&mut doc, "heading:Survey sites");
+    doc.insert(Place::Before(first), &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let caption = {
+        let v = doc.views().unwrap();
+        v.paragraphs()
+            .iter()
+            .find(|p| p.text.starts_with("Table 1:"))
+            .unwrap()
+            .node
+    };
+    let nothing: &[Block] = &[];
+    let r = doc
+        .insert(Place::Replace(caption), nothing, &WriteOptions::default())
+        .unwrap();
+    assert!(r.renumbered >= 1, "{r:?}");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let text = doc.views().unwrap().text(&Default::default());
+    assert!(!text.contains("Weather"), "{text}");
+    assert!(text.contains("Table 1: Sites, visits and counts"), "{text}");
+    assert!(text.contains("As Table 1 shows"), "{text}");
+}
+
+#[test]
+fn table_widths_must_be_finite_numbers_above_zero() {
+    let table = |widths| Table {
+        rows: vec![Row {
+            cells: vec![Cell::new(vec![]), Cell::new(vec![])],
+        }],
+        header_rows: 0,
+        first_column: false,
+        style: None,
+        widths,
+        caption: None,
+        label: None,
+    };
+    let limits = nebu_docx::ContentLimits::default();
+    for widths in [
+        Some(vec![-1.0, 1.0]),
+        Some(vec![0.0, 1.0]),
+        Some(vec![f64::NAN, 1.0]),
+        Some(vec![f64::INFINITY, 1.0]),
+    ] {
+        let c = Content {
+            blocks: vec![Block::Table(table(widths))],
+            table_styles: vec![],
+        };
+        let e = c.check(&limits).unwrap_err();
+        assert!(e.to_string().contains("widths[0]"), "{e}");
+    }
+    // Huge but finite weights pass the checker and fail at the writer,
+    // where their sum is no finite total and every column but the last
+    // would collapse.
+    let c = Content {
+        blocks: vec![Block::Table(table(Some(vec![1e308, 1e308])))],
+        table_styles: vec![],
+    };
+    c.check(&limits).unwrap();
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    let e = doc
+        .insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap_err();
+    assert!(e.to_string().contains("no finite total"), "{e}");
+}
+
+#[test]
+fn hostile_sequence_numbers_stay_arabic() {
+    // A reset past every sane count and a counter at the top of its range
+    // must not hang or fill memory on an alphabetic or Roman format.
+    let c = content(json!([
+        {"type": "table", "caption": ["Dry"], "label": "tab-dry",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["x"]}]}]}]},
+        {"type": "table", "caption": ["Wet"], "label": "tab-wet",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["y"]}]}]}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let bytes = doc.to_bytes().unwrap();
+    let mut files = support::entries(&bytes);
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let xml = String::from_utf8(files[i].1.clone()).unwrap();
+    let at = xml
+        .find("SEQ Table \\* ARABIC")
+        .expect("the first caption number");
+    let mut xml = xml.into_bytes();
+    let arabic = b"\\* ARABIC";
+    xml.splice(
+        at + "SEQ Table ".len()..at + "SEQ Table ".len() + arabic.len(),
+        b"\\* ALPHABETIC \\r 18446744073709551615".iter().copied(),
+    );
+    files[i].1 = xml;
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    let caption = {
+        let v = doc.views().unwrap();
+        v.paragraphs()
+            .iter()
+            .find(|p| p.text.starts_with("Table 1:"))
+            .unwrap()
+            .node
+    };
+    let c = content(json!([{"type": "paragraph", "content": ["Before."]}]));
+    doc.insert(Place::Before(caption), &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let numbers: Vec<String> = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .filter(|f| f.kind == "SEQ" && f.code.contains("Table") && !f.code.contains("\\c"))
+        .map(|f| f.result.clone())
+        .collect();
+    assert_eq!(
+        numbers,
+        vec!["18446744073709551615", "18446744073709551615"],
+        "{numbers:?}"
+    );
+}
+
+#[test]
+fn a_batch_deletion_and_insertion_renumbers_between_them() {
+    // Deleting the first caption and adding one at the end in one batch:
+    // the caption between them takes the deleted number.
+    let two = content(json!([
+        {"type": "table", "caption": ["Dry"], "label": "tab-dry",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["x"]}]}]}]},
+        {"type": "table", "caption": ["Wet"], "label": "tab-wet",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["y"]}]}]}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &two.blocks, &WriteOptions::default())
+        .unwrap();
+    let caption = {
+        let v = doc.views().unwrap();
+        v.paragraphs()
+            .iter()
+            .find(|p| p.text.starts_with("Table 1:"))
+            .unwrap()
+            .node
+    };
+    let late = content(
+        json!([{"type": "table", "caption": ["Late"], "label": "tab-late",
+        "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["z"]}]}]}]}]),
+    );
+    let nothing: &[Block] = &[];
+    let r = doc
+        .insert_all(
+            &[
+                (Place::Replace(caption), nothing),
+                (Place::End, late.blocks.as_slice()),
+            ],
+            &WriteOptions::default(),
+        )
+        .unwrap();
+    assert_eq!(r.renumbered, 1, "{r:?}");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let text = doc.views().unwrap().text(&Default::default());
+    assert!(!text.contains("Dry"), "{text}");
+    assert!(text.contains("Table 1: Wet"), "{text}");
+    assert!(text.contains("Table 2: Late"), "{text}");
+}
+
+#[test]
+fn a_deletion_keeps_what_stands_before_it() {
+    // A stale caption before a deleted one keeps its bytes, and deleting
+    // in a footer renumbers nothing in the body.
+    let two = content(json!([
+        {"type": "table", "caption": ["Dry"], "label": "tab-dry",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["x"]}]}]}]},
+        {"type": "table", "caption": ["Wet"], "label": "tab-wet",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["y"]}]}]}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &two.blocks, &WriteOptions::default())
+        .unwrap();
+    let bytes = doc.to_bytes().unwrap();
+    let mut files = support::entries(&bytes);
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let mut xml = String::from_utf8(files[i].1.clone()).unwrap();
+    let mark = xml.find("_Ref_tab-dry").expect("the label bookmark");
+    let at = mark + xml[mark..].find(">1</w:t>").expect("the cached number");
+    xml.replace_range(at + 1..at + 2, "7");
+    files[i].1 = xml.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    let caption = {
+        let v = doc.views().unwrap();
+        v.paragraphs()
+            .iter()
+            .find(|p| p.text.starts_with("Table 2:"))
+            .unwrap()
+            .node
+    };
+    let nothing: &[Block] = &[];
+    let r = doc
+        .insert(Place::Replace(caption), nothing, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(r.renumbered, 0, "{r:?}");
+    let footer = {
+        let v = doc.views().unwrap();
+        v.paragraphs()
+            .iter()
+            .find(|p| p.location.story == StoryKind::Footer)
+            .unwrap()
+            .node
+    };
+    let r = doc
+        .insert(Place::Replace(footer), nothing, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(r.renumbered, 0, "{r:?}");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let text = doc.views().unwrap().text(&Default::default());
+    assert!(!text.contains("Wet"), "{text}");
+    assert!(!text.contains("Table 2"), "{text}");
+    assert!(text.contains("Table 7: Dry"), "{text}");
+}
+
+#[test]
+fn picture_files_stay_inside_their_directory() {
+    let dir = std::env::temp_dir().join(format!("tabellion-files-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("bird.png"), png(20, 20)).unwrap();
+    let opts = WriteOptions {
+        files: Some(dir.clone()),
+        ..Default::default()
+    };
+    for file in ["../bird.png", "/bird.png", "..\\bird.png", "\\bird.png"] {
+        let c = content(json!([{"type": "image", "image": {"file": file}}]));
+        let mut doc = Document::from_bytes(support::sample()).unwrap();
+        let e = doc.insert(Place::End, &c.blocks, &opts).unwrap_err();
+        assert!(
+            e.to_string().contains("not inside the files directory"),
+            "{file}: {e}"
+        );
+    }
+    // A plain name in the directory still reads.
+    let c = content(json!([{"type": "image", "image": {"file": "bird.png"}}]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &opts).unwrap();
+    valid(&doc.to_bytes().unwrap());
+    #[cfg(unix)]
+    {
+        // A link inside the directory that points outside it does not.
+        let outside =
+            std::env::temp_dir().join(format!("tabellion-outside-{}.png", std::process::id()));
+        std::fs::write(&outside, png(20, 20)).unwrap();
+        std::os::unix::fs::symlink(&outside, dir.join("evil.png")).unwrap();
+        let c = content(json!([{"type": "image", "image": {"file": "evil.png"}}]));
+        let mut doc = Document::from_bytes(support::sample()).unwrap();
+        let e = doc.insert(Place::End, &c.blocks, &opts).unwrap_err();
+        assert!(
+            e.to_string().contains("not inside the files directory"),
+            "{e}"
+        );
+        // A link to a file inside still reads.
+        std::os::unix::fs::symlink(dir.join("bird.png"), dir.join("kind.png")).unwrap();
+        let c = content(json!([{"type": "image", "image": {"file": "kind.png"}}]));
+        let mut doc = Document::from_bytes(support::sample()).unwrap();
+        doc.insert(Place::End, &c.blocks, &opts).unwrap();
+        valid(&doc.to_bytes().unwrap());
+        std::fs::remove_file(&outside).ok();
+    }
+    std::fs::remove_dir_all(&dir).ok();
 }

@@ -320,13 +320,20 @@ pub(crate) fn grid(t: &Table) -> Result<Grid, String> {
         starts.push(list);
     }
     let columns = columns.unwrap_or(0);
-    if let Some(w) = &t.widths
-        && w.len() != columns
-    {
-        return Err(format!(
-            "widths gives {} columns, the table has {columns}",
-            w.len()
-        ));
+    if let Some(w) = &t.widths {
+        if w.len() != columns {
+            return Err(format!(
+                "widths gives {} columns, the table has {columns}",
+                w.len()
+            ));
+        }
+        for (i, v) in w.iter().enumerate() {
+            if !v.is_finite() || *v <= 0.0 {
+                return Err(format!(
+                    "widths[{i}]: {v} is not a width; give a number above 0"
+                ));
+            }
+        }
     }
     let cover = cover
         .into_iter()
@@ -711,11 +718,7 @@ impl Checker<'_> {
         let mut d = self.deeper(w, &cp)?;
         d.cell = true;
         for (i, b) in c.content.iter().enumerate() {
-            let bp = format!("{cp}[{i}]");
-            if let Block::Heading { .. } | Block::Figure { .. } = b {
-                // Allowed: Word puts headings and figures in cells.
-            }
-            self.block(b, &bp, d)?;
+            self.block(b, &format!("{cp}[{i}]"), d)?;
         }
         Ok(())
     }

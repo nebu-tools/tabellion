@@ -256,10 +256,48 @@ fn bytes_of(s: &Session<'_>, src: &Source, path: &str) -> Result<Vec<u8>, Error>
                     "{path}.file: the writer reads no files unless WriteOptions::files names their directory; give the picture as data"
                 )));
             };
-            let p = dir.join(f);
-            std::fs::read(&p).map_err(|e| Error::Io {
+            // The content is untrusted: an absolute path would discard the
+            // directory, and `..` would escape it. Backslashes count as
+            // separators too, so a Windows escape cannot pass on another
+            // system and lie in wait; prefixes and roots are refused
+            // outright, since `is_absolute` misses the root-only and
+            // drive-relative forms on Windows.
+            let escaped = f.replace('\\', "/");
+            let rel = std::path::Path::new(&escaped);
+            if rel.is_absolute()
+                || rel.components().any(|c| {
+                    matches!(
+                        c,
+                        std::path::Component::Prefix(_)
+                            | std::path::Component::RootDir
+                            | std::path::Component::ParentDir
+                    )
+                })
+            {
+                return Err(Error::Invalid(format!(
+                    "{path}.file: {f:?} is not inside the files directory; give a relative path without '..'"
+                )));
+            }
+            // A link inside the directory may still point outside it.
+            let base = std::fs::canonicalize(dir).map_err(|e| Error::Io {
                 action: "read",
-                path: p,
+                path: dir.clone(),
+                source: e,
+            })?;
+            let joined = dir.join(f);
+            let resolved = std::fs::canonicalize(&joined).map_err(|e| Error::Io {
+                action: "read",
+                path: joined,
+                source: e,
+            })?;
+            if !resolved.starts_with(&base) {
+                return Err(Error::Invalid(format!(
+                    "{path}.file: {f:?} is not inside the files directory; give a relative path without '..'"
+                )));
+            }
+            std::fs::read(&resolved).map_err(|e| Error::Io {
+                action: "read",
+                path: resolved,
                 source: e,
             })
         }

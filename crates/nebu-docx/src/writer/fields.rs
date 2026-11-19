@@ -88,6 +88,12 @@ fn words(code: &str) -> Vec<String> {
 }
 
 fn roman(mut n: u64, upper: bool) -> String {
+    // Past a short result the count is absurd, so the number stays
+    // Arabic rather than looping towards it: a hostile field code must
+    // neither hang nor fill memory.
+    if n > 100_000 {
+        return n.to_string();
+    }
     let table = [
         (1000, "m"),
         (900, "cm"),
@@ -114,9 +120,14 @@ fn roman(mut n: u64, upper: bool) -> String {
 }
 
 fn alpha(n: u64, upper: bool) -> String {
-    // Word repeats the letter: a … z, aa … zz.
+    // Word repeats the letter: a … z, aa … zz. Past a short result the
+    // count is absurd, so the number stays Arabic rather than filling
+    // memory: a hostile field code must not exhaust it.
     if n == 0 {
         return String::new();
+    }
+    if (n - 1) / 26 + 1 > 64 {
+        return n.to_string();
     }
     let letter = (b'a' + ((n - 1) % 26) as u8) as char;
     let s: String = std::iter::repeat_n(letter, ((n - 1) / 26 + 1) as usize).collect();
@@ -138,12 +149,15 @@ fn format(n: u64, w: &[String]) -> String {
     }
 }
 
-/// Collects fields and label texts in one pass.
+/// Collects fields and label texts in one pass. `markers` holds the nodes
+/// past deletions in the body stand after: an empty replacement deletes,
+/// and what follows it renumbers. What stands before keeps its bytes.
 fn collect(
     t: &Tree,
     body: NodeId,
     inserted: &HashSet<NodeId>,
     labels: &HashSet<String>,
+    markers: &HashSet<NodeId>,
 ) -> Result<(Vec<Field>, Vec<Event>), Error> {
     let mut fields: Vec<Field> = vec![];
     let mut events = vec![];
@@ -157,6 +171,11 @@ fn collect(
         stack.push((k, false));
     }
     while let Some((n, inside0)) = stack.pop() {
+        // Past a deletion the numbers change: what follows renumbers,
+        // while what stands before keeps its bytes.
+        if markers.contains(&n) {
+            after = true;
+        }
         let inside = inside0 || inserted.contains(&n);
         if inside {
             after = true;
@@ -318,11 +337,14 @@ fn collect(
 }
 
 /// Updates the results after an insertion and returns how many fields
-/// outside it changed.
+/// outside it changed. `deleted` holds the nodes past empty replacements
+/// in the body, so that a replacement by nothing renumbers what stands
+/// after it: an insertion of nothing otherwise changes nothing.
 pub(crate) fn update(
     doc: &mut Document,
     s: &Session<'_>,
     nodes: &[Vec<NodeId>],
+    deleted: &[NodeId],
 ) -> Result<usize, Error> {
     let main = s.main.clone();
     let inserted: HashSet<NodeId> = nodes.iter().flatten().copied().collect();
@@ -336,10 +358,12 @@ pub(crate) fn update(
     let Some(body) = t.child(t.root_element(), Some(W), "body")? else {
         return Ok(0);
     };
-    if !nodes.iter().flatten().any(|n| t.kind(*n).is_ok()) {
+    let any = nodes.iter().flatten().any(|n| t.kind(*n).is_ok());
+    if !any && deleted.is_empty() {
         return Ok(0);
     }
-    let (fields, events) = collect(t, body, &inserted, &labels)?;
+    let markers: HashSet<NodeId> = deleted.iter().copied().collect();
+    let (fields, events) = collect(t, body, &inserted, &labels, &markers)?;
     // Numbers of SEQ fields.
     let mut counters: HashMap<String, u64> = HashMap::new();
     let mut restart: HashSet<String> = HashSet::new();
@@ -371,7 +395,7 @@ pub(crate) fn update(
         if let Some(r) = reset {
             *c = r;
         } else if !w.iter().any(|x| x.eq_ignore_ascii_case("\\c")) {
-            *c += 1;
+            *c = c.saturating_add(1);
         }
         let hidden = w.iter().any(|x| x.eq_ignore_ascii_case("\\h"));
         if !restart.contains(&id) && !hidden {
@@ -396,14 +420,19 @@ pub(crate) fn update(
                 for (_, name) in &open_marks {
                     let e = texts.entry(name.to_lowercase()).or_default();
                     e.0.push_str(s);
-                    if !field.is_some_and(|f| new[f].is_some()) {
+                    // The text after the insertion keeps the kept bytes of
+                    // the fields before it: only a field whose result is
+                    // rewritten lends its new number.
+                    if !field.is_some_and(|f| fields[f].after && new[f].is_some()) {
                         e.1.push_str(s);
                     }
                     used += 2 * s.len() as u64;
                 }
             }
             Event::FieldEnd(f) => {
-                if let Some(v) = seq_value(*f) {
+                if fields[*f].after
+                    && let Some(v) = seq_value(*f)
+                {
                     for (_, name) in &open_marks {
                         texts.entry(name.to_lowercase()).or_default().1.push_str(&v);
                         used += v.len() as u64;
@@ -510,5 +539,24 @@ mod tests {
         assert_eq!(format(4, &w("SEQ Table \\* roman")), "iv");
         assert_eq!(format(28, &w("SEQ Table \\* ALPHABETIC")), "BB");
         assert_eq!(words("REF \"a b\" \\h"), vec!["REF", "a b", "\\h"]);
+        // Past every sane count the number stays Arabic rather than
+        // filling memory or hanging on a long alphabetic or Roman form.
+        assert_eq!(
+            format(u64::MAX, &w("SEQ Table \\* ALPHABETIC")),
+            u64::MAX.to_string()
+        );
+        assert_eq!(
+            format(u64::MAX, &w("SEQ Table \\* roman")),
+            u64::MAX.to_string()
+        );
+        assert_eq!(
+            format(u64::MAX, &w("SEQ Table \\* ROMAN")),
+            u64::MAX.to_string()
+        );
+        assert_eq!(
+            format(65 * 26, &w("SEQ Table \\* alphabetic")),
+            (65 * 26).to_string()
+        );
+        assert_eq!(format(100_001, &w("SEQ Table \\* ROMAN")), "100001");
     }
 }

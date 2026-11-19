@@ -61,6 +61,11 @@ impl Session<'_> {
             None => vec![1.0; g.columns],
         };
         let sum: f64 = weights.iter().sum();
+        if !sum.is_finite() || sum <= 0.0 {
+            return Err(Error::Invalid(format!(
+                "{path}.widths: the widths add up to no finite total"
+            )));
+        }
         let mut cols: Vec<i64> = weights
             .iter()
             .map(|w| ((w / sum) * total as f64).floor() as i64)

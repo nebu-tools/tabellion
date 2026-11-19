@@ -213,6 +213,24 @@ pub(crate) fn run(
         }
     }
     let page_width = first_width.unwrap_or(451.3);
+    // The width after a section-ending paragraph is the next section's:
+    // the paragraph ends its section, so an insertion after it stands in
+    // the next one.
+    let mut next_width: HashMap<NodeId, f64> = HashMap::new();
+    {
+        let blocks = v.blocks();
+        let node_of: HashMap<_, _> = blocks.iter().map(|b| (b.id, b.node)).collect();
+        for w in v.sections().windows(2) {
+            let Some(last) = w[0].last_block else {
+                continue;
+            };
+            if let (Some(&node), Some(next)) =
+                (node_of.get(&last), w[1].text_width.filter(|x| *x > 36.0))
+            {
+                next_width.insert(node, next);
+            }
+        }
+    }
     let parts: Vec<String> = stories.iter().map(|(p, _)| p.clone()).collect();
     let ids = Ids::collect(doc, &parts, super::ids::seed(doc))?;
     let notes_part = stories
@@ -269,6 +287,71 @@ pub(crate) fn run(
     for (p, _) in items {
         targets.push(place::resolve(doc, &stories, *p)?);
     }
+    // A place inside a subtree another place replaces would be written
+    // into the detached subtree: the replacement reaches the document,
+    // the other write does not, although both report nodes.
+    for (i, a) in targets.iter().enumerate() {
+        let Anchor::Replace(x) = a.anchor else {
+            continue;
+        };
+        for (j, b) in targets.iter().enumerate() {
+            if i == j || b.part != a.part {
+                continue;
+            }
+            let node = match b.anchor {
+                Anchor::Before(n) | Anchor::After(n) | Anchor::Replace(n) => n,
+                Anchor::Append => continue,
+            };
+            let t = doc.xml(&b.part)?;
+            let mut cur = t.parent(node)?;
+            while let Some(c) = cur {
+                if c == x {
+                    return Err(Error::Invalid(
+                        "two places overlap: one replaces a block that holds another place".into(),
+                    ));
+                }
+                cur = t.parent(c)?;
+            }
+        }
+    }
+    // Where empty replacements in the body delete: the node after each
+    // deleted one, past which the field scan renumbers. Only the body
+    // renumbers, and only from a deletion on.
+    let mut deleted: Vec<NodeId> = vec![];
+    {
+        let xml = doc.xml(&main)?;
+        if let Some(body) = xml.child(xml.root_element(), Some(W), "body")? {
+            // The empty replacements that delete in the body, by anchor.
+            let anchors: HashSet<NodeId> = targets
+                .iter()
+                .zip(items)
+                .filter(|(t, (_, blocks))| {
+                    blocks.is_empty()
+                        && t.story == StoryKind::Main
+                        && t.container == body
+                        && matches!(t.anchor, Anchor::Replace(_))
+                })
+                .map(|(t, _)| match t.anchor {
+                    Anchor::Replace(x) => x,
+                    _ => unreachable!("filtered to replacements"),
+                })
+                .collect();
+            // One pass over the body: the node after each anchor.
+            if !anchors.is_empty() {
+                let kids: Vec<NodeId> = xml.elements(body)?.collect();
+                let mut armed = false;
+                for k in kids {
+                    if armed {
+                        deleted.push(k);
+                        armed = false;
+                    }
+                    if anchors.contains(&k) {
+                        armed = true;
+                    }
+                }
+            }
+        }
+    }
     let mut out = Inserted::default();
     let mut pending: Vec<(&Target, Vec<NodeId>, bool)> = vec![];
     for (t, (_, blocks)) in targets.iter().zip(items) {
@@ -283,7 +366,17 @@ pub(crate) fn run(
         let width = t
             .cell_width
             .map(|w| (w - 10.8).max(36.0))
-            .or_else(|| t.top.and_then(|n| width_of.get(&n).copied()))
+            .or_else(|| {
+                // After a section-ending paragraph the insertion stands in
+                // the next section, not in the one the paragraph ends.
+                if let (Anchor::After(n), Some(top)) = (t.anchor, t.top)
+                    && n == top
+                    && let Some(w) = next_width.get(&n).copied()
+                {
+                    return Some(w);
+                }
+                t.top.and_then(|n| width_of.get(&n).copied())
+            })
             .unwrap_or(page_width);
         let ctx = Ctx {
             part: t.part.clone(),
@@ -314,7 +407,7 @@ pub(crate) fn run(
     }
     put(doc, &pending, &mut s.ids)?;
     out.nodes = pending.into_iter().map(|(_, n, _)| n).collect();
-    out.renumbered = super::fields::update(doc, &s, &out.nodes)?;
+    out.renumbered = super::fields::update(doc, &s, &out.nodes, &deleted)?;
     out.roles = s.book.sources();
     out.styles_added = s.book.added_names.clone();
     out.table_styles = s.table_styles.clone();
