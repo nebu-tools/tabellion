@@ -17,6 +17,7 @@ use typst_syntax::{DiagSpanKind, Source, ast, ast::AstNode};
 
 mod table;
 use table::{convert_tableish, is_tableish};
+mod figure;
 
 /// What is wrong with Typst source.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -136,6 +137,31 @@ fn trim_trailing_space(inlines: &mut Vec<Inline>) {
     }
 }
 
+/// Whether the rest of the paragraph holds nothing but this image:
+/// only spaces and labels up to a paragraph break, the end, or a
+/// block-level construct. Anything else shares the line, so the image
+/// is inline content instead of a block of its own.
+fn image_stands_alone(rest: &[ast::Expr]) -> bool {
+    for expr in rest {
+        match expr {
+            ast::Expr::Space(_) | ast::Expr::Label(_) => {}
+            ast::Expr::Parbreak(_) => return true,
+            ast::Expr::Heading(_)
+            | ast::Expr::ListItem(_)
+            | ast::Expr::EnumItem(_)
+            | ast::Expr::TermItem(_)
+            | ast::Expr::Equation(_)
+            | ast::Expr::Math(_) => return true,
+            ast::Expr::Raw(raw) if raw.block() => return true,
+            ast::Expr::FuncCall(call) if is_pagebreak(*call) || is_tableish(*call) => {
+                return true;
+            }
+            _ => return false,
+        }
+    }
+    true
+}
+
 /// Block positions: headings, lists, page breaks, tables and
 /// paragraphs of inlines. Trailing source whitespace is trimmed only
 /// at the top level, where a paragraph, heading or list item ends: an
@@ -202,23 +228,39 @@ pub(crate) fn convert_flow(
                 flush(&mut para, &mut blocks, trim_end);
                 blocks.push(Block::PageBreak);
             }
+            ast::Expr::FuncCall(call) if figure::is_image_call(call) => {
+                // A lone image is a block; mid-paragraph it is inline.
+                if para.is_empty() && image_stands_alone(&exprs[i + 1..]) {
+                    flush(&mut para, &mut blocks, trim_end);
+                    blocks.push(Block::Image {
+                        image: figure::convert_image(cx, call)?,
+                    });
+                    // A bare image holds no label: naming one is an error.
+                    let mut j = i + 1;
+                    while matches!(exprs.get(j), Some(ast::Expr::Space(_))) {
+                        j += 1;
+                    }
+                    if let Some(ast::Expr::Label(_)) = exprs.get(j) {
+                        return Err(unsupported(cx, exprs[j], "a label on a bare image"));
+                    }
+                } else {
+                    inline_into(cx, exprs[i], &mut para, Marks::default(), "the document")?;
+                }
+            }
             ast::Expr::FuncCall(call) if is_tableish(call) => {
                 flush(&mut para, &mut blocks, trim_end);
-                let mut block = convert_tableish(cx, call)?;
-                // A label follows the table, past any spaces.
+                // A label follows the table or figure, past any spaces.
+                // The call decides what it attaches to.
                 let mut j = i + 1;
                 while matches!(exprs.get(j), Some(ast::Expr::Space(_))) {
                     j += 1;
                 }
-                if let (Some(ast::Expr::Label(l)), Block::Table(table)) = (exprs.get(j), &mut block)
-                {
-                    if table.label.is_some() {
-                        return Err(unsupported(cx, exprs[j], "two labels for a table"));
-                    }
-                    table.label = Some(l.get().to_string());
+                let mut sibling = None;
+                if let Some(ast::Expr::Label(l)) = exprs.get(j) {
+                    sibling = Some((l.get().to_string(), exprs[j].span()));
                     i = j;
                 }
-                blocks.push(block);
+                blocks.push(convert_tableish(cx, call, sibling)?);
             }
             ast::Expr::Raw(raw) if raw.block() => {
                 flush(&mut para, &mut blocks, trim_end);
@@ -576,6 +618,12 @@ fn inline_call(
             }
             _ => Err(unsupported(cx, ast::Expr::FuncCall(call), "`#ref`")),
         },
+        "image" => {
+            out.push(Inline::Image {
+                image: figure::convert_image(cx, call)?,
+            });
+            Ok(false)
+        }
         "sub" => {
             let mut inner = marks;
             inner.subscript = true;
@@ -810,9 +858,8 @@ mod tests {
     fn rejects_what_has_no_word_form() {
         for (source, what) in [
             ("#grid(columns: 2, [a])\n", "`#grid`"),
-            ("#figure(image(\"pic.png\"))\n", "a figure around `#image`"),
             ("$x + y$\n", "math"),
-            ("#image(\"pic.png\")\n", "`#image`"),
+            ("#image()\n", "an image without a file"),
             ("#let x = 1\n", "code"),
         ] {
             let err = parse(source).unwrap_err();

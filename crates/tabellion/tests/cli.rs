@@ -336,6 +336,33 @@ fn insert_takes_typst_rowspan_tables() {
 }
 
 #[test]
+fn insert_takes_typst_figures() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let typ = dir.path().join("fig.typ");
+    std::fs::write(
+        dir.path().join("wren.png"),
+        std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../samples/wren.png"
+        ))
+        .unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        &typ,
+        "#figure(image(\"wren.png\", alt: \"A wren\"), caption: [A wren]) <fig-wren>\n",
+    )
+    .unwrap();
+    let (out_s, typ_s) = (out.display().to_string(), typ.display().to_string());
+    let (code, stdout, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("inserted 1 block"), "{stdout}");
+    let (_, text, _) = run(&["text", &out_s]);
+    assert!(text.contains("A wren"), "{text}");
+}
+
+#[test]
 fn insert_takes_a_place_and_reports_errors_with_a_status() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.docx");
