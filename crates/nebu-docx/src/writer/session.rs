@@ -231,7 +231,19 @@ pub(crate) fn run(
             }
         }
     }
-    let parts: Vec<String> = stories.iter().map(|(p, _)| p.clone()).collect();
+    let mut parts: Vec<String> = stories.iter().map(|(p, _)| p.clone()).collect();
+    // Revision ids must not collide document-wide, so the scan also covers
+    // the numbering part, where numberingChange records live.
+    if let Ok(rels) = doc.relationships(&main) {
+        for r in rels {
+            if r.kind.ends_with("/numbering")
+                && let Some(p) = r.part
+                && !parts.contains(&p)
+            {
+                parts.push(p);
+            }
+        }
+    }
     let ids = Ids::collect(doc, &parts, super::ids::seed(doc))?;
     let notes_part = stories
         .iter()

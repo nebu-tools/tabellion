@@ -39,7 +39,9 @@ pub mod xml;
 pub use content::{Content, ContentLimits};
 pub use document::{Document, Relationship, Target};
 pub use view::*;
-pub use writer::{Captions, Inserted, Place, Role, RoleSource, Roles, TableStyle, WriteOptions};
+pub use writer::{
+    Captions, Inserted, Place, Role, RoleSource, Roles, TableStyle, Track, WriteOptions,
+};
 
 /// Namespaces that callers of this crate meet.
 pub mod ns {

@@ -120,11 +120,29 @@ impl Session<'_> {
     pub(crate) fn paragraph_xml(
         &mut self,
         ctx: &Ctx,
-        props: Vec<(&'static str, String)>,
+        mut props: Vec<(&'static str, String)>,
         content: &str,
     ) -> String {
         let id = self.para_id(ctx);
         let lead = self.lead.take().unwrap_or_default();
+        if let Some(track) = self.opts.track.clone() {
+            let mark = self.ids.revision();
+            let body = self.ids.revision();
+            props.push((
+                "rPr",
+                format!(
+                    "<w:rPr><w:ins w:id=\"{mark}\" w:author=\"{}\" w:date=\"{}\"/></w:rPr>",
+                    attr(&track.author),
+                    attr(&track.date)
+                ),
+            ));
+            let inside = format!(
+                "<w:ins w:id=\"{body}\" w:author=\"{}\" w:date=\"{}\">{lead}{content}</w:ins>",
+                attr(&track.author),
+                attr(&track.date)
+            );
+            return format!("<w:p{id}>{}{inside}</w:p>", ppr(props));
+        }
         format!("<w:p{id}>{}{lead}{content}</w:p>", ppr(props))
     }
 
@@ -227,7 +245,15 @@ impl Session<'_> {
                 }
                 Ok(self.paragraph_xml(ctx, vec![], "<w:r><w:br w:type=\"page\"/></w:r>"))
             }
-            Block::Raw { xml } => Ok(xml.clone()),
+            Block::Raw { xml } => {
+                if self.opts.track.is_some() {
+                    return Err(invalid(
+                        path,
+                        "raw XML cannot be written as a tracked insertion",
+                    ));
+                }
+                Ok(xml.clone())
+            }
         }
     }
 

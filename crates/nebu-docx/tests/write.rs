@@ -1150,6 +1150,152 @@ fn a_deletion_keeps_what_stands_before_it() {
 }
 
 #[test]
+fn tracked_insertion_marks_new_blocks_as_revisions() {
+    use nebu_docx::{RevisionTarget, Revisions, Track};
+    let c = content(json!([
+        {"type": "paragraph", "content": ["Tracked hello."]},
+        {"type": "heading", "level": 2, "content": ["Tracked heading"]},
+        {"type": "table", "header_rows": 1, "rows": [
+            {"cells": [{"content": [{"type": "paragraph", "content": ["H"]}]}]},
+            {"cells": [{"content": [{"type": "paragraph", "content": ["B"]}]}]},
+        ]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    let opts = WriteOptions {
+        track: Some(Track {
+            author: "Analyst".into(),
+            date: "2026-11-19T00:00:00Z".into(),
+        }),
+        ..Default::default()
+    };
+    doc.insert(Place::End, &c.blocks, &opts).unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let xml = String::from_utf8(support::entry(&out, "word/document.xml")).unwrap();
+    assert!(xml.contains("<w:ins "), "{xml}");
+    assert!(xml.contains("w:author=\"Analyst\""), "{xml}");
+    assert!(xml.contains("<w:trPr>"), "{xml}");
+    // Paragraph marks carry their own insertion record; the views merge a
+    // paragraph's text and its mark into one revision when they share
+    // author and date (collect.rs), so the XML is the place that shows both.
+    assert!(xml.contains("<w:rPr><w:ins "), "{xml}");
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let mine: Vec<_> = v
+        .revisions()
+        .iter()
+        .filter(|r| r.author == "Analyst")
+        .collect();
+    assert!(!mine.is_empty(), "no tracked revisions by Analyst");
+    // The views merge a paragraph's text and its mark into one revision
+    // when author and date match, so Text covers both here; rows stay
+    // separate.
+    assert!(
+        mine.iter().any(|r| r.target == RevisionTarget::Text),
+        "no text insertion: {:?}",
+        mine.iter().map(|r| r.target).collect::<Vec<_>>()
+    );
+    assert!(
+        mine.iter().any(|r| r.target == RevisionTarget::Row),
+        "no row insertion: {:?}",
+        mine.iter().map(|r| r.target).collect::<Vec<_>>()
+    );
+    let accepted = v.text(&Default::default());
+    assert!(accepted.contains("Tracked hello."), "{accepted}");
+    let rejected = v.text(&nebu_docx::TextOptions {
+        revisions: Revisions::Rejected,
+        ..Default::default()
+    });
+    assert!(!rejected.contains("Tracked hello."), "{rejected}");
+    assert!(!rejected.contains("Tracked heading"), "{rejected}");
+
+    // New revision ids continue past every revision record the document
+    // has, including formatting changes, and never reuse one.
+    let mut files = support::entries(&support::sample());
+    let existing: std::collections::HashSet<u64> = files
+        .iter()
+        .filter(|(n, _)| n == "word/document.xml" || n == "word/numbering.xml")
+        .flat_map(|(_, d)| {
+            let s = String::from_utf8_lossy(d);
+            s.match_indices("w:id=\"")
+                .filter_map(|(at, _)| s[at + 6..].split('"').next()?.parse::<u64>().ok())
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let mut doc_xml = String::from_utf8(files[i].1.clone()).unwrap();
+    // Declare w14 as ignorable so the validator leaves the planted conflict
+    // record out, as a reader that knows only the transitional schemas
+    // would; the writer's id scan still reserves its w:id.
+    doc_xml = doc_xml.replacen(
+        "xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\"",
+        "xmlns:wp=\"http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing\" xmlns:w14=\"http://schemas.microsoft.com/office/word/2010/wordml\" xmlns:mc=\"http://schemas.openxmlformats.org/markup-compatibility/2006\" mc:Ignorable=\"w14\"",
+        1,
+    );
+    let anchor = doc_xml
+        .rfind("<w:sectPr")
+        .or_else(|| doc_xml.find("</w:body>"))
+        .expect("a body");
+    doc_xml.insert_str(
+        anchor,
+        concat!(
+            "<w:p><w:pPr><w:pPrChange w:id=\"900\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\"><w:pPr/></w:pPrChange></w:pPr>",
+            "<w:r><w:rPr><w:rPrChange w:id=\"901\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\"><w:rPr/></w:rPrChange></w:rPr><w:t>old</w:t></w:r></w:p>",
+            "<w:p><w:pPr><w:numPr><w:ilvl w:val=\"0\"/><w:numId w:val=\"1\"/><w:numberingChange w:id=\"903\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\" w:original=\"1:0\"/></w:numPr></w:pPr><w:r><w:t>numbered old</w:t></w:r></w:p>",
+            "<w:customXmlInsRangeStart w:id=\"904\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\"/><w:customXmlInsRangeEnd w:id=\"904\"/>",
+            "<w14:conflictIns w:id=\"905\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\"/>",
+        ),
+    );
+    files[i].1 = doc_xml.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    let c = content(json!([{"type": "paragraph", "content": ["After formatting."]}]));
+    doc.insert(Place::End, &c.blocks, &opts).unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let xml = String::from_utf8(support::entry(&out, "word/document.xml")).unwrap();
+    let fresh: Vec<u64> = xml
+        .match_indices("<w:ins w:id=\"")
+        .filter_map(|(at, _)| {
+            xml[at + "<w:ins w:id=\"".len()..]
+                .split('"')
+                .next()?
+                .parse::<u64>()
+                .ok()
+        })
+        .collect();
+    // One paragraph writes two insertion records (paragraph mark and body);
+    // both must be present and their ids must differ. Checking the raw
+    // list, not a deduplicated one, so reuse cannot hide.
+    assert!(
+        fresh.len() >= 2,
+        "expected paragraph-mark and body insertions in {xml}"
+    );
+    let distinct: std::collections::HashSet<u64> = fresh.iter().copied().collect();
+    assert_eq!(
+        distinct.len(),
+        fresh.len(),
+        "new insertion ids reuse each other: {fresh:?}"
+    );
+    for id in &distinct {
+        assert!(
+            !existing.contains(id),
+            "new insertion id {id} reuses an existing id"
+        );
+        assert!(
+            ![900, 901, 903, 904, 905].contains(id),
+            "new insertion id {id} reuses a planted change id"
+        );
+    }
+}
+
+#[test]
 fn picture_files_stay_inside_their_directory() {
     let dir = std::env::temp_dir().join(format!("tabellion-files-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
