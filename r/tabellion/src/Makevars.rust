@@ -16,6 +16,10 @@ all: $(SHLIB)
 
 $(SHLIB): $(RUSTLIB)
 
+# Remade by make itself when missing: R CMD SHLIB does not run configure.
+Makevars.platform:
+	cd .. && sh ./configure
+
 $(RUSTLIB): cargo-force
 	@set -e; \
 	rustc --version; \
