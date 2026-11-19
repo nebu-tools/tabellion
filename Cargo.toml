@@ -13,6 +13,7 @@ repository = "https://github.com/nebu-tools/tabellion"
 [workspace.dependencies]
 nebu-docx = { path = "crates/nebu-docx" }
 tabellion-typst = { path = "crates/tabellion-typst" }
+csv = "1"
 zip = { version = "9.7", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }
