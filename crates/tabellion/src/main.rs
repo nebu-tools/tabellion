@@ -160,6 +160,23 @@ enum Command {
         #[arg(long, value_name = "FILE")]
         csv: PathBuf,
     },
+    /// Replace a picture with a file of the same kind.
+    ///
+    /// The target names the figure's label: the picture the captioned
+    /// figure shows is replaced by the file, which must be a picture of
+    /// the same kind. The drawing keeps its placed size.
+    Image {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// The label of the figure whose picture to replace.
+        #[arg(long, value_name = "LABEL")]
+        target: String,
+        /// The picture file to read the new bytes from.
+        #[arg(long, value_name = "FILE")]
+        file: PathBuf,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -524,6 +541,102 @@ fn replace_table(input: &Path, output: &Path, target: &str, csv: &Path) -> Resul
     Ok(true)
 }
 
+fn replace_image(input: &Path, output: &Path, target: &str, file: &Path) -> Result<bool, String> {
+    use nebu_docx::{BlockKind, Inline, Locator};
+    let mut doc = open(input)?;
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    // The label lives on the caption paragraph; the picture it numbers
+    // stands in the paragraph before it. Only a `SEQ Figure` caption
+    // names a picture.
+    let mark = format!("bookmark:_Ref_{target}");
+    let label: Locator = mark.parse().map_err(|e: nebu_docx::Error| e.to_string())?;
+    let (para, drawing) = {
+        let views = doc.views().map_err(at)?;
+        let caption = views.locate(&label).map_err(at)?;
+        let is_figure = views.fields().iter().any(|field| {
+            field.kind == "SEQ"
+                && field.location.block.as_ref() == Some(&caption.id)
+                && field
+                    .code
+                    .split_whitespace()
+                    .nth(1)
+                    .is_some_and(|id| id.eq_ignore_ascii_case("Figure"))
+        });
+        let para = is_figure.then(|| caption.index.checked_sub(1)).flatten();
+        let drawing = para
+            .and_then(|i| views.blocks().get(i))
+            .filter(|block| block.kind == BlockKind::Paragraph)
+            .and_then(|block| {
+                block.content.iter().find_map(|inline| match inline {
+                    Inline::Drawing { image, .. } => Some(*image),
+                    _ => None,
+                })
+            });
+        (
+            para.and_then(|i| views.blocks().get(i).map(|block| block.node)),
+            drawing,
+        )
+    };
+    let Some(n) = drawing.flatten() else {
+        return Err(format!("{}: no picture labelled {target}", input.display()));
+    };
+    let (part, shared) = {
+        let views = doc.views().map_err(at)?;
+        let part = views
+            .images()
+            .get(n)
+            .and_then(|image| image.part.clone())
+            .ok_or_else(|| format!("{}: no embedded picture labelled {target}", input.display()))?;
+        let shared = views
+            .images()
+            .iter()
+            .filter(|image| image.part.as_deref() == Some(&part))
+            .count();
+        (part, shared)
+    };
+    if shared > 1 {
+        return Err(format!(
+            "{}: {part} is shared by {shared} pictures; replacing it would change them all",
+            input.display()
+        ));
+    }
+    // One drawing, one picture: an SVG with its fallback picture has two
+    // references and Word would keep showing the SVG. VML pictures keep
+    // theirs in `v:imagedata/@r:id`, like the view reader.
+    if let Some(node) = para {
+        const A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        const VML: &str = "urn:schemas-microsoft-com:vml";
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).map_err(at)?;
+        let mut refs = 0;
+        for id in tree.descendants(node).map_err(at)? {
+            let is_blip = tree.is(id, Some(A), "blip").map_err(at)?
+                || tree
+                    .name(id)
+                    .map_err(at)?
+                    .is_some_and(|name| name.local == "svgBlip");
+            let is_vml = tree.is(id, Some(VML), "imagedata").map_err(at)?;
+            let r_id = if is_vml { "id" } else { "embed" };
+            if (is_blip || is_vml) && tree.attribute(id, Some(R), r_id).map_err(at)?.is_some() {
+                refs += 1;
+            }
+        }
+        if refs > 1 {
+            return Err(format!(
+                "{}: the figure labelled {target} has more than one picture; replacing it is not supported",
+                input.display()
+            ));
+        }
+    }
+    let bytes = std::fs::read(file).map_err(|e| format!("cannot read {}: {e}", file.display()))?;
+    doc.replace_image(&part, bytes)
+        .map_err(|e| format!("{}: {e}", input.display()))?;
+    doc.save(output).map_err(|e| e.to_string())?;
+    println!("{}: replaced image {target} ({part})", output.display());
+    Ok(true)
+}
+
 /// The file name for a package part: its last segment, when that is a
 /// single safe file name on the host. The package layer already refuses
 /// `.` and `..` segments, backslashes and control characters at open;
@@ -684,6 +797,12 @@ fn main() -> ExitCode {
             Command::Fields { input, output } => fields(input, output),
             Command::Images { file, dir } => images(file, dir),
             Command::Tables { file, dir, format } => tables(file, dir, *format),
+            Command::Image {
+                input,
+                output,
+                target,
+                file,
+            } => replace_image(input, output, target, file),
             Command::Table {
                 input,
                 output,

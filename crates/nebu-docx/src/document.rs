@@ -493,6 +493,24 @@ impl Document {
         Ok(())
     }
 
+    /// Swaps the bytes of an image part for a new export of the same
+    /// picture: PNG for PNG, JPEG for JPEG, and so on. The drawing keeps
+    /// its placed size, and every reference to the part shows the new
+    /// bytes. Anything else is an error that names the part and both
+    /// kinds.
+    pub fn replace_image(&mut self, name: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        let actual = self
+            .package
+            .find(name)
+            .map(str::to_string)
+            .ok_or_else(|| Error::MissingPart(name.to_string()))?;
+        let old = self.content_type(&actual).unwrap_or_default();
+        let limits = self.limits().clone();
+        crate::writer::media::check_replacement(&actual, &old, &bytes, &limits)?;
+        self.package.set_bytes(&actual, bytes);
+        Ok(())
+    }
+
     /// The source part's name as the package spells it; empty for the
     /// package.
     fn source_name(&self, source: &str) -> Result<String, Error> {

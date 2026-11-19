@@ -267,6 +267,13 @@ impl Package {
         });
     }
 
+    /// Replaces the bytes of an existing part. The caller has checked
+    /// the name.
+    pub(crate) fn set_bytes(&mut self, name: &str, bytes: Vec<u8>) {
+        let i = self.index[&name.to_ascii_lowercase()];
+        self.entries[i].body = Body::Bytes(bytes);
+    }
+
     /// The archive as it would be saved now. With no change, the bytes it
     /// was read from.
     pub(crate) fn to_bytes(&self) -> Result<Vec<u8>, Error> {
