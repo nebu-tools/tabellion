@@ -116,6 +116,21 @@ enum Command {
         /// Where to write the result.
         output: PathBuf,
     },
+    /// Write each table to a file of its own.
+    ///
+    /// One file per table in document order, named table-1.csv,
+    /// table-2.csv and so on; nested tables get files of their own. A
+    /// merged cell leaves its grid positions empty. Refuses to
+    /// overwrite existing files.
+    Tables {
+        /// The document to read.
+        file: PathBuf,
+        /// The directory to write into, made when missing.
+        dir: PathBuf,
+        /// The file shape.
+        #[arg(long, value_enum, default_value = "csv")]
+        format: TableFormat,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -150,6 +165,12 @@ enum RevisionView {
     Accepted,
     Rejected,
     Current,
+}
+
+/// The file shapes `tables` writes.
+#[derive(Clone, Copy, ValueEnum)]
+enum TableFormat {
+    Csv,
 }
 
 fn open(path: &Path) -> Result<Document, String> {
@@ -276,6 +297,47 @@ fn fields(input: &Path, output: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
+fn tables(file: &Path, dir: &Path, format: TableFormat) -> Result<bool, String> {
+    let mut doc = open(file)?;
+    let views = doc
+        .views()
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    std::fs::create_dir_all(dir).map_err(|e| format!("cannot write {}: {e}", dir.display()))?;
+    let mut count = 0;
+    for table in views.tables() {
+        count += 1;
+        let name = match format {
+            TableFormat::Csv => format!("table-{count}.csv"),
+        };
+        let path = dir.join(name);
+        let file = std::fs::File::create_new(&path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::AlreadyExists {
+                format!("{}: file exists, refusing to overwrite", path.display())
+            } else {
+                format!("cannot write {}: {e}", path.display())
+            }
+        })?;
+        // The writer's default LF terminators; tests parse the files back.
+        let mut out = csv::Writer::from_writer(file);
+        for row in &table.rows {
+            let record: Vec<&str> = row
+                .iter()
+                .map(|cell| cell.as_deref().unwrap_or(""))
+                .collect();
+            out.write_record(&record)
+                .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+        }
+        out.flush()
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))?;
+    }
+    println!(
+        "{}: wrote {count} {}",
+        dir.display(),
+        if count == 1 { "table" } else { "tables" }
+    );
+    Ok(true)
+}
+
 fn roundtrip(input: &Path, output: &Path) -> Result<bool, String> {
     let before =
         std::fs::read(input).map_err(|e| format!("cannot read {}: {e}", input.display()))?;
@@ -358,6 +420,7 @@ fn main() -> ExitCode {
             }
             Command::Roundtrip { input, output } => roundtrip(input, output),
             Command::Fields { input, output } => fields(input, output),
+            Command::Tables { file, dir, format } => tables(file, dir, *format),
             Command::Insert {
                 input,
                 output,

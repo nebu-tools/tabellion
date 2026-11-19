@@ -66,6 +66,73 @@ fn run(args: &[&str]) -> (Option<i32>, String, String) {
 }
 
 #[test]
+fn tables_writes_one_csv_per_table() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("tables");
+    let (code, stdout, stderr) = run(&[
+        "tables",
+        &corpus("birds.docx"),
+        out.to_str().unwrap(),
+        "--format",
+        "csv",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("wrote 2 tables"), "{stdout}");
+    let read = |name: &str| {
+        let bytes = std::fs::read(out.join(name)).unwrap();
+        csv::ReaderBuilder::new()
+            .has_headers(false)
+            .from_reader(bytes.as_slice())
+            .records()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+            .iter()
+            .map(|record| record.iter().map(str::to_string).collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    };
+    let first = read("table-1.csv");
+    assert_eq!(first.len(), 5, "{first:?}");
+    assert!(first.iter().all(|row| row.len() == 4), "{first:?}");
+    assert_eq!(first[0], ["Site", "Counts", "", "Notes"]);
+    assert_eq!(first[2], ["North", "12", "41", "Reed beds"]);
+    // A merged cell leaves its grid positions empty.
+    assert_eq!(first[1][0], "");
+    let second = read("table-2.csv");
+    assert_eq!(second, [["Wren", "4"], ["Reed warbler", "7"]]);
+}
+
+#[test]
+fn tables_refuses_what_it_cannot_read() {
+    let dir = tempfile::tempdir().unwrap();
+    let (code, _, stderr) = run(&["tables", "no/such.docx", dir.path().to_str().unwrap()]);
+    assert_eq!(code, Some(3), "{stderr}");
+    let (code, _, _) = run(&[
+        "tables",
+        &corpus("birds.docx"),
+        dir.path().to_str().unwrap(),
+        "--format",
+        "tsv",
+    ]);
+    assert_eq!(code, Some(2));
+}
+
+#[test]
+fn tables_refuses_to_overwrite() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("tables");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("table-1.csv"), "precious\n").unwrap();
+    let (code, _, stderr) = run(&["tables", &corpus("birds.docx"), out.to_str().unwrap()]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("refusing to overwrite"), "{stderr}");
+    assert_eq!(
+        std::fs::read(out.join("table-1.csv")).unwrap(),
+        b"precious\n"
+    );
+    assert!(!out.join("table-2.csv").exists());
+}
+
+#[test]
 fn inspect_prints_an_outline() {
     let (code, out, err) = run(&["inspect", &corpus("birds.docx")]);
     assert_eq!(code, Some(0), "{err}");
