@@ -57,6 +57,16 @@ pub(crate) struct Content {
     pub boxes: Vec<(usize, Vec<NodeId>)>,
 }
 
+/// A paragraph of any story as collected: where it is, the cell that
+/// holds it, its content and the span of its text.
+pub(crate) struct ParagraphSpans {
+    pub node: NodeId,
+    pub location: Location,
+    pub cell: Option<CellRef>,
+    pub content: Content,
+    pub span: Span,
+}
+
 /// A table with the spans of its cells' text.
 pub(crate) struct TableSpans {
     pub table: Table,
@@ -109,8 +119,11 @@ pub(crate) struct Collector<'r> {
     // Blocks.
     pub block_spans: HashMap<NodeId, Span>,
     block_start: Option<(NodeId, usize)>,
-    pub content: HashMap<NodeId, Content>,
-    current: Option<(NodeId, Content)>,
+    /// Every paragraph of every story, in the order of the walk.
+    pub paragraphs: Vec<ParagraphSpans>,
+    /// Paragraphs begun and not ended, innermost last, with where they
+    /// begin and the cell that holds them.
+    open_paras: Vec<(NodeId, Content, usize, u16, Option<CellRef>)>,
     last_run: Option<NodeId>,
     run_format: Format,
     bookmark_names: HashMap<String, String>,
@@ -200,8 +213,8 @@ impl<'r> Collector<'r> {
             last_para_id: None,
             block_spans: HashMap::new(),
             block_start: None,
-            content: HashMap::new(),
-            current: None,
+            paragraphs: vec![],
+            open_paras: vec![],
             last_run: None,
             run_format: Format::default(),
             bookmark_names: HashMap::new(),
@@ -355,9 +368,7 @@ impl Sink for Collector<'_> {
             }
             _ => None,
         };
-        if self.at.story == StoryKind::Main {
-            self.blocks(st, ev, drawing.as_ref())?;
-        }
+        self.blocks(st, ev, drawing.as_ref())?;
         self.table(st, ev)?;
         self.field(st, ev);
         self.revision(st, ev)?;
@@ -376,24 +387,46 @@ impl Collector<'_> {
         drawing: Option<&DrawingProps>,
     ) -> Result<(), Error> {
         let tree = self.at.tree;
+        let main = self.at.story == StoryKind::Main;
         match ev {
             Event::BlockStart(n) => {
-                self.block_start = Some((n, st.at()));
-                if tree.is(n, Some(W), "p")? {
-                    self.current = Some((n, Content::default()));
+                if main {
+                    self.block_start = Some((n, st.at()));
                 }
                 return Ok(());
             }
             Event::BlockEnd(n) => {
-                if let Some((b, start)) = self.block_start.take()
+                if main
+                    && let Some((b, start)) = self.block_start.take()
                     && b == n
                 {
                     self.block_spans.insert(n, span(start, st.at(), 0, 0));
                 }
-                if let Some((p, c)) = self.current.take()
-                    && p == n
+                return Ok(());
+            }
+            Event::Start(Kind::Paragraph, p) => {
+                let cell = self.stack.last().and_then(|t| {
+                    t.current.map(|i| CellRef {
+                        table: t.index,
+                        row: t.table.cells[i].row,
+                        column: t.table.cells[i].column,
+                    })
+                });
+                self.open_paras
+                    .push((p, Content::default(), st.at(), st.depth(), cell));
+                return Ok(());
+            }
+            Event::End(Kind::Paragraph, p) => {
+                if let Some((n, content, start, depth, cell)) = self.open_paras.pop()
+                    && n == p
                 {
-                    self.content.insert(p, c);
+                    self.paragraphs.push(ParagraphSpans {
+                        node: n,
+                        location: self.at.location(),
+                        cell,
+                        content,
+                        span: span(start, st.at(), depth, 0),
+                    });
                 }
                 return Ok(());
             }
@@ -403,7 +436,7 @@ impl Collector<'_> {
             }
             _ => {}
         }
-        let Some((_, content)) = self.current.as_mut() else {
+        let Some((_, content, ..)) = self.open_paras.last_mut() else {
             return Ok(());
         };
         let items = &mut content.items;

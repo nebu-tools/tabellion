@@ -1,0 +1,646 @@
+{
+    "file":  "equations.docx",
+    "opened":  true,
+    "error":  null,
+    "word_version":  "16.0 build 16.0.20326",
+    "compatibility_mode":  15,
+    "converted":  false,
+    "paragraphs":  [
+                       {
+                           "style":  "Title",
+                           "text":  "Breeding bird survey of the Alder Marshes\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "TOC 1",
+                           "text":  "Survey sites\t1\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "TOC 1",
+                           "text":  "Species\t1\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "TOC 1",
+                           "text":  "Methods\t3\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Survey sites\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "The survey covered four sites along the river. \r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Table 1: Sites, visits and counts\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Site\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Counts\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Notes\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Visits\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Pairs\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "North\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "12\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "41\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Reed beds\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "3\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "9\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Second count\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "East\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "9\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "33\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Wren\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "4\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Reed warbler\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "7\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r\u0007",
+                           "list":  "",
+                           "in_table":  true
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "As Table 1 shows, the north site held the most pairs.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "The north site lies in reed beds below the weir.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Species\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Wrens sang at every site\u0002, and reed warblers at two\u0002.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "/\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Caption",
+                           "text":  "Figure 1: A wren at the north site\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Grey herons fed on the east site at dawn and flew to the heronry at dusk.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "A field note stands beside this paragraph.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "This paragraph is on page 2. The report has tables.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "The north site is described in The north site lies in reed beds below the weir.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Data: count sheet 1\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "End of the first section.\f",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 2",
+                           "text":  "Density\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\t𝑑=\r𝑛\r𝐴\r\t(1)\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\t𝑁=\r𝑖\r𝑘\r\r𝑛\r𝑖\r\r\t(2)\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "𝐴=4\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "With 𝑛 pairs, Equation (1) gives the density and Equation (2) the total; see Density.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Heading 1",
+                           "text":  "Methods\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "Each site was visited at dawn by two observers.\r",
+                           "list":  "",
+                           "in_table":  false
+                       },
+                       {
+                           "style":  "Normal",
+                           "text":  "\r",
+                           "list":  "",
+                           "in_table":  false
+                       }
+                   ],
+    "table_count":  1,
+    "tables":  [
+                   {
+                       "style":  "Table Normal",
+                       "rows":  5,
+                       "columns":  4,
+                       "header_rows":  0,
+                       "heading_rows":  false,
+                       "row_bands":  true,
+                       "first_column":  false,
+                       "nested":  1
+                   }
+               ],
+    "table_styles":  [
+                         {
+                             "name":  "Table Normal",
+                             "builtin":  true
+                         }
+                     ],
+    "captions":  {
+                     "Table":  [
+                                   "Table 1: Sites, visits and counts"
+                               ],
+                     "Figure":  [
+                                    "Figure 1: A wren at the north site"
+                                ],
+                     "Equation":  [
+                                      "𝑑=,𝑛-𝐴.\t(1)",
+                                      "𝑁=,𝑖-𝑘-,𝑛-𝑖..\t(2)"
+                                  ]
+                 },
+    "bookmarks":  [
+                      "_Ref245879778",
+                      "_Ref_eq-density",
+                      "_Ref_eq-total",
+                      "_Ref_sec-density",
+                      "_Toc245879784",
+                      "_Toc245879785",
+                      "_Toc245879786",
+                      "site_north"
+                  ],
+    "fields_before":  [
+                          {
+                              "story":  1,
+                              "code":  "TOC \\o \"1-3\"",
+                              "result":  "Survey sites\t1\rSpecies\t1\rMethods\t3\r"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "PAGEREF _Toc245879784 \\h",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "PAGEREF _Toc245879785 \\h",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "PAGEREF _Toc245879786 \\h",
+                              "result":  "3"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Table \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref245879778 \\h",
+                              "result":  "Table 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Figure \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "PAGE",
+                              "result":  "2"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "IF \u0013 SEQ Table \\c \u0015 \u003e 0 \"The report has tables.\" \"The report has no tables.\"",
+                              "result":  "The report has tables."
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Table \\c",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF site_north \\h",
+                              "result":  "The north site lies in reed beds below the weir."
+                          },
+                          {
+                              "story":  1,
+                              "code":  "HYPERLINK \"https://example.org/alder-marshes\"",
+                              "result":  "count sheet 1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Sheet \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Equation \\* ARABIC",
+                              "result":  "1"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "SEQ Equation \\* ARABIC",
+                              "result":  "2"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_eq-density \\h",
+                              "result":  "(1)"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_eq-total \\h",
+                              "result":  "(2)"
+                          },
+                          {
+                              "story":  1,
+                              "code":  "REF _Ref_sec-density \\h",
+                              "result":  "Density"
+                          },
+                          {
+                              "story":  9,
+                              "code":  "PAGE",
+                              "result":  "1"
+                          }
+                      ],
+    "fields_after":  [
+                         {
+                             "story":  1,
+                             "code":  "TOC \\o \"1-3\"",
+                             "result":  "Survey sites\t1\rSpecies\t1\rMethods\t3\r"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "PAGEREF _Toc245879784 \\h",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "PAGEREF _Toc245879785 \\h",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "PAGEREF _Toc245879786 \\h",
+                             "result":  "3"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Table \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref245879778 \\h",
+                             "result":  "Table 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Figure \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "PAGE",
+                             "result":  "2"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "IF \u0013 SEQ Table \\c \u0015 \u003e 0 \"The report has tables.\" \"The report has no tables.\"",
+                             "result":  "The report has tables."
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Table \\c",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF site_north \\h",
+                             "result":  "The north site lies in reed beds below the weir."
+                         },
+                         {
+                             "story":  1,
+                             "code":  "HYPERLINK \"https://example.org/alder-marshes\"",
+                             "result":  "count sheet 1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Sheet \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Equation \\* ARABIC",
+                             "result":  "1"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "SEQ Equation \\* ARABIC",
+                             "result":  "2"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_eq-density \\h",
+                             "result":  "(1)"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_eq-total \\h",
+                             "result":  "(2)"
+                         },
+                         {
+                             "story":  1,
+                             "code":  "REF _Ref_sec-density \\h",
+                             "result":  "Density"
+                         },
+                         {
+                             "story":  9,
+                             "code":  "PAGE",
+                             "result":  "1"
+                         }
+                     ],
+    "references":  [
+                       {
+                           "code":  "REF _Ref245879778 \\h",
+                           "result":  "Table 1",
+                           "target":  "Table 1"
+                       },
+                       {
+                           "code":  "REF site_north \\h",
+                           "result":  "The north site lies in reed beds below the weir.",
+                           "target":  "The north site lies in reed beds below the weir."
+                       },
+                       {
+                           "code":  "REF _Ref_eq-density \\h",
+                           "result":  "(1)",
+                           "target":  "(1)"
+                       },
+                       {
+                           "code":  "REF _Ref_eq-total \\h",
+                           "result":  "(2)",
+                           "target":  "(2)"
+                       },
+                       {
+                           "code":  "REF _Ref_sec-density \\h",
+                           "result":  "Density",
+                           "target":  "Density"
+                       }
+                   ],
+    "footnotes":  [
+                      {
+                          "index":  1,
+                          "text":  "Counted from song between 05:00 and 08:00."
+                      }
+                  ],
+    "inline_shapes":  [
+                          {
+                              "type":  3,
+                              "width":  90,
+                              "height":  60,
+                              "alt":  "A dark bird shape on a pale green ground"
+                          }
+                      ]
+}

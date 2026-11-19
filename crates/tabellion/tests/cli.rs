@@ -100,6 +100,7 @@ fn every_view_prints_as_text_and_as_json() {
         "sections",
         "numbering",
         "content-controls",
+        "paragraphs",
     ];
     for doc in ["parts.docx", "birds.docx", "edge.docx"] {
         for v in views {
@@ -244,4 +245,69 @@ fn inspect_names_blocks_that_share_a_paragraph_id() {
         ),
         "{out}"
     );
+}
+
+#[test]
+fn insert_takes_a_place_and_reports_errors_with_a_status() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let content = dir.path().join("c.json");
+    std::fs::write(
+        &content,
+        r#"[{"type": "paragraph", "content": ["A wren sang."]}]"#,
+    )
+    .unwrap();
+    let o = |args: &[&str]| run(args);
+    let (out_s, content_s) = (out.display().to_string(), content.display().to_string());
+    for place in [
+        vec![],
+        vec!["--before", "heading:Methods"],
+        vec!["--after", "#3"],
+        vec!["--replace", "bookmark:summary"],
+        vec!["--at", "results"],
+    ] {
+        let mut args = vec!["insert", SAMPLE, &out_s, "--content", &content_s];
+        args.extend(place.iter());
+        let (code, stdout, err) = o(&args);
+        assert_eq!(code, Some(0), "{place:?}: {err}");
+        assert!(stdout.contains("inserted 1 block"), "{stdout}");
+        let (_, text, _) = o(&["text", &out_s]);
+        assert!(text.contains("A wren sang.\n"), "{place:?}: {text}");
+    }
+    // Content that cannot go there, a place that matches nothing, JSON that
+    // is not content: one line and status 3.
+    std::fs::write(&content, r#"[{"type": "heading", "level": 12}]"#).unwrap();
+    let (code, _, err) = o(&["insert", SAMPLE, &out_s, "--content", &content_s]);
+    assert_eq!(code, Some(3));
+    assert!(
+        err.contains("[0].level") && err.lines().count() == 1,
+        "{err}"
+    );
+    std::fs::write(&content, "[]").unwrap();
+    let (code, _, err) = o(&[
+        "insert",
+        SAMPLE,
+        &out_s,
+        "--content",
+        &content_s,
+        "--before",
+        "heading:Nowhere",
+    ]);
+    assert_eq!(code, Some(3));
+    assert!(err.contains("no block matches"), "{err}");
+    // Two places, or no content, is a wrong command line.
+    let (code, _, _) = o(&[
+        "insert",
+        SAMPLE,
+        &out_s,
+        "--content",
+        &content_s,
+        "--at",
+        "results",
+        "--before",
+        "#1",
+    ]);
+    assert_eq!(code, Some(2));
+    let (code, _, _) = o(&["insert", SAMPLE, &out_s]);
+    assert_eq!(code, Some(2));
 }

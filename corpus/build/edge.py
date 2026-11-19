@@ -38,6 +38,9 @@ DECL = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
 AUTHOR = 'w:author="Wren Ashby" w:date="2026-05-03T08:00:00Z"'
 
 
+BOX_NOTE = ('<w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr>'
+            '<w:footnoteReference w:id="3"/></w:r>')
+
 def p(body, pid=None, ppr=""):
     attr = f' w14:paraId="{pid}" w14:textId="77777777"' if pid else ""
     return f"<w:p{attr}>{ppr}{body}</w:p>"
@@ -126,6 +129,8 @@ body = "".join([
     + p("", "10000024") + '</w:tc><w:tc>' + p(r("9"), "10000025") + '</w:tc></w:tr></w:tbl>',
     p("", "10000026"),
     # A text box in both branches of mc:AlternateContent: Word reads one.
+    # Its footnote reference Word drops when it opens the file, with the
+    # note, so the notes of the body keep their numbers.
     p(r("Beside a box. ") + '<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>'
       '<wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="1" '
       'behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1"><wp:simplePos x="0" y="0"/>'
@@ -136,10 +141,10 @@ body = "".join([
       'uri="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"><wps:wsp><wps:cNvSpPr txBox="1"/>'
       '<wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="508000"/></a:xfrm>'
       '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></wps:spPr><wps:txbx><w:txbxContent>'
-      + p(r("Box text, read once."), "10000027") + '</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>'
+      + p(r("Box text, read once.") + BOX_NOTE, "10000027") + '</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp>'
       '</a:graphicData></a:graphic></wp:anchor></w:drawing></mc:Choice><mc:Fallback><w:pict>'
       '<v:shape id="box" style="position:absolute;width:100pt;height:40pt" type="#_x0000_t202">'
-      '<v:textbox><w:txbxContent>' + p(r("Box text, read once."), "10000028")
+      '<v:textbox><w:txbxContent>' + p(r("Box text, read once.") + BOX_NOTE, "10000028")
       + '</w:txbxContent></v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r>',
       "10000029"),
     # Content controls around a row and around a cell.
@@ -194,6 +199,7 @@ footnotes = f"""{DECL}<w:footnotes xmlns:w="{W}">
 <w:footnote w:type="continuationSeparator" w:id="0"><w:p><w:r><w:continuationSeparator/></w:r></w:p></w:footnote>
 <w:footnote w:id="1"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Counted twice.</w:t></w:r></w:p></w:footnote>
 <w:footnote w:id="2"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:t>*</w:t></w:r><w:r><w:t xml:space="preserve"> Marked by hand.</w:t></w:r></w:p></w:footnote>
+<w:footnote w:id="3"><w:p><w:pPr><w:pStyle w:val="FootnoteText"/></w:pPr><w:r><w:rPr><w:rStyle w:val="FootnoteReference"/></w:rPr><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> Noted in the box.</w:t></w:r></w:p></w:footnote>
 </w:footnotes>"""
 
 settings = f"""{DECL}<w:settings xmlns:w="{W}"><w:defaultTabStop w:val="708"/><w:footnotePr><w:footnote w:id="-1"/><w:footnote w:id="0"/></w:footnotePr></w:settings>"""

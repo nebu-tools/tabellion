@@ -36,6 +36,7 @@ pub(crate) fn run(file: &Path, view: Option<View>, json: bool) -> Result<(), Str
     let v = views;
     match view {
         View::Blocks => show!("blocks", v.blocks(), blocks_text),
+        View::Paragraphs => show!("paragraphs", v.paragraphs(), paragraphs_text),
         View::Styles => show!("styles", v.styles().iter().collect::<Vec<_>>(), styles_text),
         View::Tables => show!("tables", v.tables(), tables_text),
         View::Fields => show!("fields", v.fields(), fields_text),
@@ -227,6 +228,29 @@ fn blocks_text(blocks: &[Block]) -> String {
         })
         .collect();
     columns(&["#", "ID", "KIND", "STYLE", "LEVEL", "TEXT"], &rows)
+}
+
+fn paragraphs_text(paragraphs: &[nebu_docx::Paragraph]) -> String {
+    let rows: Vec<Vec<String>> = paragraphs
+        .iter()
+        .map(|p| {
+            let story = serde_json::to_value(p.location.story)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default();
+            vec![
+                p.index.to_string(),
+                story.replace('_', " "),
+                id(&p.location.block),
+                p.cell
+                    .map(|c| format!("{} {},{}", c.table, c.row, c.column))
+                    .unwrap_or_default(),
+                opt(&p.style_name),
+                p.text.clone(),
+            ]
+        })
+        .collect();
+    columns(&["#", "STORY", "BLOCK", "CELL", "STYLE", "TEXT"], &rows)
 }
 
 fn kind_name(k: BlockKind) -> &'static str {

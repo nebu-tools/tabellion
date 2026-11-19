@@ -177,9 +177,11 @@ Suite that apply to such a parser (XML 1.0 fifth edition and Namespaces
 
 No input may make the engine panic. Every malformed file gives an error
 that says what is wrong and where. Tests feed the engine truncated and
-damaged archives, zip bombs, deep nesting and malformed XML, and four fuzz
-targets in `fuzz/` run opening, parsing, random edit sequences and every
-view on random bytes.
+damaged archives, zip bombs, deep nesting and malformed XML, and six fuzz
+targets in `fuzz/` run opening, parsing, random edit sequences, every
+view, the reader of the content model's JSON form and the writer on
+random bytes. Content to write is untrusted input too, with limits of its
+own (see "Writing content").
 
 ### The document model
 
@@ -205,6 +207,12 @@ story) and gives what a reader needs (text, cells, codes, authors).
   Word would not keep (above `7FFFFFFF`, or not hexadecimal) gives no id.
   A block gives its kind, style, outline level, list, the text a reader
   sees and, for a paragraph, its content.
+- `Views::paragraphs()` lists every paragraph of every story: the body
+  with its tables and block content controls, headers and footers, notes,
+  comments, and text boxes after the story that holds them. Each gives its
+  location (story, part and the top-level block of the body), the
+  innermost table cell that holds it, its style, its text and its content,
+  and its node, which is a place for the writer.
 - A paragraph's content is a flat list: runs of text with their direct
   formatting, the toggle properties that are on after the style cascade
   and the tracked change they are in, and the inline objects between
@@ -212,9 +220,8 @@ story) and gives what a reader needs (text, cells, codes, authors).
   come as a start and an end around their content; note references,
   drawings, equations, breaks and unknown elements as single items. A flat
   list needs no recursion to build, read or serialise, whatever the
-  nesting. The blocks give it for the paragraphs of the body's top level;
-  paragraphs in tables, block content controls and text boxes give their
-  text through those views, and their run-level content is not listed yet.
+  nesting. Every paragraph has it; a block of the body's top level gives
+  that of its paragraph again.
 - `Views::tables()` places cells on the grid, resolving `gridSpan`,
   `vMerge`, `hMerge`, `gridBefore` and `gridAfter`. Each cell appears once
   with its row, column and spans and its own text, paragraphs separated by
@@ -237,7 +244,9 @@ story) and gives what a reader needs (text, cells, codes, authors).
   answer (from `commentsExtended`) and whether they are resolved; notes with
   their text, the number Word shows and the block that calls them, in the
   order of their references; content controls with kind, tag, title, whether
-  they show their placeholder, and their text.
+  they show their placeholder, and their text. A note reference in a text
+  box has no number: Word drops it, with its note, when it opens the file,
+  and numbers the notes of the body as if it were not there.
 - `Views::revisions()` lists every `w:ins`, `w:del`, `w:moveFrom`,
   `w:moveTo`, the marks on paragraphs, rows and cells, and the property
   changes (`rPrChange`, `pPrChange`, `tblPrChange`, `trPrChange`,
@@ -357,8 +366,17 @@ hidden; a paragraph style and a character style that both hide text, or
 both make it bold, cancel out; a table style and a paragraph style that
 are both bold cancel out; two styles of one `basedOn` chain that are both
 bold give bold; a character style that sets bold off leaves a bold heading
-bold; and direct formatting decides over each of these. Document defaults
-are not among the cases yet.
+bold; and direct formatting decides over each of these.
+
+The document defaults give a toggle property only where no style states it.
+Word does so (`defaults.docx`, with bold and italic in the defaults): a
+character style that is bold leaves its text bold, a paragraph style and a
+character style that are both bold leave it bold, a paragraph style that
+sets bold off turns it off, and text in no style is bold. Word's own "Set
+As Default" puts bold and italic into the Normal style and leaves the
+defaults alone, so `corpus/build/word.ps1` makes the document in Word, adds
+`w:b` and `w:i` to the defaults of its styles part, and has Word open the
+file, set the two cases that turn bold off, and save it again.
 
 The document keeps what it read until an edit changes a tree or a part is
 added: each tree counts the edits that reach it, and the views are read
@@ -398,6 +416,7 @@ key named after the view:
 | Key | Items |
 | --- | --- |
 | `blocks` | `id`, `shared_para_id`, `index`, `kind`, `style`, `style_name`, `level`, `numbering`, `text`, `element`, `control`, `content` |
+| `paragraphs` | `index`, `location`, `cell`, `style`, `style_name`, `text`, `content` |
 | `styles` | `id`, `name`, `display_name`, `local_names`, `kind`, `built_in`, `default`, `hidden`, `based_on`, `next`, `linked`, `outline_level`, `numbering` |
 | `tables` | `index`, `id`, `location`, `parent`, `style`, `row_count`, `column_count`, `cells`, `rows` |
 | `fields` | `index`, `kind`, `code`, `result`, `simple`, `parent`, `location` |
@@ -443,42 +462,233 @@ the table does not have are found by their stored name.
 
 ### Writing content: the content model
 
-Every authoring path produces the same content model: blocks (paragraph,
-heading, list, table, figure, image, display equation, page break, raw
-OOXML) and inlines (text with marks, footnote, cross-reference, link, inline
-math, line break, field, image, raw OOXML). The model says what the content
-is. It has a JSON form, so the command line and other languages can produce
-it directly.
+Every authoring path produces the same content model,
+`nebu_docx::content::Content`: blocks, and the table styles they name. The
+blocks are paragraph, heading, list, table, figure, image, display
+equation, page break and raw OOXML; the inlines are text with marks,
+footnote, cross-reference, link, inline equation, line break, field, image
+and raw OOXML. The model says what the content is: a heading has a level
+and a label, a table has rows of cells with spans, a figure has a picture,
+a caption and a label. No name of WordprocessingML appears in it outside
+raw OOXML.
 
-The writer turns the model into WordprocessingML in the target document's
-own styles. `Roles` says which style plays which part: body text, headings
-by level, caption, list bullet, list number, footnote text and reference,
-figure paragraph, table text, default table style, hyperlink, code.
-`Roles::detect` finds Word's built-in styles by their stored names; a pack
-can name others. The writer:
+The model has a JSON form. `crates/nebu-docx/schema/content.json` gives
+it as a JSON Schema; serialising a `Content` writes it and
+`Content::from_json` reads it. A bare array stands for a list of blocks,
+and a string for plain text. Tests keep code and schema together: random
+content must have the schema's shape and read back as the same content,
+and the content the tests make must use every property the schema names.
 
-- writes captions as Word writes them: the label word, a `SEQ` field, the
-  separator and the text, with a hidden bookmark around label and number, so
-  that a `REF` cross-reference shows "Table 3" and Word's own cross-reference
-  dialog lists the caption;
-- writes a cross-reference as a `REF … \h` field, and a reference to a
-  numbered equation as "Equation" and a `REF` to its "(n)";
-- names the bookmark of a label `_Ref_<label>`, hidden as Word's own are, so
-  that a label stays findable after Word saves the file and in a later run;
-- writes numbered lists as a fresh numbering instance over the list style's
-  definition, so each list starts at 1, and nested items at deeper levels;
-- writes footnotes into the footnotes part, creating it with its separators
-  if the template has none;
-- adds images as media parts with relationships and content types, sized
-  from their pixel size and resolution and limited to the text width;
-- writes Typst math as Office Math;
-- writes tables with the grid computed from row and column spans, per-cell
-  shading, alignment and borders, repeated header rows and a real table
-  style;
-- tracks the insertion when asked: runs in `w:ins`, paragraph marks and rows
-  marked as inserted, all under one author and date.
+Reading JSON is reading untrusted input. `ContentLimits` bounds the size
+(256 MiB), the nesting of lists, cells, notes and links (32 levels) and
+the number of blocks, inlines, list items, rows and cells together (4
+million); the JSON parser itself refuses nesting deeper than 128 levels.
+Every error is `Error::Invalid`, names the JSON path and says what is
+wrong there, as in `blocks[3].rows[1].cells[0].row_span: a span is at
+least 1`. An unknown key is an error. Content built in code passes the
+same checks (`Content::check`), with the same paths. They are:
 
-After every write the engine brings field results up to date (see "Fields").
+- A table lists, for each row, the cells that begin in it, left to right;
+  a cell takes the first grid position no cell above covers. Every row
+  must cover the same number of grid columns, no two cells may cover one
+  position, and no cell may reach past the last row. A ragged table or an
+  overlap is an error that names the row and the column, from 0. A row
+  that cells from above cover entirely may list no cells.
+- A label has up to 35 letters, digits, `_` and `-` and starts with a
+  letter, so that its bookmark `_Ref_<label>` fits Word's 40 characters.
+  Content gives a label once.
+- An equation is Office Math XML for now: one `m:oMath` of the elements of
+  the Office Math schema, with WordprocessingML only in its runs.
+  `Math::omml` makes one; the Typst mapping will make the same type from
+  Typst math, so nothing that takes a `Math` changes then.
+- Raw OOXML is parsed with the engine's own parser under the default
+  limits, with the prefixes `w`, `r`, `m`, `wp`, `a`, `pic`, `w14`, `wps`
+  and `mc` bound. It must be well-formed, and its elements must stand
+  where the item stands: `w:p`, `w:tbl`, `w:sdt` and the other
+  block-level elements for a block; `w:r`, `w:hyperlink`, `w:fldSimple`,
+  `m:oMath` and the other run-level elements for an inline.
+- A footnote does not stand in a footnote or in a link, a link not in a
+  link, a page break not in a table cell or a footnote. Text holds only
+  characters XML allows, a colour six hexadecimal digits, a border 0.25 to
+  6 points.
+
+### The writer
+
+`Document::insert` writes blocks at a `Place`: before, after or instead
+of a node, or at the end of the body, before its final section
+properties. The node is a block of `Views::blocks` or a paragraph of
+`Views::paragraphs`, which reaches table cells, content controls, headers
+and footers, notes and text boxes. `Document::insert_all` writes at
+several places in one pass. Everything is checked before the first change,
+and should a step fail half-way the parts are put back as they were (the
+trees are copied with their identity, so handles stay good), so an error
+leaves the document as it was.
+
+What a place allows:
+
+| Content | Not in |
+| --- | --- |
+| A footnote | a header or footer, a note, a text box: Word drops a note reference in a text box when it opens the file |
+| A page break | a table cell, a header or footer, a note, a text box |
+| A caption, a label, a cross-reference, a numbered equation | anything but the body, its tables and its content controls, since Word numbers each story apart |
+| Any content | a comment |
+
+A table may stand in a cell, a note, a header or a text box. A container
+that must end with a paragraph (a cell, a note, a header, a footer, a text
+box) gets an empty one when the new blocks would end it with a table.
+
+**Roles.** `Roles` names the style that plays each `Role`: body text,
+headings of each level, captions, bulleted and numbered lists, footnote
+text and reference, figures, table text, tables that name no style,
+hyperlinks and code. `Roles::detect` finds Word's built-in styles by the
+names Word stores; `Roles::set` chooses another style for a role, by id or
+name, and a choice that names no style of that kind is an error that
+lists those the document has. A role whose style the document lacks falls
+back in this order:
+
+- body text: Body Text, then the default paragraph style;
+- table text: the default paragraph style;
+- figures: the style of body text;
+- lists: List Bullet and List Number, then List Paragraph, added if the
+  document lacks it;
+- every other role: Word's built-in style, added with Word's own
+  definition.
+
+The definitions come from Word: `tools/word/builtin-styles.sh` has a Word
+of its own apply each style and save the file, and copies the definitions
+into `crates/nebu-docx/src/writer/builtin.xml`, without the editing session
+id and without the link to the character style Word makes alongside a
+paragraph style. `Inserted::roles` says for each role the content used
+where its style came from: the caller's choice, Word's built-in style, a
+fallback, or a definition added.
+
+**Captions** are written as Word's Insert Caption writes them, in the
+Caption style: the label word, a `SEQ` field (a `w:fldSimple`, as Word
+writes it), the separator and the text. The caption of a label has the
+hidden bookmark `_Ref_<label>` around the word and the number, where Word's
+cross-reference dialog puts its own `_Ref` bookmarks, so that a `REF`
+shows "Table 3" and Word's dialog lists the caption. A table's caption
+stands above it and keeps with it; a figure's stands below the picture,
+whose paragraph keeps with the caption. The words and the separator are
+`WriteOptions::captions`: Figure, Table, Equation and ": ".
+
+When the blocks are in place, one pass over the body numbers every `SEQ`
+field in document order for its identifier, as Word's update does: `\r`
+sets the number, `\c` repeats it, and `\*` formats it (ARABIC, ALPHABETIC,
+alphabetic, ROMAN, roman). The captions the document had count, so a new
+caption gets the number Word would give it, and every later field of the
+sequence gets its new number; fields before the insertion keep their
+bytes. A field nested in another field's code, as in
+`{ IF { SEQ Table \c } > 0 … }`, gets its number in the code; the field
+around it keeps its result until the fields update computes it. A
+sequence with a `\s` field, which Word numbers again after each heading of
+a level, is left as it is: such chapter-restarting sequences wait for the
+fields update. Text boxes, the `mc:Fallback` branch of alternate content
+and deleted content are not counted.
+
+**Cross-references** are `REF <bookmark> \h` fields. The same pass gives
+each one in the insertion the text of its bookmark as its result, and each
+one outside it whose bookmark (a label's or one of Word's own `_Ref`
+bookmarks) holds a number that changed the new text. `Inserted::renumbered`
+counts the fields outside the insertion that changed. A reference to a
+heading shows its text; one to a numbered equation reads "Equation (2)":
+the word, then a `REF` to the bookmark around "(2)". A label that names
+nothing is `Error::Invalid`, which names it and the labels that exist: the
+content's and the document's `_Ref_` bookmarks. A label the document has
+already is an error too.
+
+**Equations** without a label are a paragraph of their own
+(`m:oMathPara`). A labelled one is centred at a tab at half the text width,
+with "(n)" at a right tab at the text width; the number is a
+`SEQ Equation` field inside the label's bookmark.
+
+**Lists** get a fresh numbering instance over the definition of the list
+style, so each list starts at 1. Which definition, in this order: the one
+the role's style is numbered by, if it has a level for every depth the
+list reaches and is not a single-level definition (for nested items); for
+nested lists over single-level definitions, as Word's own List Number and
+List Number 2 are, the style of each depth with its own definition and an
+instance for each list at each depth; else a definition of nine levels
+that the writer adds, under the role's style. A list nested in a list of
+the other kind, bullets in a numbered list, is planned on its own. The
+numbering part is created when the document has none. Word shows the
+numbers as planned: "1." and "2." for each list, "a." below them, bullets
+for bulleted items (`corpus/written/parts-added.word.json`).
+
+**Footnotes** go into the footnotes part. A document without one gets it
+with the separator and continuation separator as Word writes them, its
+relationship and content type, and the two entries of `w:footnotePr` in
+the settings, in the place the schema gives them. New ids follow the
+highest the part has. A note's paragraphs take the footnote text style;
+its first paragraph begins with the mark in the footnote reference style
+and a space, and a note that begins with a table gets an empty paragraph
+for the mark. A note may hold tables and lists.
+
+**Pictures** are PNG, JPEG, GIF or SVG, known by their first bytes. Their
+size comes from the pixel size and resolution (PNG's `pHYs`, JPEG's JFIF
+density, else 96 pixels per inch; GIF has none), an SVG's from its width
+and height or its `viewBox`, a pixel being 0.75 points. A picture wider
+than the text width of the section it lands in, or of the cell, is scaled
+down to it; a width or height of the content alone keeps the proportions.
+An SVG needs a PNG fallback, which the content supplies: Word shows the
+PNG where it cannot draw SVG, and making one would need an SVG renderer
+with its fonts, far heavier than the engine. Headers are read step by step
+past each chunk or segment's length, and an SVG with the engine's parser
+under the document's limits, so a picture costs at most its own size.
+The same bytes are one part, named after their hash
+(`word/media/image-<16 hex digits>.<ext>`), with one relationship from
+each part that shows it; the extension gets a `Default` content type once,
+as Word writes them. A picture given as a file is read only when
+`WriteOptions::files` names the directory it is relative to, as the command
+line does with the directory of the JSON file; a server that leaves it
+unset reads no file that content names.
+
+**Hyperlinks** to an address get a relationship of type hyperlink with
+`TargetMode="External"`, one for each address; those into the document an
+anchor, to a bookmark the document has or to a label's bookmark. Their
+text is in the hyperlink style.
+
+**Tables** are written in a fixed layout. The grid columns, the table and
+each cell have their widths in twentieths of a point: equal columns, or
+the content's relative widths, across the text width, or the width of the
+cell that holds the table less its padding. Word then draws the table as
+written and does not measure the content to size the columns again, so the
+table looks the same in every reader and after every save; Word's own
+`Tables.Add` writes a fixed layout too. An autofit layout would leave the
+widths to each reader. Cells that span columns get `w:gridSpan`, those
+that span rows `w:vMerge` with the cells they cover written as
+continuations. Header rows get `w:tblHeader`, which repeats them on each
+page, and the table's `w:tblLook` turns on the style's header row, banded
+rows and, when asked, its first column. A cell's shading, alignment,
+vertical alignment and borders are direct formatting over the table style.
+Paragraphs in cells take the table text role.
+
+**Ids.** The writer gives new paragraphs and rows a `w14:paraId` when the
+part's root declares `w14` ignorable, as files that Word saved do; it adds
+no namespace to a file that does not declare it, so blocks written into
+such a file have `#index` ids until Word saves it. Paragraph ids come from
+a generator seeded with the SHA-256 of the source file and the number of
+insertions made, and skip the ids every story part has. Bookmark ids,
+drawing ids (`wp:docPr`), relationship ids, numbering ids and note ids
+continue after the highest the document has. So the ids never collide,
+and the same call on the same file gives the same bytes, which a property
+test checks.
+
+**What stays.** Every part the insertion does not need keeps its zip
+record, and in a part it changes every node outside the insertion keeps
+its bytes, which tests check part by part, and byte by byte around the
+insertion, for every kind of place in the body. The parts an insertion may change are the part of the place,
+styles (styles added), numbering (definitions and instances), footnotes,
+settings (`w:footnotePr`, only when it creates the footnotes part),
+relationships, content types and media, and the fields after the
+insertion whose numbers change. Taking out what an insertion added gives
+back the bytes of the part of the place when it numbered nothing again;
+what it added to other parts stays.
+
+Two things the writer does not do yet: insert as a tracked change
+(`WriteOptions::track`), which comes with the editing calls, and update all
+field results after a write (see "Fields"), which comes with the fields
+update; until then the writer updates the `SEQ` and `REF` fields above.
 
 ### Public interface
 
@@ -528,13 +738,28 @@ let sha: String = doc.sha256();                             // names the file #i
 The writer adds:
 
 ```rust
-let opts = WriteOptions { roles: Roles::detect(doc.views()?.styles()), track: Some(Revision::now("Analyst")), table_styles };
-doc.insert(Place::Replace(place.node), &blocks, &opts)?;   // Before, After, Replace, End
+let content = Content::from_json(&std::fs::read("part.json")?)?; // or built in code
+let opts = WriteOptions {
+    roles: Roles::detect(doc.views()?.styles()),         // the default; Roles::set overrides
+    ..WriteOptions::for_content(&content, None)          // its table styles; no files read
+};
+let place = doc.views()?.locate(&"heading:Methods".parse()?)?.node;
+let done: Inserted = doc.insert(Place::Before(place), &content.blocks, &opts)?; // Before, After, Replace, End
+doc.insert_all(&[(Place::End, &more), (Place::After(cell_paragraph), &in_cell)], &opts)?;
+let id = doc.ensure_table_style(&TableStyle::Defined(Box::new(def)))?; // or TableStyle::Named
+```
 
+`Inserted` gives the nodes written for each place, the roles used and where
+their styles came from, the styles added, the table styles used, the
+labels with their bookmarks, and the number of fields outside the
+insertion whose results changed.
+
+The editing calls and the fields update come next:
+
+```rust
+let opts = WriteOptions { track: Some(Revision::now("Analyst")), ..opts };   // tracked insertion
 revise::replace_in_paragraph(&mut doc, para, "old", "new", Some(&rev))?;
 revise::settle(&mut doc, /* accept */ true, Some("Analyst"))?;
-
-doc.ensure_table_style(&TableStyle::Defined(def))?;       // returns the style id
 fields::update(&mut doc)?;
 ```
 
@@ -558,10 +783,12 @@ a missing part, a bad part name, an exceeded limit (with the `Limits` field
 to raise), malformed XML (with part, line and column), something not
 supported, an edit that would make the tree invalid, and a node handle from
 another tree. The document views add `Invalid` (a place that matches
-nothing or several blocks, a locator or option that names nothing). The
-editing calls will add `ForeignRevision` (another author's pending change
-in the target, with the authors' names) and use `Invalid` for an unknown
-label and a ragged table.
+nothing or several blocks, a locator or option that names nothing), and
+the writer uses it for content that cannot be written: JSON that is not
+content, with its path, a ragged table, an unknown label or style, and
+content a place does not allow. The editing calls will add
+`ForeignRevision` (another author's pending change in the target, with
+the authors' names).
 
 ## The command line
 
@@ -589,6 +816,7 @@ tabellion fill report-template.docx out.docx --pack report.pack.toml \
     --set author="A. Lark" --set date=2026-06-30 --at results --typst results.typ
 
 # Insert and edit
+tabellion insert in.docx out.docx --before heading:Methods --content part.json
 tabellion insert in.docx out.docx --before heading:Methods --typst part.typ [--author A]
 tabellion replace in.docx out.docx --find "draft" --with "final" [--block p:1A2B3C4D] [--author A]
 tabellion apply in.docx ops.json out.docx     # edit operations, tracked by default
@@ -632,12 +860,18 @@ endnotes, as Word numbers them, and lists the notes at the end;
 
 Every command exits with 0 on success, 1 when `roundtrip` finds that the
 copy differs, 2 for a wrong command line, 3 when a file cannot be read or
-written or is not a document the engine can read, and 70 for an internal
-error. An error is one line on standard error, never a backtrace.
+written, is not a document the engine can read, or holds content that
+cannot be written where it is asked to go, and 70 for an internal error.
+An error is one line on standard error, never a backtrace.
 
 `insert` takes the place in one of four forms: `--before PLACE`,
-`--after PLACE`, `--replace PLACE`, or `--at NAME` for a `{{NAME}}`
-placeholder to fill. Without one it appends at the end.
+`--after PLACE`, `--replace PLACE` with a locator, or `--at NAME` for a
+`{{NAME}}` placeholder to fill, which replaces the paragraph that holds it.
+Without one it appends at the end. `--content FILE` reads the content
+model's JSON form, and pictures it gives as files are read relative to
+the JSON file; it prints the number of blocks inserted, the styles added
+and the labels written. `--typst` and `--author` come with the Typst
+mapping and the tracked insertion.
 
 `apply` takes the operations format, a JSON list of changes:
 
@@ -868,19 +1102,31 @@ There is one notion of a table style. A table names its style, and the name
 resolves in this order:
 
 1. a definition passed with the content (from Typst, R or JSON), by name;
-2. a table style the document already has, by id, name or localised name;
-3. the pack's default table style, then Word's "Table Grid".
+2. a table style the document already has, by id, name or the name Word
+   shows in English;
+3. a table that names no style takes the default table style role (a
+   pack's choice, else Table Grid); a document without Table Grid gets it
+   as Word defines it, with Normal Table under it if that is missing too.
 
-A definition (`TableStyleDef`) holds the font and size, the outer and inner
-borders, cell padding, the header row's fill, colour, weight and bottom
-border, a band fill for every other body row, and an optional first-column
-look. The engine writes it as a real `w:style w:type="table"` with
-`tblStylePr` sections for `firstRow`, `band1Horz` and `firstCol`, and sets
-the table's `tblLook` so the header and banding apply. Word lists the style in
-the table design gallery, and a Word user can change it or apply it to other
-tables. If the document already has a style of that name, the engine uses it
-and does not overwrite it, so a later run never undoes a Word user's change to
-the style.
+A name that resolves to nothing is `Error::Invalid`, which lists the table
+styles the document has; it never falls back to another style silently.
+
+A definition (`TableStyleDef`) holds the font and size of the table's
+text, the outer and inner borders, the cell padding, the look of the header
+rows (fill, text colour, bold, a line below), a fill for every other body
+row, and the look of the first column. The engine writes it as a real
+`w:style w:type="table"`, based on Normal Table and shown in Word's table
+design gallery, with `tblStylePr` sections for `firstRow`, `firstCol` and
+`band1Horz`; the table's `tblLook` turns on the header row and banding, and
+the first column when the table asks for it. The rows mark themselves as
+header rows (`w:tblHeader`); the style does not, because Word drops the
+rows' mark when it saves a table whose style has one, and then reports no
+header rows. Word lists the style in the table design gallery, and a Word
+user can change it or apply it to other tables. If the document already
+has a style of that name, the engine uses it and does not overwrite it, so
+a later run never undoes a Word user's change to the style.
+`Document::ensure_table_style` does the same for a style on its own and
+returns its id.
 
 The same style from three sources:
 
@@ -1000,8 +1246,17 @@ results that should show the time of opening, and `INCLUDETEXT` or
 - **Property tests.** Random well-formed XML with namespaces, references,
   comments, CDATA and processing instructions must write back its bytes;
   random edit sequences must give XML that an independent parser reads as
-  the edits say; random content-model documents go through write, read and
-  write again. A second oracle runs any sequence of creations, text and
+  the edits say. Random content (paragraphs with marks, notes, links,
+  fields and equations, headings, nested lists, tables with any valid
+  spans, figures, equations, raw OOXML, labels and references to them)
+  must have the shape of `schema/content.json` and read back from its JSON
+  as the same content; inserted into the sample template, a Word-made
+  document and one without numbering and notes, it must give the same
+  bytes twice, be valid against the schemas, and read back through the
+  views: the paragraphs' text, the headings, every table on its grid with
+  each cell's spans and text, the captions as `SEQ` fields, each label's
+  hidden bookmark with one `REF` whose result is the bookmark's text, the
+  notes and the pictures. A second oracle runs any sequence of creations, text and
   attribute changes, renames, insertions, moves between parents that bind
   prefixes differently, removals, copies, fragments with clashing bindings
   and handles of another tree: the output must parse, roxmltree must read
@@ -1018,14 +1273,32 @@ results that should show the time of opening, and `INCLUDETEXT` or
   malformed XML, duplicate and unsafe entry names give errors, never a panic.
   Each limit is tested with an input of exactly its value and one more, at
   open and for every edit that makes nodes or deepens the tree.
-- **Schema validation.** Every output is validated against the ECMA-376
-  transitional schemas plus Microsoft's extensions with the Open XML SDK's
-  validator (a small .NET tool run in CI). Word's tolerance is not the
-  standard; the validator catches element order and attribute errors that
-  Word may repair silently or refuse.
-- **Golden files.** The content model's JSON for each authoring input is
-  compared with a stored copy, and so are the generated XML fragments.
-- **LibreOffice as a second reader.** `soffice --headless --convert-to pdf`
+- **Schema validation.** Every document the writer's tests write is
+  validated against the ECMA-376 transitional schemas, every part in
+  WordprocessingML with the DrawingML and Office Math it holds. Word's
+  tolerance is not the standard; the validator catches element order and
+  attribute errors that Word may repair silently or refuse. The schemas
+  are those of ECMA-376 fifth edition, part 4, copied unmodified into
+  `crates/nebu-docx/tests/xsd/` under Ecma International's copyright notice,
+  which allows copying them unmodified with the notice (the README there
+  holds it); they are test data and no build of the engine includes them.
+  The validator (`tests/support/xsd.rs`) knows the part of XML Schema they
+  use: elements and attributes, complex types with sequences, choices,
+  groups, `any` and occurrence bounds, extensions, attribute groups, and
+  simple types by restriction, list and union. A content model becomes an
+  automaton the children run through. Markup compatibility comes first, as
+  a reader that knows only these schemas applies it: what `mc:Ignorable`
+  names is left out, and of `mc:AlternateContent` the first branch whose
+  namespaces the schemas define stands in its place. Every part of every
+  document of the corpus that Word made passes it, and a broken part fails
+  it with each error found. This takes the place of the Open XML SDK's
+  validator, which would have needed .NET in CI and checks the same
+  schemas.
+- **Golden files** (with the Typst and Markdown paths). The content model's
+  JSON for each authoring input is compared with a stored copy, and so are
+  the generated XML fragments.
+- **LibreOffice as a second reader** (to come; LibreOffice was not
+  available where this was built). `soffice --headless --convert-to pdf`
   and `--convert-to txt` must succeed on every output, and the text must
   contain the expected paragraphs, captions with numbers, and footnotes. A
   second reader finds the files that only Word can open.
@@ -1057,7 +1330,9 @@ results that should show the time of opening, and `INCLUDETEXT` or
   interface), field notes with changes (a deletion over another author's
   insertion, tracked changes in a header, a footer and a footnote, a
   comment over two cells, content controls around a paragraph, a row and
-  words), toggle properties through styles (`cascade.docx`), a recipe
+  words), toggle properties through styles (`cascade.docx`), toggle
+  properties in the document defaults with a group content control made
+  as Word's Developer tab makes one (`defaults.docx`), a recipe
   collection in German and one in French in built-in styles, a document
   from pandoc, and a document written by hand for what Word does not
   write from its interface (a field nested in a field code, hidden text,
@@ -1065,12 +1340,15 @@ results that should show the time of opening, and `INCLUDETEXT` or
   `mc:AlternateContent` that Word does not understand, an ignorable
   element of an unknown namespace, custom XML, smart tags, an equation, a
   group content control and controls around a row and a cell, a note with
-  its own mark, a legacy VML picture, two paragraphs with one paraId, a
+  its own mark, a note reference in a text box, a legacy VML picture, two
+  paragraphs with one paraId, a
   vertical merge into a row with `gridBefore`, and toggles through a
   `basedOn` chain and a table style). `corpus/build.sh` makes each file
   and the readings; the Word documents are made by `corpus/build/word.ps1`
   in a Word instance of its own, under the invented names Wren Ashby and
-  Pip Tanager. LibreOffice was not available where the corpus was made, so
+  Pip Tanager. Word adds a group content control only to a selection:
+  `ContentControls.Add` on a range that is not selected gives "This is not
+  a valid selection", so the script selects the paragraphs first. LibreOffice was not available where the corpus was made, so
   it has no LibreOffice document yet.
 - Where the views report a document differently from Word on purpose, the
   test normalises the difference and names it: Word writes control
@@ -1084,8 +1362,10 @@ results that should show the time of opening, and `INCLUDETEXT` or
   of cells has one cell for a merged cell and none for the grid columns a
   row skips, where the views write a tab for each grid column, so runs of
   tabs compare as one.
-- A test reads every file under `corpus/`, `samples/` and `tools/`, the
-  tables of style names, the schema and the documentation, every part of
+- A test reads every file under `corpus/` (the documents the writer made
+  and Word saved in `corpus/written/` too), `samples/` and `tools/`, the
+  tables of style names, the built-in styles the writer adds, the
+  pictures of the writer's tests, the schemas and the documentation, every part of
   every .docx among them, and fails on a user's path, a machine name of
   the form Windows gives or the name of the machine the test runs on, an
   e-mail address outside the example domains, the name of the user the
@@ -1095,6 +1375,27 @@ results that should show the time of opening, and `INCLUDETEXT` or
   a real name in running text from an invented one.
 - Every view of every corpus document is validated against
   `crates/nebu-docx/schema/views.json`.
+- The writer, beyond the property tests: the JSON form's errors name the
+  path for each kind of mistake, and each limit is tested; content goes
+  before, after and instead of a block and at the end of the body, into a
+  cell, a content control, a header, a footnote and a text box, and each
+  place a block may not stand in gives the error that says why; a
+  document without numbering, notes or Table Grid gets them; a table
+  before Word's own captions numbers them again, with the cross-references
+  to them; unknown labels and styles give errors that list what exists,
+  and leave the document as it was; a table style of a name the document
+  has is used and not overwritten; pictures of each format are stored once
+  and sized to the text width; inserting and then taking the inserted nodes
+  out gives back the part's bytes.
+- The work of inserting grows in proportion to the content and the
+  document: the guard of `crates/nebu-docx/src/view/linear.rs` inserts n
+  blocks of every kind at the end, blocks at n places of a document of n
+  paragraphs, and a table of n rows, and 4n may cost no more than five
+  times n. Insertions at many places of one container cost one pass over
+  its children.
+- Six fuzz targets run in CI for 30 seconds each: the four of the views
+  and the edits, `content` on the JSON reader, and `write`, which makes
+  content from the bytes and inserts it at a place the bytes choose.
 - Tables nested 2,000 deep, 3,000 nested fields, content controls, revisions
   and hyperlinks run on a thread with a 256 KiB stack; thousands of
   bookmarks open at once meet `max_total_size`; an absurd `gridSpan`, broken
@@ -1150,6 +1451,34 @@ validates against the schemas.
 Run it with `tools/word/check.sh OUTDIR file.docx…`; set
 `TABELLION_WORD_PDF=1` for PDFs and `TABELLION_WORD_TIMEOUT` for the time
 limit per file. A release runs it over the test corpus on a Windows machine.
+
+The documents the writer makes are checked in Word the same way, and what
+Word reports is kept next to them, so that CI compares with it without
+Word. `crates/nebu-docx/tests/written.rs` writes six documents into
+`corpus/written/`: the README's survey in place of a placeholder of the
+sample template; a table and a figure before the captions of the Word-made
+bird survey, with content in one of its table cells, its header, its
+footnote and its text box; the survey and plain lists and tables in a
+document without numbering, notes or Table Grid; pictures of every format;
+tables with spans both ways, a nested table, borders and shading, header
+rows, a first column and the template's own table style; and numbered
+equations with references. A test checks that the writer still makes them
+byte for byte. `tools/word/written.sh` opens each in a Word of its own
+(`tools/word/written.ps1`), with the same time limit for a repair dialog,
+and writes `NAME.word.json` and the file Word saved, `NAME.saved.docx`. The
+tests compare: Word opened each without repair and in its current mode;
+the paragraphs of the body with their styles; the tables; the numbers
+Word shows for list items (`ListFormat.ListString`); the captions Word
+lists for cross-references (`GetCrossReferenceItems` for Table, Figure and
+Equation); every field's result as written and after Word updates all
+fields in all stories, which must be equal; each cross-reference's result
+against the text of the bookmark it names; the footnotes; the inline
+pictures and their sizes; and the table styles, present, applied, with the
+header rows, banding and first column the content asks for. The file Word
+saved still has every label's bookmark, and as many cross-references name
+it as before. Word reads the header rows of a table with vertically merged
+cells only through a selection, since such a table's rows cannot be
+reached one by one, so the script selects a cell of each row.
 
 ## Installing the R package
 
@@ -1207,10 +1536,18 @@ inspect large.docx` takes 225 ms, `tabellion text large.docx` 163 ms and
 `tabellion inspect large.docx blocks --json` 157 ms, medians of fifteen
 runs. Parsing the XML is the largest part; the walk is the second.
 
-`tabellion bench` measures each step as the median of several runs in one
-process, reading the file from disk each time. CI runs it on the generated
-document and fails when a step exceeds twice its target, so slow changes are
-seen when they are made. The generator
+Inserting 300 chapters, each a heading with a label, four paragraphs with
+cross-references and a footnote, a captioned table of five rows and a
+numbered list (2,100 blocks, giving a `document.xml` of 1.7 MB), takes 63
+to 74 ms into the sample template, the median of five runs
+(`cargo run --release -p nebu-docx --example chapters -- samples/report-template.docx 300`),
+on the same machine with the load average near 20.
+
+A `tabellion bench` command is planned: it will measure each step as the
+median of several runs in one process, reading the file from disk each
+time, and CI will run it on the generated document and fail when a step
+exceeds twice its target. Until then the examples `views` and `chapters`
+give the numbers above. The generator
 (`cargo run --release -p nebu-docx --example generate -- samples/report-template.docx 300 large.docx`)
 makes the document from the sample template, so anyone can repeat the
 numbers.

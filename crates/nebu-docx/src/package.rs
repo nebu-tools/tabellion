@@ -38,6 +38,13 @@ pub(crate) struct Package {
     read: Cell<u64>,
 }
 
+/// The parts of a package as they were, to put back after a failed edit.
+pub(crate) struct Snapshot {
+    entries: Vec<Entry>,
+    index: HashMap<String, usize>,
+    read: u64,
+}
+
 /// Checks a name for use as a part: relative, `/`-separated, no empty, `.`
 /// or `..` segments, no backslash or control characters. A trailing `/`
 /// marks a directory entry, which is kept but is not a part.
@@ -111,6 +118,35 @@ impl Package {
             limits,
             read: Cell::new(0),
         })
+    }
+
+    /// The parts as they are now. Trees are copied with their identity,
+    /// so handles into them stay good after [`Package::restore`].
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            entries: self
+                .entries
+                .iter()
+                .map(|e| Entry {
+                    name: e.name.clone(),
+                    source: e.source,
+                    body: match &e.body {
+                        Body::Source => Body::Source,
+                        Body::Bytes(b) => Body::Bytes(b.clone()),
+                        Body::Xml(t) => Body::Xml(Box::new(t.snapshot())),
+                    },
+                })
+                .collect(),
+            index: self.index.clone(),
+            read: self.read.get(),
+        }
+    }
+
+    /// Puts back the parts of a snapshot.
+    pub(crate) fn restore(&mut self, s: Snapshot) {
+        self.entries = s.entries;
+        self.index = s.index;
+        self.read.set(s.read);
     }
 
     /// What the parsed trees and the list of parts are now. Equal stamps

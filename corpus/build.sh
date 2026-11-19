@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the test corpus.
 #
-#   corpus/build.sh word     # the Word-made documents, in a Word of its own
+#   corpus/build.sh word [NAME...]  # the Word-made documents, or some, in a Word of its own
 #   corpus/build.sh pandoc   # the pandoc-made document
 #   corpus/build.sh edge     # the hand-written document of edge cases
 #   corpus/build.sh read [FILE...]  # Word's readings of every document, or of some
@@ -27,15 +27,17 @@ word() {
   python3 "$here/build/png.py" "$dir/bird.png" 120 80 200 225 190
   python3 "$here/build/png.py" "$dir/heron.png" 96 64 190 210 235
   local status=0
+  local only=()
+  if [ $# -gt 0 ]; then only=(-Only "$(IFS=,; echo "$*")"); fi
   timeout "$limit" "$PS" -NoProfile -ExecutionPolicy Bypass -File "$(wslpath -w "$dir/word.ps1")" \
-    -Dir "$(wslpath -w "$dir")" || status=$?
+    -Dir "$(wslpath -w "$dir")" "${only[@]}" || status=$?
   if [ $status -eq 124 ] && [ -f "$dir/word.pid" ]; then
     local pid
     pid=$(tr -dc 0-9 < "$dir/word.pid")
     "$PS" -NoProfile -Command "Stop-Process -Id $pid -Force" >/dev/null 2>&1 || true
     echo "corpus/build.sh: Word took longer than ${limit}s; stopped its process $pid" >&2
   fi
-  for f in birds parts recipes-de recettes-fr cascade changes; do
+  for f in birds parts recipes-de recettes-fr cascade changes defaults; do
     [ -f "$dir/$f.docx" ] && cp "$dir/$f.docx" "$here/$f.docx"
   done
   rm -rf "$dir"
@@ -72,7 +74,7 @@ read_all() {
 }
 
 case ${1:-} in
-  word) word ;;
+  word) shift; word "$@" ;;
   pandoc) pandoc_doc ;;
   edge) edge_doc ;;
   read) shift; read_all "$@" ;;

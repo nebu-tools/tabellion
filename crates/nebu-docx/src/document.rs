@@ -69,6 +69,9 @@ pub struct Document {
     main: String,
     /// The views as last read.
     pub(crate) views: Option<Box<crate::view::Cache>>,
+    /// The number of insertions made, which seeds the ids the next one
+    /// creates.
+    pub(crate) writes: u64,
 }
 
 impl std::fmt::Debug for Document {
@@ -126,6 +129,7 @@ impl Document {
             package,
             main: String::new(),
             views: None,
+            writes: 0,
         };
         let rels = doc.relationships("")?;
         let Some(rel) = rels
@@ -196,6 +200,19 @@ impl Document {
     /// hex. A `#<index>` block id holds for this file only.
     pub fn sha256(&self) -> String {
         crate::sha256::hex(self.package.source_bytes())
+    }
+
+    /// The parts as they are, to put back with [`Document::restore`].
+    pub(crate) fn snapshot(&self) -> (crate::package::Snapshot, u64) {
+        (self.package.snapshot(), self.writes)
+    }
+
+    /// Puts the parts back as a snapshot had them. The views are read
+    /// again on next use.
+    pub(crate) fn restore(&mut self, s: (crate::package::Snapshot, u64)) {
+        self.package.restore(s.0);
+        self.writes = s.1;
+        self.views = None;
     }
 
     /// The stamp of the parsed trees and the list of parts.
@@ -320,7 +337,63 @@ impl Document {
             }
             Target::External(uri) => (uri.to_string(), true),
         };
-        let rels = rels_name(&source);
+        let next = self.next_relationship_id(&source)?;
+        let id = format!("rId{next}");
+        self.write_relationship(&source, &id, kind, &target, external)?;
+        Ok(id)
+    }
+
+    /// The number after the highest `rIdN` of a part's relationships.
+    pub(crate) fn next_relationship_id(&mut self, source: &str) -> Result<u64, Error> {
+        Ok(self
+            .relationships(source)?
+            .iter()
+            .filter_map(|r| r.id.strip_prefix("rId")?.parse::<u64>().ok())
+            .max()
+            .unwrap_or(0)
+            + 1)
+    }
+
+    /// Adds a relationship with an id the caller has made free, without
+    /// reading the relationships again. The target is checked as
+    /// [`add_relationship`](Self::add_relationship) checks it.
+    pub(crate) fn add_relationship_as(
+        &mut self,
+        source: &str,
+        id: &str,
+        kind: &str,
+        target: Target<'_>,
+    ) -> Result<(), Error> {
+        let source = self.source_name(source)?;
+        for v in [kind, target.as_str(), id] {
+            if let Some(c) = v.chars().find(|&c| !xml_char(c)) {
+                return Err(Error::Edit(format!(
+                    "U+{:04X} cannot appear in a relationship",
+                    c as u32
+                )));
+            }
+        }
+        let (target, external) = match target {
+            Target::Part(p) => {
+                let Some(p) = self.package.find(p) else {
+                    return Err(Error::MissingPart(p.to_string()));
+                };
+                (relative(&source, p), false)
+            }
+            Target::External(uri) => (uri.to_string(), true),
+        };
+        self.write_relationship(&source, id, kind, &target, external)
+    }
+
+    fn write_relationship(
+        &mut self,
+        source: &str,
+        id: &str,
+        kind: &str,
+        target: &str,
+        external: bool,
+    ) -> Result<(), Error> {
+        let rels = rels_name(source);
         if self.package.find(&rels).is_none() {
             let empty = format!(
                 "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\r\n<Relationships xmlns=\"{}\"></Relationships>",
@@ -328,29 +401,51 @@ impl Document {
             );
             self.add_part(&rels, RELS_TYPE, empty.into_bytes())?;
         }
-        let ids: Vec<String> = self
-            .relationships(&source)?
-            .into_iter()
-            .map(|r| r.id)
-            .collect();
-        let next = ids
-            .iter()
-            .filter_map(|id| id.strip_prefix("rId")?.parse::<u64>().ok())
-            .max()
-            .unwrap_or(0)
-            + 1;
-        let id = format!("rId{next}");
         let t = self.package.xml(&rels)?;
         let root = t.root_element();
         let r = t.create_element(Some(ns::RELATIONSHIPS), "Relationship")?;
-        t.set_attribute(r, None, "Id", &id)?;
+        t.set_attribute(r, None, "Id", id)?;
         t.set_attribute(r, None, "Type", kind)?;
-        t.set_attribute(r, None, "Target", &target)?;
+        t.set_attribute(r, None, "Target", target)?;
         if external {
             t.set_attribute(r, None, "TargetMode", "External")?;
         }
         t.append(root, r)?;
-        Ok(id)
+        Ok(())
+    }
+
+    /// Adds a `Default` content type for an extension, which parts of that
+    /// extension then take without an override of their own.
+    pub(crate) fn add_default_type(&mut self, ext: &str, content_type: &str) -> Result<(), Error> {
+        let t = self.package.xml(CONTENT_TYPES)?;
+        let root = t.root_element();
+        let d = t.create_element(Some(ns::CONTENT_TYPES), "Default")?;
+        t.set_attribute(d, None, "Extension", ext)?;
+        t.set_attribute(d, None, "ContentType", content_type)?;
+        t.append(root, d)?;
+        Ok(())
+    }
+
+    /// Adds a part whose content type the content types part gives
+    /// already, without reading it again. The name is checked as
+    /// [`add_part`](Self::add_part) checks it.
+    pub(crate) fn add_typed_part(&mut self, name: &str, bytes: Vec<u8>) -> Result<(), Error> {
+        check_part_name(name)?;
+        if !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"-._~/".contains(&b))
+            || name.ends_with('/')
+        {
+            return Err(Error::PartName {
+                name: name.into(),
+                reason: "use ASCII letters, digits, '-', '.', '_', '~' and '/'",
+            });
+        }
+        if self.package.find(name).is_some() {
+            return Err(Error::PartExists(name.to_string()));
+        }
+        self.package.add(name, bytes);
+        Ok(())
     }
 
     /// Adds a part with its content type. The content types part gets an

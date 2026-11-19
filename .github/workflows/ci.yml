@@ -31,3 +31,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-targets
       - run: cargo test --doc
+
+  fuzz:
+    # Every fuzz target for a short time, from seeds of the corpus.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install nightly --profile minimal && rustup default nightly
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - run: cargo install cargo-fuzz --locked
+      - name: Run each target for 30 seconds
+        working-directory: fuzz
+        run: |
+          mkdir -p corpus/open corpus/views corpus/content
+          cp ../samples/report-template.docx corpus/open/
+          for f in ../corpus/*.docx; do { printf '\0'; cat "$f"; } > "corpus/views/$(basename "$f")"; done
+          cp ../samples/survey.json corpus/content/
+          for t in xml edit open views content write; do
+            cargo fuzz run "$t" -- -max_total_time=30
+          done

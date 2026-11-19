@@ -15,8 +15,8 @@ use super::text::{Pieces, Show, Span, roman};
 use super::walk::{self, Shared, W};
 use super::{
     Block, BlockId, BlockKind, Bookmark, Comment, ContentControl, Control, Field, HeaderFooter,
-    Image, Inline, Locator, Margins, Note, NoteKind, NumberingRef, Revision, Section, StoryKind,
-    Table, TextOptions,
+    Image, Inline, Locator, Margins, Note, NoteKind, NumberingRef, Paragraph, Revision, Section,
+    StoryKind, Table, TextOptions,
 };
 
 const COMMENTS_EXTENDED: &str = "commentsExtended";
@@ -306,7 +306,9 @@ impl<'d> Reader<'d> {
             while let Some((b, block)) = queue.pop_front() {
                 c.enter(tree, StoryKind::TextBox, &s.part, block, rels);
                 let start = shared.pieces.len();
-                walk::walk(tree, b, &self.styles, numbered, &mut shared, &mut c)?;
+                // Word drops a note reference in a text box when it opens
+                // the file, so such a reference takes no number.
+                walk::walk(tree, b, &self.styles, false, &mut shared, &mut c)?;
                 c.close_all(shared.pieces.len());
                 let span = shared.pieces.span_from(start, 0);
                 box_spans.insert(b, span);
@@ -318,8 +320,9 @@ impl<'d> Reader<'d> {
         }
         let pieces = shared.pieces;
         let mut cut = Cut::new(&pieces, self.doc.limits().max_total_size);
-        let blocks = self.blocks_from(&mut c, &pieces, &box_spans)?;
-        let tables = tables_from(std::mem::take(&mut c.tables), &pieces);
+        let (tables, table_map) = tables_from(std::mem::take(&mut c.tables), &pieces);
+        let paragraphs = self.paragraphs_from(&mut c, &pieces, &box_spans, &table_map)?;
+        let blocks = self.blocks_from(&c, &pieces, &paragraphs)?;
         let fields = std::mem::take(&mut c.fields)
             .into_iter()
             .flatten()
@@ -379,6 +382,7 @@ impl<'d> Reader<'d> {
             .collect();
         Ok(Views {
             blocks,
+            paragraphs,
             styles: self.styles.clone(),
             tables,
             fields,
@@ -401,21 +405,19 @@ impl<'d> Reader<'d> {
         })
     }
 
-    fn blocks_from(
+    /// Every paragraph of every story with its content; the text of the
+    /// text boxes a drawing holds goes into the drawing's item.
+    fn paragraphs_from(
         &self,
         c: &mut Collector<'_>,
         pieces: &Pieces,
         box_spans: &HashMap<NodeId, Span>,
-    ) -> Result<Vec<Block>, Error> {
-        let t = self.tree(&self.main)?;
-        let mut out = Vec::with_capacity(self.blocks.len());
-        for (index, &(n, id, kind, shared_para_id)) in self.blocks.iter().enumerate() {
-            let text = c
-                .block_spans
-                .get(&n)
-                .map(|&s| pieces.item_text(s, Show::VIEWS))
-                .unwrap_or_default();
-            let mut content = c.content.remove(&n).unwrap_or_default();
+        table_map: &HashMap<usize, usize>,
+    ) -> Result<Vec<Paragraph>, Error> {
+        let raw = std::mem::take(&mut c.paragraphs);
+        let mut out = Vec::with_capacity(raw.len());
+        for (index, p) in raw.into_iter().enumerate() {
+            let mut content = p.content;
             for (i, boxes) in std::mem::take(&mut content.boxes) {
                 let mut all = String::new();
                 for b in boxes {
@@ -430,6 +432,50 @@ impl<'d> Reader<'d> {
                     *text = Some(all);
                 }
             }
+            let t = self.tree(&p.location.part)?;
+            let props = props::paragraph_props(t, p.node)?;
+            let style = self.styles.paragraph_style(props.style.as_deref());
+            out.push(Paragraph {
+                index,
+                style: props.style.clone().or_else(|| style.map(|s| s.id.clone())),
+                style_name: style.map(|s| s.display_name.clone()).or(props.style),
+                text: pieces.item_text(p.span, Show::VIEWS),
+                cell: p.cell.map(|mut r| {
+                    r.table = table_map.get(&r.table).copied().unwrap_or(r.table);
+                    r
+                }),
+                location: p.location,
+                content: content.items,
+                node: p.node,
+            });
+        }
+        Ok(out)
+    }
+
+    fn blocks_from(
+        &self,
+        c: &Collector<'_>,
+        pieces: &Pieces,
+        paragraphs: &[Paragraph],
+    ) -> Result<Vec<Block>, Error> {
+        let t = self.tree(&self.main)?;
+        let by_node: HashMap<NodeId, usize> = paragraphs
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.location.story == StoryKind::Main && p.cell.is_none())
+            .map(|(i, p)| (p.node, i))
+            .collect();
+        let mut out = Vec::with_capacity(self.blocks.len());
+        for (index, &(n, id, kind, shared_para_id)) in self.blocks.iter().enumerate() {
+            let text = c
+                .block_spans
+                .get(&n)
+                .map(|&s| pieces.item_text(s, Show::VIEWS))
+                .unwrap_or_default();
+            let content = by_node
+                .get(&n)
+                .map(|&i| paragraphs[i].content.clone())
+                .unwrap_or_default();
             let mut block = Block {
                 id,
                 shared_para_id,
@@ -442,7 +488,7 @@ impl<'d> Reader<'d> {
                 text,
                 element: None,
                 control: None,
-                content: content.items,
+                content,
                 node: n,
             };
             match kind {
@@ -804,7 +850,10 @@ impl<'p> Cut<'p> {
     }
 }
 
-fn tables_from(raw: Vec<Option<super::collect::TableSpans>>, pieces: &Pieces) -> Vec<Table> {
+fn tables_from(
+    raw: Vec<Option<super::collect::TableSpans>>,
+    pieces: &Pieces,
+) -> (Vec<Table>, HashMap<usize, usize>) {
     let mut out: Vec<Table> = raw
         .into_iter()
         .flatten()
@@ -850,7 +899,7 @@ fn tables_from(raw: Vec<Option<super::collect::TableSpans>>, pieces: &Pieces) ->
                 .collect();
         }
     }
-    out
+    (out, map)
 }
 
 /// A note's text without its own mark, if it has one, and without the
@@ -881,6 +930,7 @@ struct Text {
 /// cost in proportion to the text of the stories it includes.
 pub struct Views {
     blocks: Vec<Block>,
+    paragraphs: Vec<Paragraph>,
     styles: Styles,
     tables: Vec<Table>,
     fields: Vec<Field>,
@@ -910,6 +960,14 @@ impl Views {
     /// text and the content of paragraphs. No cost.
     pub fn blocks(&self) -> &[Block] {
         &self.blocks
+    }
+
+    /// Every paragraph of every story, with its location, the table cell
+    /// that holds it, its style, text and content: the body and its
+    /// tables and content controls, headers and footers, notes, comments,
+    /// and text boxes after the story that holds them. No cost.
+    pub fn paragraphs(&self) -> &[Paragraph] {
+        &self.paragraphs
     }
 
     /// The styles. No cost.

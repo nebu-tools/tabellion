@@ -20,8 +20,9 @@ const INTERNAL: u8 = 70;
     version,
     about = "Build and edit Word documents without Word",
     after_help = "Exit status: 0 on success, 1 if roundtrip finds the copy differs, 2 for a \
-                  wrong command line, 3 if a file cannot be read or written or is not a Word \
-                  document tabellion can read, 70 for an internal error."
+                  wrong command line, 3 if a file cannot be read or written, is not a Word \
+                  document tabellion can read, or holds content that cannot be written where \
+                  asked, 70 for an internal error."
 )]
 struct Cli {
     #[command(subcommand)]
@@ -69,6 +70,35 @@ enum Command {
         #[arg(long)]
         no_text_boxes: bool,
     },
+    /// Insert content from the content model's JSON form.
+    ///
+    /// The place is one of --before, --after or --replace with a locator
+    /// (p:ID, t:ID, #INDEX, heading:TEXT, bookmark:NAME, placeholder:NAME
+    /// or text:TEXT), or --at NAME for the paragraph that holds {{NAME}};
+    /// without one, the content goes at the end of the body. Pictures given
+    /// as files are read relative to the JSON file.
+    #[command(group(clap::ArgGroup::new("place").args(["before", "after", "replace", "at"])))]
+    Insert {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// The content: JSON in the shape crates/nebu-docx/schema/content.json gives.
+        #[arg(long, value_name = "FILE")]
+        content: PathBuf,
+        /// Before the block the locator names.
+        #[arg(long, value_name = "LOCATOR")]
+        before: Option<String>,
+        /// After the block the locator names.
+        #[arg(long, value_name = "LOCATOR")]
+        after: Option<String>,
+        /// Instead of the block the locator names.
+        #[arg(long, value_name = "LOCATOR")]
+        replace: Option<String>,
+        /// Instead of the paragraph that holds {{NAME}}.
+        #[arg(long, value_name = "NAME")]
+        at: Option<String>,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -84,6 +114,7 @@ enum Command {
 #[derive(Clone, Copy, PartialEq, Eq, ValueEnum)]
 pub(crate) enum View {
     Blocks,
+    Paragraphs,
     Styles,
     Tables,
     Fields,
@@ -119,6 +150,79 @@ fn text(file: &Path, options: &TextOptions) -> Result<(), String> {
         .text(options);
     layout::emit(&t);
     Ok(())
+}
+
+struct InsertArgs<'a> {
+    input: &'a Path,
+    output: &'a Path,
+    content: &'a Path,
+    before: &'a Option<String>,
+    after: &'a Option<String>,
+    replace: &'a Option<String>,
+    at: &'a Option<String>,
+}
+
+fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
+    use nebu_docx::{Content, Locator, Place, WriteOptions};
+    let mut doc = open(a.input)?;
+    let json = std::fs::read(a.content)
+        .map_err(|e| format!("cannot read {}: {e}", a.content.display()))?;
+    let content = Content::from_json(&json).map_err(|e| format!("{}: {e}", a.content.display()))?;
+    let at = |e: nebu_docx::Error| format!("{}: {e}", a.input.display());
+    let place = {
+        let mut found = |loc: &str| -> Result<nebu_docx::xml::NodeId, String> {
+            let l: Locator = loc.parse().map_err(|e: nebu_docx::Error| e.to_string())?;
+            Ok(doc.views().map_err(at)?.locate(&l).map_err(at)?.node)
+        };
+        match (a.before, a.after, a.replace, a.at) {
+            (Some(l), ..) => Place::Before(found(l)?),
+            (_, Some(l), ..) => Place::After(found(l)?),
+            (_, _, Some(l), _) => Place::Replace(found(l)?),
+            (.., Some(name)) => {
+                let l = Locator::placeholder(name).map_err(|e| e.to_string())?;
+                Place::Replace(doc.views().map_err(at)?.locate(&l).map_err(at)?.node)
+            }
+            _ => Place::End,
+        }
+    };
+    let dir = a
+        .content
+        .parent()
+        .map(|p| {
+            if p.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                p
+            }
+        })
+        .map(Path::to_path_buf);
+    let opts = WriteOptions::for_content(&content, dir);
+    let done = doc
+        .insert(place, &content.blocks, &opts)
+        .map_err(|e| format!("{}: {e}", a.content.display()))?;
+    doc.save(a.output).map_err(|e| e.to_string())?;
+    let n = content.blocks.len();
+    let mut line = format!(
+        "{}: inserted {n} {} from {}",
+        a.output.display(),
+        if n == 1 { "block" } else { "blocks" },
+        a.content.display()
+    );
+    if !done.styles_added.is_empty() {
+        line.push_str(&format!(
+            "; added the styles {}",
+            done.styles_added.join(", ")
+        ));
+    }
+    if !done.labels.is_empty() {
+        let names: Vec<&str> = done.labels.iter().map(|(l, _)| l.as_str()).collect();
+        line.push_str(&format!("; labels {}", names.join(", ")));
+    }
+    if done.renumbered > 0 {
+        line.push_str(&format!("; renumbered {} later fields", done.renumbered));
+    }
+    println!("{line}");
+    Ok(true)
 }
 
 fn roundtrip(input: &Path, output: &Path) -> Result<bool, String> {
@@ -202,6 +306,23 @@ fn main() -> ExitCode {
                 text(file, &options).map(|_| true)
             }
             Command::Roundtrip { input, output } => roundtrip(input, output),
+            Command::Insert {
+                input,
+                output,
+                content,
+                before,
+                after,
+                replace,
+                at,
+            } => insert(InsertArgs {
+                input,
+                output,
+                content,
+                before,
+                after,
+                replace,
+                at,
+            }),
         }
     };
     match std::panic::catch_unwind(run) {

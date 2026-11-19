@@ -4,6 +4,8 @@
 #   powershell.exe -NoProfile -ExecutionPolicy Bypass -File word.ps1 -Dir DIR
 #
 # DIR holds the pictures (bird.png, heron.png) and receives the documents.
+# -Only names the documents to make, by file name without .docx; without it
+# the script makes them all.
 #
 # Safety: the script starts its Word through tools/word/Word.psm1, which
 # learns the process id of that instance from the instance itself and
@@ -11,7 +13,7 @@
 # to invented values for the documents; Word.psm1 records each option before
 # the first change and puts every one back when the script ends, however
 # it ends.
-param([Parameter(Mandatory)][string]$Dir)
+param([Parameter(Mandatory)][string]$Dir, [string[]]$Only)
 $ErrorActionPreference = 'Stop'
 Import-Module (Join-Path $PSScriptRoot 'Word.psm1') -Force
 
@@ -419,6 +421,92 @@ function Changes {
   Save $doc 'changes.docx'
 }
 
+function Defaults {
+  # Toggle properties in the document defaults. Word's own "Set As
+  # Default" puts bold and italic into the Normal style and leaves
+  # w:docDefaults alone, so the script makes the document in Word, adds bold and
+  # italic to the defaults of its styles part, and has Word open the file
+  # and save it again: the file is Word's, its defaults are not ones Word's
+  # interface makes.
+  $doc = $word.Documents.Add()
+  $s = $doc.Styles.Add('Bold Note', 1); $s.Font.Bold = $true
+  $s = $doc.Styles.Add('Plain Note', 1); $s.Font.Bold = $false
+  $s = $doc.Styles.Add('Based Bold', 1); $s.BaseStyle = 'Bold Note'
+  $s = $doc.Styles.Add('Strong Note', 2); $s.Font.Bold = $true
+  $s = $doc.Styles.Add('Slanted', 2); $s.Font.Italic = $true
+  $s = $doc.Styles.Add('Bold Grid', 3); $s.Font.Bold = $true
+  $cases = @(
+    @('A wren sang in the reeds.', $NORMAL, $null, $null, $null),
+    @('A robin sang on the fence.', 'Bold Note', $null, $null, $null),
+    @('A dunnock fed under the hedge.', $NORMAL, 'Strong Note', $null, $null),
+    @('A teal rested on the pool.', 'Plain Note', $null, $null, $null),
+    @('A heron stood in the shallows.', $NORMAL, $null, $null, $null),
+    @('A swift flew over the marsh.', 'Based Bold', $null, $null, $null),
+    @('A coot dived by the reeds.', 'Bold Note', 'Strong Note', $null, $null),
+    @('A snipe rose from the grass.', $NORMAL, 'Slanted', $null, $null)
+  )
+  Para $doc 'Document defaults' $TITLE | Out-Null
+  $at = @()
+  foreach ($c in $cases) {
+    $r = Para $doc $c[0] $NORMAL
+    $at += ,@($r.Start, $r.End)
+  }
+  for ($i = $cases.Count - 1; $i -ge 0; $i--) {
+    $c = $cases[$i]
+    $r = $doc.Range($at[$i][0], $at[$i][1])
+    $r.Paragraphs.Item(1).Style = $doc.Styles.Item($c[1])
+    $r = $doc.Range($at[$i][0], $at[$i][1])
+    if ($c[2]) { $r.Style = $doc.Styles.Item($c[2]) }
+    if ($c[3]) { $r.Font.($c[3]) = $c[4] }
+  }
+  # A table in a bold table style.
+  $end = $doc.Content.End - 1
+  $tbl = $doc.Tables.Add($doc.Range($end, $end), 1, 2)
+  $tbl.Style = 'Bold Grid'
+  $tbl.Cell(1, 1).Range.Text = 'Wren'
+  $tbl.Cell(1, 2).Range.Text = 'Robin'
+  # A group content control around two paragraphs with a control inside,
+  # made as Word's Developer tab makes one: select, then group. Adding it
+  # to a range that is not selected gives "This is not a valid selection".
+  $g = Para $doc 'Delivery to the north shed.' $NORMAL
+  $g2 = Para $doc 'Payment on delivery.' $NORMAL
+  $pay = $doc.ContentControls.Add(1, $doc.Range($g2.Start, $g2.Start + 7))
+  $pay.Tag = 'delivery:payment'; $pay.Title = 'Payment'
+  $doc.Range($g.Start, $g2.End).Select()
+  $grp = $word.Selection.Range.ContentControls.Add(7)
+  $grp.Tag = 'delivery:group'; $grp.Title = 'Delivery'
+  Para $doc 'The survey ends here.' $NORMAL | Out-Null
+  Scrub $doc 'Document defaults'
+  Save $doc 'defaults-base.docx'
+  # Bold and italic into the defaults.
+  $base = Join-Path $Dir 'defaults-base.docx'
+  Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+  $zip = [IO.Compression.ZipFile]::Open($base, 'Update')
+  try {
+    $e = $zip.GetEntry('word/styles.xml')
+    $rd = New-Object IO.StreamReader($e.Open())
+    try { $xml = $rd.ReadToEnd() } finally { $rd.Close() }
+    $patched = [regex]::Replace($xml, '(<w:rPrDefault><w:rPr><w:rFonts[^>]*/>)', '$1<w:b/><w:bCs/><w:i/><w:iCs/>')
+    if ($patched -eq $xml) { throw 'the styles part has no rPrDefault to add bold to' }
+    $e.Delete()
+    $n = $zip.CreateEntry('word/styles.xml')
+    $wr = New-Object IO.StreamWriter($n.Open(), (New-Object Text.UTF8Encoding($false)))
+    try { $wr.Write($patched) } finally { $wr.Close() }
+  } finally { $zip.Dispose() }
+  # Bold taken off again, now that it is the default: Word writes the
+  # property as off only where it differs from what the text would have.
+  $doc = $word.Documents.Open($base, $false, $false, $false)
+  $doc.Styles.Item('Plain Note').Font.Bold = $false
+  $heron = $doc.Paragraphs.Item(6).Range
+  if (-not $heron.Text.StartsWith('A heron')) { throw "paragraph 6 is not the heron's: $($heron.Text)" }
+  $doc.Range($heron.Start, $heron.End - 1).Font.Bold = $false
+  Scrub $doc 'Document defaults'
+  Save $doc 'defaults.docx'
+  Remove-Item $base
+}
+
+function Wanted($name) { -not $Only -or (@($Only | ForEach-Object { $_ -split ',' }) -contains $name) }
+
 $session = Start-OwnWord -PidFile (Join-Path $Dir 'word.pid')
 $word = $session.Word
 try {
@@ -426,21 +514,22 @@ try {
   $word.DisplayAlerts = 0
   Set-WordOption $session 'Options.UseLocalUserInfo' $true
   As-Author $AUTHOR_A 'WA'
-  Birds
+  if (Wanted 'birds') { Birds }
   Test-ForcedFailure 'word.ps1, after the first document'
-  Parts
-  Recipes 'recipes-de.docx' 1031 'Rezepte aus dem Obstgarten' 'Apfelkuchen' `
+  if (Wanted 'parts') { Parts }
+  if (Wanted 'recipes-de') { Recipes 'recipes-de.docx' 1031 'Rezepte aus dem Obstgarten' 'Apfelkuchen' `
     'Ein einfacher Kuchen mit Äpfeln aus dem eigenen Garten.' `
     @('Mehl', 'Eier', 'Butter') @('Den Teig rühren.', 'Die Äpfel schneiden.', 'Eine Stunde backen.') `
     'Ein Kuchen ist erst fertig, wenn die Küche danach duftet.' 'Tabelle' 'Zutaten für einen Kuchen' `
-    'Säuerliche Sorten eignen sich am besten.'
-  Recipes 'recettes-fr.docx' 1036 'Recettes du verger' 'Tarte aux pommes' `
+    'Säuerliche Sorten eignen sich am besten.' }
+  if (Wanted 'recettes-fr') { Recipes 'recettes-fr.docx' 1036 'Recettes du verger' 'Tarte aux pommes' `
     'Une tarte simple avec des pommes du jardin.' `
     @('Farine', 'Œufs', 'Beurre') @('Préparer la pâte.', 'Couper les pommes.', 'Cuire une heure.') `
     'Une tarte est prête quand la cuisine sent bon.' 'Tableau' 'Ingrédients pour une tarte' `
-    'Les variétés acidulées conviennent le mieux.'
-  Cascade
-  Changes
+    'Les variétés acidulées conviennent le mieux.' }
+  if (Wanted 'cascade') { Cascade }
+  if (Wanted 'changes') { Changes }
+  if (Wanted 'defaults') { Defaults }
 } catch {
   [Console]::Error.WriteLine("word.ps1, line $($_.InvocationInfo.ScriptLineNumber): $($_.Exception.Message)")
   throw
