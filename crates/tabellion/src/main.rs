@@ -142,6 +142,24 @@ enum Command {
         /// The directory to write into, made when missing.
         dir: PathBuf,
     },
+    /// Replace a table from a CSV file.
+    ///
+    /// The target names the table's label: the table under the caption
+    /// that carries the label is replaced by the CSV rows, one row of
+    /// text cells per record. The caption and the table style stay; a
+    /// repeating header row does not carry over.
+    Table {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// The label of the table to replace.
+        #[arg(long, value_name = "LABEL")]
+        target: String,
+        /// The CSV file to read the table from.
+        #[arg(long, value_name = "FILE")]
+        csv: PathBuf,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -408,6 +426,104 @@ fn images(file: &Path, dir: &Path) -> Result<bool, String> {
     Ok(true)
 }
 
+/// True for a `SEQ` field of the table sequence, whatever the case of
+/// its identifier: the writer numbers `SEQ Table` and `SEQ table` as
+/// one sequence.
+fn is_table_seq(field: &nebu_docx::Field) -> bool {
+    field.kind == "SEQ"
+        && field
+            .code
+            .split_whitespace()
+            .nth(1)
+            .is_some_and(|id| id.eq_ignore_ascii_case("Table"))
+}
+
+fn replace_table(input: &Path, output: &Path, target: &str, csv: &Path) -> Result<bool, String> {
+    use nebu_docx::{BlockKind, Content, Locator, Place, WriteOptions, content};
+    let mut doc = open(input)?;
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    let blocks = doc.views().map_err(at)?.blocks().to_vec();
+    // The label lives on the caption paragraph; the table follows it. The
+    // bookmark alone is not enough: figures, headings and equations take
+    // `_Ref_` bookmarks too. Only a `SEQ Table` caption names a table.
+    let mark = format!("bookmark:_Ref_{target}");
+    let label: Locator = mark.parse().map_err(|e: nebu_docx::Error| e.to_string())?;
+    let caption = doc.views().map_err(at)?.locate(&label).map_err(at)?;
+    let (caption_id, caption_index) = (caption.id, caption.index);
+    let is_table_caption = doc
+        .views()
+        .map_err(at)?
+        .fields()
+        .iter()
+        .any(|field| field.location.block.as_ref() == Some(&caption_id) && is_table_seq(field));
+    let table = is_table_caption
+        .then(|| blocks.get(caption_index + 1))
+        .flatten()
+        .filter(|block| block.kind == BlockKind::Table)
+        .ok_or_else(|| format!("{}: no table labelled {target}", input.display()))?;
+    let mut records = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .flexible(true)
+        .from_path(csv)
+        .map_err(|e| format!("cannot read {}: {e}", csv.display()))?;
+    let mut rows = Vec::new();
+    for record in records.records() {
+        let record = record.map_err(|e| format!("cannot read {}: {e}", csv.display()))?;
+        rows.push(record.iter().map(str::to_string).collect::<Vec<_>>());
+    }
+    if rows.is_empty() {
+        return Err(format!("cannot read {}: no rows", csv.display()));
+    }
+    let width = rows[0].len();
+    for (i, row) in rows.iter().enumerate() {
+        if row.len() != width {
+            return Err(format!(
+                "cannot read {}: row {} has {} cells, expected {width}",
+                csv.display(),
+                i + 1,
+                row.len()
+            ));
+        }
+    }
+    let content = Content {
+        blocks: vec![content::Block::Table(content::Table {
+            rows: rows
+                .iter()
+                .map(|row| content::Row {
+                    cells: row
+                        .iter()
+                        .map(|text| {
+                            content::Cell::new(vec![content::Block::Paragraph {
+                                style: None,
+                                align: None,
+                                content: vec![content::Inline::text(text)],
+                            }])
+                        })
+                        .collect(),
+                })
+                .collect(),
+            header_rows: 0,
+            first_column: false,
+            style: table.style.clone(),
+            widths: None,
+            caption: None,
+            label: None,
+        })],
+        table_styles: Vec::new(),
+    };
+    let opts = WriteOptions::for_content(&content, None);
+    doc.insert(Place::Replace(table.node), &content.blocks, &opts)
+        .map_err(|e| format!("{}: {e}", input.display()))?;
+    doc.save(output).map_err(|e| e.to_string())?;
+    println!(
+        "{}: replaced table {target} ({} × {})",
+        output.display(),
+        rows.len(),
+        width
+    );
+    Ok(true)
+}
+
 /// The file name for a package part: its last segment, when that is a
 /// single safe file name on the host. The package layer already refuses
 /// `.` and `..` segments, backslashes and control characters at open;
@@ -568,6 +684,12 @@ fn main() -> ExitCode {
             Command::Fields { input, output } => fields(input, output),
             Command::Images { file, dir } => images(file, dir),
             Command::Tables { file, dir, format } => tables(file, dir, *format),
+            Command::Table {
+                input,
+                output,
+                target,
+                csv,
+            } => replace_table(input, output, target, csv),
             Command::Insert {
                 input,
                 output,
@@ -658,5 +780,47 @@ mod tests {
         assert_eq!(next("image1.png"), "image1.png");
         assert_eq!(next("image1.png"), "image1-2.png");
         assert_eq!(next("image1.png"), "image1-3.png");
+    }
+}
+
+#[cfg(test)]
+mod seq_tests {
+    use super::is_table_seq;
+
+    fn field(code: &str) -> nebu_docx::Field {
+        let kind = code
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_ascii_uppercase();
+        nebu_docx::Field {
+            index: 0,
+            kind,
+            code: code.to_string(),
+            result: String::new(),
+            simple: true,
+            parent: None,
+            location: nebu_docx::Location {
+                story: nebu_docx::StoryKind::Main,
+                part: String::new(),
+                block: None,
+            },
+        }
+    }
+
+    #[test]
+    fn table_sequences_match_in_any_case() {
+        for code in [
+            "SEQ Table",
+            "SEQ Table \\* ARABIC",
+            "SEQ Table \\c",
+            "SEQ table",
+            "seq table",
+        ] {
+            assert!(is_table_seq(&field(code)), "{code}");
+        }
+        for code in ["SEQ", "SEQ Figure", "REF _Ref_tab-sites \\h", "SEQ Tables"] {
+            assert!(!is_table_seq(&field(code)), "{code}");
+        }
     }
 }

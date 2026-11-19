@@ -606,3 +606,277 @@ fn images_disambiguates_drawings_sharing_a_part() {
         std::fs::read(out.join(&names[1])).unwrap()
     );
 }
+
+const LABELLED_TABLE_JSON: &str = r#"{"blocks": [{"type": "table", "header_rows": 1, "caption": [{"type": "text", "text": "Sites."}], "label": "tab-sites", "rows": [{"cells": [{"content": [{"type": "paragraph", "content": [{"type": "text", "text": "site"}]}]}, {"content": [{"type": "paragraph", "content": [{"type": "text", "text": "count"}]}]}]}, {"cells": [{"content": [{"type": "paragraph", "content": [{"type": "text", "text": "North"}]}]}, {"content": [{"type": "paragraph", "content": [{"type": "text", "text": "12"}]}]}]}]}]}"#;
+
+fn labelled_doc(dir: &std::path::Path) -> std::path::PathBuf {
+    let template = dir.join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.join("table.json");
+    std::fs::write(&content, LABELLED_TABLE_JSON).unwrap();
+    let labeled = dir.join("labeled.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        labeled.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    labeled
+}
+
+#[test]
+fn table_replaces_a_labelled_table_from_csv() {
+    let dir = tempfile::tempdir().unwrap();
+    let labeled = labelled_doc(dir.path());
+    let csv = dir.path().join("new.csv");
+    std::fs::write(&csv, "a,b\nc,d\n").unwrap();
+    let out = dir.path().join("replaced.docx");
+    let (code, stdout, stderr) = run(&[
+        "table",
+        labeled.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--csv",
+        csv.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("replaced table tab-sites (2 × 2)"),
+        "{stdout}"
+    );
+    // The caption stays; the body round-trips through extract.
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("Table 1: Sites."), "{text}");
+    let back = dir.path().join("back");
+    let (code, _, stderr) = run(&["tables", out.to_str().unwrap(), back.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let bytes = std::fs::read(back.join("table-1.csv")).unwrap();
+    let rows: Vec<Vec<String>> = csv::ReaderBuilder::new()
+        .has_headers(false)
+        .from_reader(bytes.as_slice())
+        .records()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap()
+        .iter()
+        .map(|record| record.iter().map(str::to_string).collect())
+        .collect();
+    assert_eq!(rows, [["a", "b"], ["c", "d"]]);
+}
+
+#[test]
+fn table_refuses_what_it_cannot_replace() {
+    let dir = tempfile::tempdir().unwrap();
+    let labeled = labelled_doc(dir.path());
+    let out = dir.path().join("out.docx");
+    let csv = dir.path().join("new.csv");
+    std::fs::write(&csv, "a,b\nc,d\n").unwrap();
+    // No such label.
+    let (code, _, stderr) = run(&[
+        "table",
+        labeled.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-nowhere",
+        "--csv",
+        csv.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no block matches"), "{stderr}");
+    // A ragged file names the row.
+    let ragged = dir.path().join("ragged.csv");
+    std::fs::write(&ragged, "a,b\nc\n").unwrap();
+    let (code, _, stderr) = run(&[
+        "table",
+        labeled.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--csv",
+        ragged.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("row 2 has 1 cells, expected 2"), "{stderr}");
+    // An empty file has no rows.
+    let empty = dir.path().join("empty.csv");
+    std::fs::write(&empty, "").unwrap();
+    let (code, _, stderr) = run(&[
+        "table",
+        labeled.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--csv",
+        empty.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no rows"), "{stderr}");
+    // A missing file never reaches the document.
+    let (code, _, stderr) = run(&[
+        "table",
+        labeled.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--csv",
+        dir.path().join("no-such.csv").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("cannot read"), "{stderr}");
+    // A label on a figure names no table.
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "A wren."}], "label": "fig-wren"}]}"#,
+    )
+    .unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        labeled.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+        "--at",
+        "author",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let (code, _, stderr) = run(&[
+        "table",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--csv",
+        csv.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no table labelled fig-wren"), "{stderr}");
+}
+
+#[test]
+fn table_refuses_a_label_that_names_no_table() {
+    let dir = tempfile::tempdir().unwrap();
+    // A labelled figure followed by an unlabelled table: the bookmark
+    // resolves, but no table carries the label.
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "A wren."}], "label": "fig-wren"}]}"#,
+    )
+    .unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    std::fs::write(
+        dir.path().join("plain.json"),
+        r#"{"blocks": [{"type": "table", "rows": [{"cells": [{"content": [{"type": "paragraph", "content": [{"type": "text", "text": "x"}]}]}]}]}]}"#,
+    )
+    .unwrap();
+    let both = dir.path().join("both.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        figured.to_str().unwrap(),
+        both.to_str().unwrap(),
+        "--content",
+        dir.path().join("plain.json").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let csv = dir.path().join("new.csv");
+    std::fs::write(&csv, "a,b\n").unwrap();
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "table",
+        both.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--csv",
+        csv.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no table labelled fig-wren"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn table_accepts_a_lowercase_seq_caption() {
+    let dir = tempfile::tempdir().unwrap();
+    let labeled = labelled_doc(dir.path());
+    let lowered = dir.path().join("lowered.docx");
+    {
+        let mut doc = nebu_docx::Document::open(&labeled).unwrap();
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let root = tree.root_element();
+        let body = tree
+            .child(root, Some(nebu_docx::ns::W), "body")
+            .unwrap()
+            .expect("a body");
+        let mut changed = 0;
+        let mut blips: Vec<_> = Vec::new();
+        for id in tree.descendants(body).unwrap() {
+            if tree
+                .is(id, Some(nebu_docx::ns::W), "fldSimple")
+                .unwrap_or(false)
+            {
+                blips.push(id);
+            }
+        }
+        for id in blips {
+            let instr = tree
+                .attribute(id, Some(nebu_docx::ns::W), "instr")
+                .unwrap()
+                .map(|instr| instr.into_owned());
+            if let Some(instr) = instr.filter(|instr| instr.contains("SEQ Table")) {
+                tree.set_attribute(
+                    id,
+                    Some(nebu_docx::ns::W),
+                    "instr",
+                    &instr.replace("SEQ Table", "seq table"),
+                )
+                .unwrap();
+                changed += 1;
+            }
+        }
+        assert!(changed > 0, "a SEQ Table caption");
+        doc.save(&lowered).unwrap();
+    }
+    let csv = dir.path().join("new.csv");
+    std::fs::write(&csv, "a,b\n").unwrap();
+    let out = dir.path().join("out.docx");
+    let (code, stdout, stderr) = run(&[
+        "table",
+        lowered.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--csv",
+        csv.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("replaced table tab-sites (1 × 2)"),
+        "{stdout}"
+    );
+}
