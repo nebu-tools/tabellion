@@ -8,13 +8,13 @@
 //! naming the argument and the line where it stands: styling stays
 //! with the document template.
 
-use nebu_docx::content::{Align, Block, Cell, Inline, Marks, Row, Table};
+use nebu_docx::content::{Align, Block, Cell, Inline, Row, Table};
 use typst_syntax::{
     Span,
     ast::{self, AstNode},
 };
 
-use super::{Cx, Error, convert_flow, inline_markup, unsupported, unsupported_at};
+use super::{Cx, Error, convert_flow, unsupported, unsupported_at};
 
 /// Whether a call builds a table or a figure around one, or errors
 /// naming why it does not.
@@ -43,15 +43,24 @@ fn field_table(call: ast::FuncCall) -> Option<(String, String)> {
     }
 }
 
-/// A `#table`, `#figure` or dotted table call as a block. The label
-/// stays empty for the caller, which reads a sibling `<label>`.
-pub(crate) fn convert_tableish(cx: &Cx, call: ast::FuncCall) -> Result<Block, Error> {
+/// A `#table`, `#figure` or dotted table call as a block. The caller
+/// passes a sibling `<label>` if one follows; what it attaches to
+/// depends on the call.
+pub(crate) fn convert_tableish(
+    cx: &Cx,
+    call: ast::FuncCall,
+    sibling: Option<(String, typst_syntax::Span)>,
+) -> Result<Block, Error> {
     match call.callee() {
         ast::Expr::Ident(id) if id.as_str() == "table" => {
-            Ok(Block::Table(convert_table(cx, call)?))
+            let mut table = convert_table(cx, call)?;
+            if let Some((name, _)) = sibling {
+                table.label = Some(name);
+            }
+            Ok(Block::Table(table))
         }
         ast::Expr::Ident(id) if id.as_str() == "figure" => {
-            Ok(Block::Table(convert_figure(cx, call)?))
+            Ok(crate::figure::convert_figure(cx, call, sibling)?)
         }
         ast::Expr::Ident(id) if id.as_str() == "grid" => {
             Err(unsupported(cx, ast::Expr::FuncCall(call), "`#grid`"))
@@ -75,7 +84,7 @@ struct CellSpec {
 }
 
 /// A `#table` call as a content table.
-fn convert_table(cx: &Cx, call: ast::FuncCall) -> Result<Table, Error> {
+pub(crate) fn convert_table(cx: &Cx, call: ast::FuncCall) -> Result<Table, Error> {
     let args: Vec<ast::Arg> = call.args().items().collect();
     let mut columns: Option<Columns> = None;
     let mut align: Option<Align> = None;
@@ -382,7 +391,7 @@ fn paragraph(content: Vec<Inline>) -> Block {
 }
 
 /// A short name for a cell-body error.
-fn describeish(expr: ast::Expr) -> String {
+pub(crate) fn describeish(expr: ast::Expr) -> String {
     match expr {
         ast::Expr::FuncCall(call) => match call.callee() {
             ast::Expr::Ident(ident) => format!("`#{}`", ident.as_str()),
@@ -505,86 +514,6 @@ fn lay_out(
         caption: None,
         label: None,
     })
-}
-
-/// A `#figure` around a table: the caption and an optional label.
-fn convert_figure(cx: &Cx, call: ast::FuncCall) -> Result<Table, Error> {
-    let mut body: Option<ast::Expr> = None;
-    let mut caption: Option<Vec<Inline>> = None;
-    let mut label: Option<String> = None;
-    for arg in call.args().items() {
-        match arg {
-            ast::Arg::Pos(expr) => {
-                if body.is_some() {
-                    return Err(unsupported(cx, expr, "a figure with two bodies"));
-                }
-                body = Some(expr);
-            }
-            ast::Arg::Named(named) if named.name().as_str() == "caption" => match named.expr() {
-                ast::Expr::ContentBlock(block) => {
-                    let mut content = Vec::new();
-                    inline_markup(
-                        cx,
-                        block.body(),
-                        &mut content,
-                        Marks::default(),
-                        "a caption",
-                    )?;
-                    caption = Some(content);
-                }
-                ast::Expr::Str(s) => {
-                    caption = Some(vec![Inline::text(&s.get())]);
-                }
-                _ => {
-                    return Err(unsupported_at(cx, named.span(), "a computed caption"));
-                }
-            },
-            ast::Arg::Named(named) if named.name().as_str() == "label" => {
-                if let ast::Expr::Label(l) = named.expr() {
-                    label = Some(l.get().to_string());
-                } else {
-                    return Err(unsupported_at(cx, named.span(), "a computed label"));
-                }
-            }
-            ast::Arg::Named(named) => {
-                return Err(unsupported_at(
-                    cx,
-                    named.span(),
-                    &format!("a `{}` figure argument", named.name().as_str()),
-                ));
-            }
-            ast::Arg::Spread(_) => {
-                return Err(unsupported(
-                    cx,
-                    ast::Expr::FuncCall(call),
-                    "spread figure arguments",
-                ));
-            }
-        }
-    }
-    let Some(body) = body else {
-        return Err(unsupported(
-            cx,
-            ast::Expr::FuncCall(call),
-            "an empty figure",
-        ));
-    };
-    let ast::Expr::FuncCall(inner) = body else {
-        return Err(unsupported(cx, body, "a figure around content"));
-    };
-    if !matches!(inner.callee(), ast::Expr::Ident(id) if id.as_str() == "table") {
-        return Err(unsupported(
-            cx,
-            body,
-            &format!("a figure around {}", describeish(body)),
-        ));
-    }
-    let mut table = convert_table(cx, inner)?;
-    table.caption = caption;
-    if label.is_some() {
-        table.label = label;
-    }
-    Ok(table)
 }
 
 #[cfg(test)]
@@ -734,7 +663,11 @@ mod tests {
                 1,
                 "a `placement` figure argument",
             ),
-            ("#figure(image(\"p.png\"))\n", 1, "a figure around `#image`"),
+            (
+                "#figure(image(\"p.png\"), placement: top)\n",
+                1,
+                "a `placement` figure argument",
+            ),
         ] {
             let err = parse(source).unwrap_err();
             assert_eq!(
