@@ -27,6 +27,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      # extendr links R, so the Windows test build needs R present.
+      - uses: r-lib/actions/setup-r@v2
+        if: matrix.os == 'windows-2025'
+        with:
+          r-version: release
       - run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --all-targets
@@ -40,6 +45,8 @@ jobs:
       - uses: r-lib/actions/setup-r@v2
         with:
           r-version: release
+      # Headers for the source installs of testthat's and curl's dependencies.
+      - run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libuv1-dev
       - run: rustup toolchain install stable --profile minimal && rustup default stable
       - uses: Swatinem/rust-cache@v2
         with:
