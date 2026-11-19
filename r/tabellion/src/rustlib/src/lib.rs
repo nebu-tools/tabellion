@@ -479,7 +479,14 @@ mod tests {
         let mut doc = open_docx(input.to_str().unwrap()).unwrap();
         let headers = vec!["site".to_string()];
         let columns = vec![vec![Some("A".to_string())]];
-        add_table(&mut doc, &headers, &columns, Some("Counts."), Some("tab-counts")).unwrap();
+        add_table(
+            &mut doc,
+            &headers,
+            &columns,
+            Some("Counts."),
+            Some("tab-counts"),
+        )
+        .unwrap();
         // The writer numbers captions at insert, so a refresh finds
         // nothing stale but still reads every field cleanly.
         let changed = refresh_fields(&mut doc).unwrap();
