@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/nebu-docx", "crates/tabellion"]
+members = ["crates/nebu-docx", "crates/tabellion", "crates/tabellion-typst"]
 exclude = ["fuzz"]
 
 [workspace.package]

@@ -259,6 +259,42 @@ fn fields_updates_results_and_reports_the_count() {
 }
 
 #[test]
+fn insert_takes_typst_source() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let typ = dir.path().join("part.typ");
+    std::fs::write(
+        &typ,
+        "= Methods\n\nWe measured *growth*.\n\n- first\n- second\n",
+    )
+    .unwrap();
+    let (out_s, typ_s) = (out.display().to_string(), typ.display().to_string());
+    let (code, stdout, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("inserted 3 blocks"), "{stdout}");
+    let (_, text, _) = run(&["text", &out_s]);
+    for line in ["Methods", "We measured growth.", "first", "second"] {
+        assert!(text.contains(line), "{line}: {text}");
+    }
+    // What has no Word form is one line on stderr with status 3.
+    std::fs::write(&typ, "#table(columns: 2, [a])\n").unwrap();
+    let (code, _, err) = run(&["insert", SAMPLE, &out_s, "--typst", &typ_s]);
+    assert_eq!(code, Some(3), "{err}");
+    assert!(err.contains("has no Word form"), "{err}");
+    // The two sources exclude each other: a wrong command line is 2.
+    let (code, _, _) = run(&[
+        "insert",
+        SAMPLE,
+        &out_s,
+        "--content",
+        "c.json",
+        "--typst",
+        &typ_s,
+    ]);
+    assert_eq!(code, Some(2));
+}
+
+#[test]
 fn insert_takes_a_place_and_reports_errors_with_a_status() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.docx");

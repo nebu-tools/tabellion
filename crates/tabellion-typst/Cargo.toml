@@ -1,0 +1,16 @@
+[package]
+name = "tabellion-typst"
+description = "Typst source as content for Word documents"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+nebu-docx.workspace = true
+typst-syntax = "0.15"
+thiserror.workspace = true
+
+[dev-dependencies]
+nebu-docx.workspace = true
