@@ -20,7 +20,11 @@ $(RUSTLIB): cargo-force
 	@set -e; \
 	rustc --version; \
 	if [ -f rust/vendor.tar.xz ] || [ -d rust/vendor ]; then \
-	    if [ ! -d rust/vendor ]; then tar -xJf rust/vendor.tar.xz -C rust; fi; \
+	    if [ ! -d rust/vendor ]; then \
+	        rm -rf rust/vendor.tmp; mkdir -p rust/vendor.tmp; \
+	        tar -xJf rust/vendor.tar.xz -C rust/vendor.tmp; \
+	        mv rust/vendor.tmp/vendor rust/vendor; rmdir rust/vendor.tmp; \
+	    fi; \
 	    mkdir -p .cargo; \
 	    cp rust/vendor-config.toml .cargo/config.toml; \
 	elif [ -d rust/local ]; then \

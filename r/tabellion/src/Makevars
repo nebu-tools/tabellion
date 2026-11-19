@@ -1,5 +1,6 @@
 OBJECTS = entrypoint.o
 RUSTLIB = rustlib/target/release/libtabellion.a
-PKG_LIBS = $(RUSTLIB) -lgcc_s -lutil -lrt -lpthread -lm -ldl
 
+# Platform link flags, written by configure.
+include Makevars.platform
 include Makevars.rust

@@ -215,7 +215,7 @@ pointer to `--help`.
 
 ## Build and test
 
-You need Rust 1.88 or later.
+You need Rust 1.92 or later.
 
 ```sh
 cargo build --release
