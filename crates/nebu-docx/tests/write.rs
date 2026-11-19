@@ -1296,6 +1296,909 @@ fn tracked_insertion_marks_new_blocks_as_revisions() {
 }
 
 #[test]
+fn update_fields_fixes_stale_results_anywhere() {
+    // Two captions written fresh, then the first aged to a wrong number:
+    // a whole-document update numbers both again, with no insertion.
+    let two = content(json!([
+        {"type": "table", "caption": ["Dry"], "label": "tab-dry",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["x"]}]}]}]},
+        {"type": "table", "caption": ["Wet"], "label": "tab-wet",
+         "rows": [{"cells": [{"content": [{"type": "paragraph", "content": ["y"]}]}]}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &two.blocks, &WriteOptions::default())
+        .unwrap();
+    let bytes = doc.to_bytes().unwrap();
+    let mut files = support::entries(&bytes);
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let mut xml = String::from_utf8(files[i].1.clone()).unwrap();
+    let mark = xml.find("_Ref_tab-dry").expect("the label bookmark");
+    let at = mark + xml[mark..].find(">1</w:t>").expect("the cached number");
+    xml.replace_range(at + 1..at + 2, "7");
+    files[i].1 = xml.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    let n = doc.update_fields().unwrap();
+    assert!(n >= 1, "stale fields were not reported");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let text = doc.views().unwrap().text(&Default::default());
+    assert!(text.contains("Table 1: Dry"), "{text}");
+    assert!(text.contains("Table 2: Wet"), "{text}");
+    assert!(!text.contains("Table 7"), "{text}");
+    // A second pass finds nothing stale.
+    let n = doc.update_fields().unwrap();
+    assert_eq!(n, 0);
+}
+
+#[test]
+fn update_fields_with_nothing_stale_changes_nothing() {
+    let mut doc = Document::from_bytes(corpus("birds.docx")).unwrap();
+    let before = doc.to_bytes().unwrap();
+    let n = doc.update_fields().unwrap();
+    assert_eq!(n, 0, "a Word-made document should already agree");
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[test]
+fn update_fields_fixes_a_stale_ref_result() {
+    // Ordinary bookmarks resolve too, and a stale REF is rewritten even
+    // when the bookmark text itself never changed.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"50\" w:name=\"mytarget\"/><w:r><w:t>Target text</w:t></w:r><w:bookmarkEnd w:id=\"50\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF mytarget \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"51\" w:name=\"empty\"/><w:bookmarkEnd w:id=\"51\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF empty \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let n = doc.update_fields().unwrap();
+    assert!(n >= 2, "stale REF results were not reported");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let result = |code: &str| {
+        v.fields()
+            .iter()
+            .find(|f| f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(result("REF mytarget"), "Target text");
+    assert_eq!(result("REF empty"), "");
+    // A second pass finds nothing stale.
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_leaves_switched_refs_alone() {
+    // Switches change what a REF result means; only a bare cross-reference
+    // is rewritten.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"52\" w:name=\"kept\"/><w:r><w:t>Kept</w:t></w:r><w:bookmarkEnd w:id=\"52\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF kept \\h \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF kept \\* MERGEFORMAT \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let before = doc.to_bytes().unwrap();
+    let n = doc.update_fields().unwrap();
+    assert_eq!(n, 0, "switched REFs must keep their results");
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    let mut doc = Document::from_bytes(before).unwrap();
+    for f in doc.views().unwrap().fields() {
+        if f.kind == "REF" && f.code.contains("kept") {
+            assert_eq!(f.result, "WRONG", "{f:?}");
+        }
+    }
+}
+
+#[test]
+fn update_fields_restarts_chapter_sequences_at_headings() {
+    // Each field's own level governs it: figures restart at Heading 1,
+    // tables at Heading 2, and neither resets the other.
+    let c = content(json!([
+        {"type": "heading", "level": 1, "content": ["Part one"]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1", "result": "9"}]},
+        {"type": "heading", "level": 2, "content": ["Detail"]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1", "result": "9"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Table \\s 2", "result": "9"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Table \\s 2", "result": "9"}]},
+        {"type": "heading", "level": 2, "content": ["More detail"]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Table \\s 2", "result": "9"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1", "result": "9"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 2", "result": "9"}]},
+        {"type": "heading", "level": 2, "content": ["Deep"]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1", "result": "9"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 2", "result": "9"}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let n = doc.update_fields().unwrap();
+    assert!(n >= 4, "restarted sequences were not reported");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let mut numbers = |id: &str| {
+        doc.views()
+            .unwrap()
+            .fields()
+            .iter()
+            .filter(|f| f.kind == "SEQ" && f.code.contains(id))
+            .map(|f| f.result.clone())
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        numbers("Figure"),
+        vec!["1", "2", "3", "1", "4", "1"],
+        "{:?}",
+        numbers("Figure")
+    );
+    assert_eq!(
+        numbers("Table"),
+        vec!["1", "2", "1"],
+        "{:?}",
+        numbers("Table")
+    );
+}
+
+#[test]
+fn update_fields_resolves_nested_forward_references() {
+    // The outer REF comes before the bookmark it names, and that
+    // bookmark holds another stale REF: one update refreshes both.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF outer \"><w:r><w:t>WRONG-OUTER</w:t></w:r></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"70\" w:name=\"outer\"/><w:r><w:t> Bee </w:t></w:r><w:fldSimple w:instr=\" REF inner \"><w:r><w:t>WRONG-INNER</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"70\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"71\" w:name=\"inner\"/><w:r><w:t>Sea</w:t></w:r><w:bookmarkEnd w:id=\"71\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let n = doc.update_fields().unwrap();
+    assert_eq!(n, 2, "two fields change, counted once each");
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let mut result = |code: &str| {
+        doc.views()
+            .unwrap()
+            .fields()
+            .iter()
+            .find(|f| f.kind == "REF" && f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(result("REF inner"), "Sea");
+    assert_eq!(result("REF outer"), " Bee Sea");
+    // A further pass finds nothing stale.
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_resolves_a_chain_of_forward_references() {
+    // A -> B -> C -> D, each REF sitting inside its bookmark and naming
+    // the next one, D holding literal text. One call resolves all three
+    // caches; a second call finds nothing stale.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"90\" w:name=\"chn-a\"/><w:r><w:t>a</w:t></w:r><w:fldSimple w:instr=\" REF chn-b \"><w:r><w:t>0A</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"90\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"91\" w:name=\"chn-b\"/><w:r><w:t>b</w:t></w:r><w:fldSimple w:instr=\" REF chn-c \"><w:r><w:t>0B</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"91\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"92\" w:name=\"chn-c\"/><w:r><w:t>c</w:t></w:r><w:fldSimple w:instr=\" REF chn-d \"><w:r><w:t>0C</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"92\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"93\" w:name=\"chn-d\"/><w:r><w:t>d</w:t></w:r><w:bookmarkEnd w:id=\"93\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 3);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let mut result = |code: &str| {
+        doc.views()
+            .unwrap()
+            .fields()
+            .iter()
+            .find(|f| f.kind == "REF" && f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(result("REF chn-d"), "d");
+    assert_eq!(result("REF chn-c"), "cd");
+    assert_eq!(result("REF chn-b"), "bcd");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_resolves_bookmarks_inside_simple_caches() {
+    // A bookmark wholly inside a simple field's cached result still
+    // resolves: the cached text is split around it instead of
+    // collapsing the whole subtree into one event.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"98\" w:name=\"outer2\"/><w:r><w:t>See Deep</w:t></w:r><w:bookmarkEnd w:id=\"98\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF outer2 \"><w:r><w:t>See </w:t></w:r><w:bookmarkStart w:id=\"99\" w:name=\"inner2\"/><w:r><w:t>Deep</w:t></w:r><w:bookmarkEnd w:id=\"99\"/></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF inner2 \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF inner2"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "Deep");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_freezes_early_closing_self_references() {
+    // The REF's result holds bookmark A around x, but A closes before
+    // the field's end marker, so end-position tracking misses the
+    // self-loop. Content-based edges catch it: the cache stays as it
+    // is instead of growing on every update.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"96\" w:name=\"selfmark\"/><w:r><w:t>x</w:t></w:r><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF selfmark </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>STALE</w:t></w:r><w:bookmarkEnd w:id=\"96\"/><w:r><w:t>y</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF selfmark"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "STALEy");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_stops_on_cyclic_references() {
+    // Mutually referencing bookmarks never settle: the update leaves
+    // their caches unchanged instead of rewriting forever, and a rerun
+    // finds nothing to do.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"80\" w:name=\"cyc-a\"/><w:r><w:t>a</w:t></w:r><w:fldSimple w:instr=\" REF cyc-b \"><w:r><w:t>0</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"80\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"81\" w:name=\"cyc-b\"/><w:r><w:t>b</w:t></w:r><w:fldSimple w:instr=\" REF cyc-a \"><w:r><w:t>0</w:t></w:r></w:fldSimple><w:bookmarkEnd w:id=\"81\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let mut doc = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    for code in ["REF cyc-a", "REF cyc-b"] {
+        let result = doc
+            .views()
+            .unwrap()
+            .fields()
+            .iter()
+            .find(|f| f.kind == "REF" && f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default();
+        assert_eq!(result, "0", "{code}");
+    }
+    valid(&doc.to_bytes().unwrap());
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_splits_a_shared_run_at_the_end_marker() {
+    // Begin, instruction and end share one run and there is no result
+    // yet: the insertion materializes a separator so the result lands
+    // inside the field, and later updates find a single cached copy.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"82\" w:name=\"samerun\"/><w:r><w:t>Solo</w:t></w:r><w:bookmarkEnd w:id=\"82\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/><w:instrText xml:space=\"preserve\"> REF samerun </w:instrText><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // The insertion pass does not follow plain bookmarks, so the
+    // whole-document pass materializes the result: once, with a
+    // separator, readable on the next pass.
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF samerun"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "Solo");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_splits_a_shared_run_with_a_separator() {
+    // Begin, instruction, separator and end share one run and there is
+    // no cached result yet: splitting at the end marker still lands the
+    // new result inside the field instead of before the whole run.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"84\" w:name=\"shared\"/><w:r><w:t>Solo</w:t></w:r><w:bookmarkEnd w:id=\"84\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/><w:instrText xml:space=\"preserve\"> REF shared </w:instrText><w:fldChar w:fldCharType=\"separate\"/><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF shared"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "Solo");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_tracks_each_end_marker_in_a_shared_run() {
+    // Two sibling fields share one run with no cached result: each split
+    // finds its own end marker where it currently is, so the second
+    // result lands inside the second field, not before the first.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"90\" w:name=\"firstm\"/><w:r><w:t>One</w:t></w:r><w:bookmarkEnd w:id=\"90\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"91\" w:name=\"secondm\"/><w:r><w:t>Two</w:t></w:r><w:bookmarkEnd w:id=\"91\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/><w:instrText xml:space=\"preserve\"> REF firstm </w:instrText><w:fldChar w:fldCharType=\"separate\"/><w:fldChar w:fldCharType=\"end\"/><w:fldChar w:fldCharType=\"begin\"/><w:instrText xml:space=\"preserve\"> REF secondm </w:instrText><w:fldChar w:fldCharType=\"separate\"/><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 2);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let mut result = |code: &str| {
+        doc.views()
+            .unwrap()
+            .fields()
+            .iter()
+            .find(|f| f.kind == "REF" && f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default()
+    };
+    assert_eq!(result("REF firstm"), "One");
+    assert_eq!(result("REF secondm"), "Two");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_keeps_formatting_after_a_split_end() {
+    // The text after the end marker keeps the run's formatting when a
+    // shared run is split: the tail carries a copy of the run properties.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"86\" w:name=\"fmtmark\"/><w:r><w:t>See</w:t></w:r><w:bookmarkEnd w:id=\"86\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:rPr><w:b/></w:rPr><w:fldChar w:fldCharType=\"begin\"/><w:instrText xml:space=\"preserve\"> REF fmtmark </w:instrText><w:fldChar w:fldCharType=\"separate\"/><w:fldChar w:fldCharType=\"end\"/><w:t>Bold tail</w:t></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let xml = String::from_utf8(support::entry(&out, "word/document.xml")).unwrap();
+    // "Bold tail" must sit in a run that carries the bold property.
+    let at = xml.find("Bold tail").expect("the tail text");
+    let run = xml[..at].rfind("<w:r").expect("its run");
+    assert!(
+        xml[run..at].contains("w:b"),
+        "the split tail lost its formatting"
+    );
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_uses_the_write_anchor_for_cycles() {
+    // The first cached run sits outside the target while a later cached
+    // run sits inside it: the rewrite retains only the first, so there
+    // is no self-cycle to freeze and the stale cache gets fixed.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"87\" w:name=\"anch\"/><w:r><w:t>Kept</w:t></w:r><w:bookmarkEnd w:id=\"87\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF anch </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>OUT</w:t></w:r><w:bookmarkStart w:id=\"88\" w:name=\"anch\"/><w:r><w:t>IN</w:t></w:r><w:bookmarkEnd w:id=\"88\"/><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_projects_seq_numbers_inside_closing_bookmarks() {
+    // A bookmark wraps the cached number of a simple SEQ field and
+    // closes before the field's end: the new number is projected where
+    // the cached text lives, so a REF to the bookmark resolves.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" SEQ projmark \\* ARABIC \"><w:bookmarkStart w:id=\"85\" w:name=\"projmark\"/><w:r><w:t>9</w:t></w:r><w:bookmarkEnd w:id=\"85\"/></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF projmark \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // The insertion pass numbers the SEQ; the whole-document pass
+    // carries that number into the bookmark and on to the REF.
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let number = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "SEQ" && f.code.contains("projmark"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    let reference = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF projmark"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(number, "1");
+    assert_eq!(reference, "1");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_matches_bookmark_case_in_complex_anchors() {
+    // Complex REF fields cycle through an uppercase bookmark: the
+    // first-text anchor is lowercased like everywhere else, so the
+    // cycle is seen and both caches stay frozen.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"93\" w:name=\"UPPER\"/><w:r><w:t>a</w:t></w:r><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF lower </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>0</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r><w:bookmarkEnd w:id=\"93\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"94\" w:name=\"lower\"/><w:r><w:t>b</w:t></w:r><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF UPPER </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>0</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r><w:bookmarkEnd w:id=\"94\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    for code in ["REF lower", "REF UPPER"] {
+        let result = doc
+            .views()
+            .unwrap()
+            .fields()
+            .iter()
+            .find(|f| f.kind == "REF" && f.code.contains(code))
+            .map(|f| f.result.clone())
+            .unwrap_or_default();
+        assert_eq!(result, "0", "{code}");
+    }
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_orders_projected_numbers_before_nested_fields() {
+    // A bookmark holds a complex SEQ whose cached number is followed by
+    // a nested DATE field: the projected number belongs where the cached
+    // number stands, so a REF reads "1X", not "X1". The writer already
+    // rewrites in place; a second update reporting nothing proves the
+    // model agrees with it.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"95\" w:name=\"orderm\"/><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> SEQ OrderFig </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>9</w:t></w:r><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> DATE </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>X</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r><w:bookmarkEnd w:id=\"95\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF orderm </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>STALE</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // The insertion pass numbers the SEQ; the whole-document pass
+    // carries that number into the bookmark and on to the REF.
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    // The bookmark itself shows the number before the nested field.
+    let xml = String::from_utf8(support::entry(&out, "word/document.xml")).unwrap();
+    let start = xml
+        .find("<w:bookmarkStart w:id=\"95\"")
+        .expect("bookmark start");
+    let end = xml[start..]
+        .find("<w:bookmarkEnd w:id=\"95\"/>")
+        .expect("bookmark end")
+        + start;
+    let region = &xml[start..end];
+    let one = region.find(">1</w:t>").expect("the number");
+    let ex = region.find(">X</w:t>").expect("the nested field");
+    assert!(one < ex, "the number stands before the nested field");
+    let mut doc = Document::from_bytes(out).unwrap();
+    let reference = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF orderm"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(reference, "1X");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_ignores_separators_before_the_first_number() {
+    // A bookmark wraps a leading cached tab but closes before the
+    // cached number: the tab is a separator the rewrite detaches, so
+    // it must not claim the projected number. The REF clears instead
+    // of reading a number that is no longer in its target.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"96\" w:name=\"leadtab\"/><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> SEQ LeadFig \\s 1 </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:tab/></w:r><w:bookmarkEnd w:id=\"96\"/><w:r><w:t>9</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF leadtab </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>STALE</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // The `\\s` sequence is not numbered on insertion, so the stale
+    // tab survives until the whole-document pass detaches it.
+    assert_eq!(doc.update_fields().unwrap(), 2);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let reference = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF leadtab"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert!(reference.is_empty(), "cleared, not {reference:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_ignores_simple_separators_before_the_first_number() {
+    // The same leading-tab shape in a simple field: the buffered text
+    // is split at the first `w:t`, so the tab segment cannot claim
+    // the projected number either.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" SEQ LeadFig2 \\s 1 \"><w:bookmarkStart w:id=\"97\" w:name=\"leadtab2\"/><w:r><w:tab/></w:r><w:bookmarkEnd w:id=\"97\"/><w:r><w:t>9</w:t></w:r></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF leadtab2 \"><w:r><w:t>STALE</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 2);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let reference = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF leadtab2"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert!(reference.is_empty(), "cleared, not {reference:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_projects_at_the_first_text_on_insertion() {
+    // A `_Ref` bookmark is tracked even in the single insertion pass,
+    // which runs no fixpoint: a leading tab must not claim the number
+    // there either. The REF is already clear in the inserted document,
+    // so the whole-document pass finds nothing to do.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"98\" w:name=\"_RefLead\"/><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> SEQ LeadFig3 </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:tab/></w:r><w:bookmarkEnd w:id=\"98\"/><w:r><w:t>0</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF _RefLead </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>STALE</w:t></w:r><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let number = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "SEQ" && f.code.contains("LeadFig3"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(number, "1");
+    let reference = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF _RefLead"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert!(reference.is_empty(), "cleared, not {reference:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_projects_empty_first_text_before_the_bookmark() {
+    // A simple SEQ whose first `w:t` is empty claims the projection at
+    // that empty text, before the tracked bookmark opens around the
+    // later `w:t`. The writer puts the number in the first `w:t` and
+    // removes the later one, so the REF is already clear after the
+    // single insertion pass.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" SEQ LeadFig4 \"><w:r><w:t/></w:r><w:bookmarkStart w:id=\"99\" w:name=\"_RefEmpty\"/><w:r><w:t>9</w:t></w:r><w:bookmarkEnd w:id=\"99\"/></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF _RefEmpty \"><w:r><w:t>STALE</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let number = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "SEQ" && f.code.contains("LeadFig4"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(number, "1");
+    let reference = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF _RefEmpty"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert!(reference.is_empty(), "cleared, not {reference:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_does_not_freeze_writes_outside_the_target() {
+    // The cached result sits wholly before the bookmark it names; only
+    // the field's end marker lies inside. The rewrite touches nothing
+    // inside the bookmark, so there is no self-cycle to freeze. The
+    // cache is aged after insertion so the whole-document pass, not
+    // the insertion, decides.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF after </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>New</w:t></w:r><w:bookmarkStart w:id=\"83\" w:name=\"after\"/><w:r><w:fldChar w:fldCharType=\"end\"/></w:r><w:r><w:t>New</w:t></w:r><w:bookmarkEnd w:id=\"83\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    // Age only the cached result, not the bookmark text.
+    let bytes = doc.to_bytes().unwrap();
+    let mut files = support::entries(&bytes);
+    let i = files
+        .iter()
+        .position(|(n, _)| n == "word/document.xml")
+        .unwrap();
+    let xml = String::from_utf8(files[i].1.clone()).unwrap();
+    let sep = "<w:fldChar w:fldCharType=\"separate\"/>";
+    let at = xml.find(sep).expect("the separate marker") + sep.len();
+    let aged = xml[..at].to_string() + &xml[at..].replacen("<w:t>New</w:t>", "<w:t>STALE</w:t>", 1);
+    files[i].1 = aged.into_bytes();
+    let refs: Vec<(&str, &[u8])> = files
+        .iter()
+        .map(|(n, d)| (n.as_str(), d.as_slice()))
+        .collect();
+    let mut doc = Document::from_bytes(support::zip(&refs, false)).unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF after"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "New");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_uses_the_first_text_for_cycle_edges() {
+    // The first cached run sits outside the target while a later cached
+    // run sits inside it: the rewrite retains only the first, so there
+    // is no self-cycle to freeze. Detaching the later run converges
+    // instead of rewriting forever.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:r><w:fldChar w:fldCharType=\"begin\"/></w:r><w:r><w:instrText xml:space=\"preserve\"> REF multi </w:instrText></w:r><w:r><w:fldChar w:fldCharType=\"separate\"/></w:r><w:r><w:t>OUT</w:t></w:r><w:bookmarkStart w:id=\"90\" w:name=\"multi\"/><w:r><w:t>IN</w:t></w:r><w:bookmarkEnd w:id=\"90\"/><w:r><w:fldChar w:fldCharType=\"end\"/></w:r></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 1);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF multi"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_freezes_an_empty_self_reference() {
+    // An empty cached REF inside its own target has no result content
+    // to contribute, but writing it would land inside the target: the
+    // write-location edge freezes it before it can write.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"97\" w:name=\"selfempty\"/><w:r><w:t>x</w:t></w:r><w:fldSimple w:instr=\" REF selfempty \"><w:r/></w:fldSimple><w:bookmarkEnd w:id=\"97\"/></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF selfempty"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_ignores_deleted_bookmarks_in_simple_caches() {
+    // A bookmark nested in deleted content of a simple cache does not
+    // resolve: a REF to it stays untouched, and the deletion does not
+    // leak into the cached text either.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"90\" w:name=\"plain\"/><w:r><w:t>Hi</w:t></w:r><w:bookmarkEnd w:id=\"90\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF plain \"><w:r><w:t>Hi</w:t></w:r><w:del w:id=\"91\" w:author=\"Old\" w:date=\"2026-01-01T00:00:00Z\"><w:bookmarkStart w:id=\"92\" w:name=\"innerdel\"/><w:r><w:t>ZZZ</w:t></w:r><w:bookmarkEnd w:id=\"92\"/></w:del></w:fldSimple></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF innerdel \"><w:r><w:t>WRONG</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let result = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("REF innerdel"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "WRONG");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_keeps_hidden_repeats_hidden() {
+    // A hidden `\c` repeat keeps its hidden cache instead of showing the
+    // last displayed number, and does not advance any counter.
+    let c = content(json!([
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1 \\r 5", "result": "0"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\c \\h", "result": "WRONG"}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    doc.update_fields().unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let numbers: Vec<String> = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .filter(|f| f.kind == "SEQ" && f.code.contains("Figure"))
+        .map(|f| f.result.clone())
+        .collect();
+    assert_eq!(numbers, vec!["5", "WRONG"], "{numbers:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_repeats_the_shown_number_for_c() {
+    // `\c` repeats the number last shown for the sequence, not the
+    // counter that plain fields happen to share a key with.
+    let c = content(json!([
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\s 1 \\r 5", "result": "0"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\c", "result": "0"}]},
+        {"type": "paragraph", "content": [{"type": "field", "code": "SEQ Figure \\c", "result": "0"}]},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    doc.update_fields().unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let numbers: Vec<String> = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .filter(|f| f.kind == "SEQ" && f.code.contains("Figure"))
+        .map(|f| f.result.clone())
+        .collect();
+    assert_eq!(numbers, vec!["5", "5", "5"], "{numbers:?}");
+    assert_eq!(doc.update_fields().unwrap(), 0);
+}
+
+#[test]
+fn update_fields_does_not_double_tabs_in_a_reference() {
+    // The stale result already holds a tab: the update replaces the old
+    // separators instead of adding to them.
+    let c = content(json!([
+        {"type": "raw", "xml": "<w:p><w:bookmarkStart w:id=\"60\" w:name=\"tabbed\"/><w:r><w:t>A</w:t></w:r><w:r><w:tab/></w:r><w:r><w:t>B</w:t></w:r><w:bookmarkEnd w:id=\"60\"/></w:p>"},
+        {"type": "raw", "xml": "<w:p><w:fldSimple w:instr=\" REF tabbed \"><w:r><w:t>STALE</w:t></w:r><w:tab/><w:r><w:t>STALE</w:t></w:r></w:fldSimple></w:p>"},
+    ]));
+    let mut doc = Document::from_bytes(support::sample()).unwrap();
+    doc.insert(Place::End, &c.blocks, &WriteOptions::default())
+        .unwrap();
+    doc.update_fields().unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let mut doc = Document::from_bytes(out).unwrap();
+    let v = doc.views().unwrap();
+    let result = v
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("tabbed"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(result, "A\tB", "{result:?}");
+    // A second update must not add another tab.
+    assert_eq!(doc.update_fields().unwrap(), 0);
+    let mut doc = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let again = doc
+        .views()
+        .unwrap()
+        .fields()
+        .iter()
+        .find(|f| f.kind == "REF" && f.code.contains("tabbed"))
+        .map(|f| f.result.clone())
+        .unwrap_or_default();
+    assert_eq!(again, "A\tB", "{again:?}");
+}
+
+#[test]
 fn picture_files_stay_inside_their_directory() {
     let dir = std::env::temp_dir().join(format!("tabellion-files-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

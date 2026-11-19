@@ -248,6 +248,17 @@ fn inspect_names_blocks_that_share_a_paragraph_id() {
 }
 
 #[test]
+fn fields_updates_results_and_reports_the_count() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("out.docx");
+    let out_s = out.display().to_string();
+    let (code, stdout, err) = run(&["fields", SAMPLE, &out_s]);
+    assert_eq!(code, Some(0), "{err}");
+    assert!(stdout.contains("updated 0 fields"), "{stdout}");
+    assert_eq!(std::fs::read(&out).unwrap(), std::fs::read(SAMPLE).unwrap());
+}
+
+#[test]
 fn insert_takes_a_place_and_reports_errors_with_a_status() {
     let dir = tempfile::tempdir().unwrap();
     let out = dir.path().join("out.docx");

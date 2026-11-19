@@ -102,6 +102,16 @@ enum Command {
         #[arg(long, value_name = "AUTHOR")]
         author: Option<String>,
     },
+    /// Update the results of fields without Word.
+    ///
+    /// Recomputes every SEQ and bare REF result in the body; fields only
+    /// Word can compute keep their results. Prints how many fields changed.
+    Fields {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+    },
     /// Open a document, save it unchanged, and compare the two files.
     ///
     /// Exits with 0 if OUT is IN byte for byte, and 1 if they differ.
@@ -233,6 +243,20 @@ fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
     Ok(true)
 }
 
+fn fields(input: &Path, output: &Path) -> Result<bool, String> {
+    let mut doc = open(input)?;
+    let n = doc
+        .update_fields()
+        .map_err(|e| format!("{}: {e}", input.display()))?;
+    doc.save(output).map_err(|e| e.to_string())?;
+    println!(
+        "{}: updated {n} {}",
+        output.display(),
+        if n == 1 { "field" } else { "fields" }
+    );
+    Ok(true)
+}
+
 fn roundtrip(input: &Path, output: &Path) -> Result<bool, String> {
     let before =
         std::fs::read(input).map_err(|e| format!("cannot read {}: {e}", input.display()))?;
@@ -314,6 +338,7 @@ fn main() -> ExitCode {
                 text(file, &options).map(|_| true)
             }
             Command::Roundtrip { input, output } => roundtrip(input, output),
+            Command::Fields { input, output } => fields(input, output),
             Command::Insert {
                 input,
                 output,
