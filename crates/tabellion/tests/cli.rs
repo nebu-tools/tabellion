@@ -512,3 +512,97 @@ fn insert_takes_a_place_and_reports_errors_with_a_status() {
     let (code, _, _) = o(&["insert", SAMPLE, &out_s]);
     assert_eq!(code, Some(2));
 }
+
+#[test]
+fn images_writes_one_file_per_embedded_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("images");
+    let (code, stdout, stderr) = run(&["images", &corpus("birds.docx"), out.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("wrote 2 images"), "{stdout}");
+    for name in ["image1.png", "image2.png"] {
+        let bytes = std::fs::read(out.join(name)).unwrap();
+        assert!(bytes.len() > 8, "{name}");
+        assert_eq!(&bytes[0..8], b"\x89PNG\r\n\x1a\n", "{name}");
+    }
+}
+
+#[test]
+fn images_refuses_to_overwrite() {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("images");
+    std::fs::create_dir_all(&out).unwrap();
+    std::fs::write(out.join("image1.png"), "precious\n").unwrap();
+    let (code, _, stderr) = run(&["images", &corpus("birds.docx"), out.to_str().unwrap()]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("refusing to overwrite"), "{stderr}");
+    assert_eq!(
+        std::fs::read(out.join("image1.png")).unwrap(),
+        b"precious\n"
+    );
+    assert!(!out.join("image2.png").exists());
+}
+
+#[test]
+fn images_disambiguates_drawings_sharing_a_part() {
+    let dir = tempfile::tempdir().unwrap();
+    let patched = dir.path().join("shared.docx");
+    std::fs::copy(corpus("birds.docx"), &patched).unwrap();
+    {
+        let mut doc = nebu_docx::Document::open(&patched).unwrap();
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let root = tree.root_element();
+        let body = tree
+            .child(root, Some(nebu_docx::ns::W), "body")
+            .unwrap()
+            .expect("a body");
+        const A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        let blips: Vec<_> = tree
+            .descendants(body)
+            .unwrap()
+            .filter(|id| tree.is(*id, Some(A), "blip").unwrap_or(false))
+            .collect();
+        assert!(blips.len() >= 2, "{}", blips.len());
+        let mut first: Option<String> = None;
+        for blip in blips {
+            let rid = tree
+                .attribute(blip, Some(R), "embed")
+                .unwrap()
+                .expect("an embed")
+                .into_owned();
+            if first.is_none() {
+                first = Some(rid);
+            }
+            tree.set_attribute(blip, Some(R), "embed", first.as_deref().unwrap())
+                .unwrap();
+        }
+        doc.save(dir.path().join("shared2.docx")).unwrap();
+    }
+    let out = dir.path().join("images");
+    let (code, stdout, stderr) = run(&[
+        "images",
+        dir.path().join("shared2.docx").to_str().unwrap(),
+        out.to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("wrote 2 images"), "{stdout}");
+    let mut names: Vec<String> = std::fs::read_dir(&out)
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+        .collect();
+    names.sort();
+    assert_eq!(names.len(), 2, "{names:?}");
+    let plain = names
+        .iter()
+        .find(|n| !n.contains("-2."))
+        .expect("a base name");
+    let (stem, ext) = plain.rsplit_once('.').expect("an extension");
+    assert!(names.contains(&format!("{stem}-2.{ext}")), "{names:?}");
+    // Both drawings show the same part, so the bytes match.
+    assert_eq!(
+        std::fs::read(out.join(&names[0])).unwrap(),
+        std::fs::read(out.join(&names[1])).unwrap()
+    );
+}
