@@ -98,6 +98,9 @@ enum Command {
         /// Instead of the paragraph that holds {{NAME}}.
         #[arg(long, value_name = "NAME")]
         at: Option<String>,
+        /// Write the new blocks as a tracked insertion by this author.
+        #[arg(long, value_name = "AUTHOR")]
+        author: Option<String>,
     },
     /// Open a document, save it unchanged, and compare the two files.
     ///
@@ -160,6 +163,7 @@ struct InsertArgs<'a> {
     after: &'a Option<String>,
     replace: &'a Option<String>,
     at: &'a Option<String>,
+    author: &'a Option<String>,
 }
 
 fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
@@ -196,7 +200,11 @@ fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
             }
         })
         .map(Path::to_path_buf);
-    let opts = WriteOptions::for_content(&content, dir);
+    let mut opts = WriteOptions::for_content(&content, dir);
+    if let Some(author) = a.author {
+        use nebu_docx::Track;
+        opts.track = Some(Track::now(author));
+    }
     let done = doc
         .insert(place, &content.blocks, &opts)
         .map_err(|e| format!("{}: {e}", a.content.display()))?;
@@ -314,6 +322,7 @@ fn main() -> ExitCode {
                 after,
                 replace,
                 at,
+                author,
             } => insert(InsertArgs {
                 input,
                 output,
@@ -322,6 +331,7 @@ fn main() -> ExitCode {
                 after,
                 replace,
                 at,
+                author,
             }),
         }
     };

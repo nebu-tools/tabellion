@@ -98,7 +98,19 @@ impl Session<'_> {
             crate::cost::tick(1);
             let id = self.para_id(ctx);
             x.push_str(&format!("<w:tr{id}>"));
-            if r < t.header_rows {
+            if let Some(track) = self.opts.track.clone() {
+                let rev = self.ids.revision();
+                let header = if r < t.header_rows {
+                    "<w:tblHeader/>"
+                } else {
+                    ""
+                };
+                x.push_str(&format!(
+                    "<w:trPr>{header}<w:ins w:id=\"{rev}\" w:author=\"{}\" w:date=\"{}\"/></w:trPr>",
+                    attr(&track.author),
+                    attr(&track.date)
+                ));
+            } else if r < t.header_rows {
                 x.push_str("<w:trPr><w:tblHeader/></w:trPr>");
             }
             let mut col = 0;

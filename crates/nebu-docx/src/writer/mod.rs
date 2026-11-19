@@ -78,6 +78,61 @@ impl Default for Captions {
     }
 }
 
+/// Who a tracked insertion belongs to.
+///
+/// `Track::now` stamps it with the current UTC time in the form Word
+/// writes (`YYYY-MM-DDTHH:MM:SSZ`). The writer puts every new block's runs
+/// inside `w:ins` with this author and date, and marks the paragraph mark
+/// the same way, so the views read the insertion back as a revision and
+/// `text` with `Revisions::Rejected` leaves it out.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Track {
+    /// The revision author, as Word shows it.
+    pub author: String,
+    /// The revision date, as written in the file.
+    pub date: String,
+}
+
+impl Track {
+    /// A track record for `author` stamped with the current time.
+    pub fn now(author: &str) -> Track {
+        Track {
+            author: author.to_string(),
+            date: utc_now(),
+        }
+    }
+}
+
+fn utc_now() -> String {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    // Days to civil date (Howard Hinnant's algorithm).
+    let days = (secs / 86_400) as i64;
+    let time = (secs % 86_400) as i64;
+    let z = days + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1_460 + doe / 36_524 - doe / 146_096) / 365;
+    let mut y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as i64;
+    let m = (if mp < 10 { mp + 3 } else { mp - 9 }) as i64;
+    y += if m <= 2 { 1 } else { 0 };
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m,
+        d,
+        time / 3_600,
+        (time % 3_600) / 60,
+        time % 60
+    )
+}
+
 /// How content is written.
 #[derive(Debug, Clone, Default)]
 pub struct WriteOptions {
@@ -93,6 +148,12 @@ pub struct WriteOptions {
     /// it the writer reads no file, and a picture given as a file is an
     /// error.
     pub files: Option<PathBuf>,
+    /// When present, new blocks are written as a tracked insertion by this
+    /// author: runs inside `w:ins`, with the paragraph mark flagged the
+    /// same way. A replacement still removes the old block and writes the
+    /// new one as an insertion; keeping the old text as a tracked deletion
+    /// comes with the editing calls.
+    pub track: Option<Track>,
     /// Bounds on the content.
     pub limits: ContentLimits,
 }
