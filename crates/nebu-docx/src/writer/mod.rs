@@ -235,6 +235,24 @@ impl Document {
         }
     }
 
+    /// Recomputes every `SEQ` and bare `REF` result in the body and
+    /// returns how many distinct fields changed. Fields Word alone can
+    /// compute (page numbers, dates, external includes) and `REF`s with
+    /// switches keep their results. `SEQ` sequences that restart at a
+    /// heading level start again after each heading of that level.
+    pub fn update_fields(&mut self) -> Result<usize, Error> {
+        let backup = self.snapshot();
+        match fields::update_all(self) {
+            // No counter advance: refreshing field results allocates no
+            // document ids.
+            Ok(n) => Ok(n),
+            Err(e) => {
+                self.restore(backup);
+                Err(e)
+            }
+        }
+    }
+
     /// Adds a table style, or finds one the document has, and returns its
     /// id.
     ///
