@@ -880,3 +880,365 @@ fn table_accepts_a_lowercase_seq_caption() {
         "{stdout}"
     );
 }
+
+#[test]
+fn image_replaces_a_labelled_figure_with_same_kind_bytes() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "A wren."}], "label": "fig-wren"}]}"#,
+    )
+    .unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // Different bytes, same kind: flip a byte well past the header.
+    let mut alt = std::fs::read(dir.path().join("wren.png")).unwrap();
+    alt[100] ^= 0xff;
+    std::fs::write(dir.path().join("alt.png"), &alt).unwrap();
+    let out = dir.path().join("out.docx");
+    let (code, stdout, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--file",
+        dir.path().join("alt.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("replaced image fig-wren"), "{stdout}");
+    let back = dir.path().join("back");
+    let (code, _, stderr) = run(&["images", out.to_str().unwrap(), back.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let files: Vec<_> = std::fs::read_dir(&back)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    assert_eq!(files.len(), 1, "{files:?}");
+    assert_eq!(std::fs::read(&files[0]).unwrap(), alt);
+    // The caption still numbers the figure.
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("Figure 1: A wren."), "{text}");
+}
+
+#[test]
+fn image_refuses_what_it_cannot_replace() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "A wren."}], "label": "fig-wren"}]}"#,
+    )
+    .unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("out.docx");
+    // No such label.
+    let (code, _, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-nowhere",
+        "--file",
+        dir.path().join("wren.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no block matches"), "{stderr}");
+    assert!(!out.exists());
+    // A label on a table names no picture.
+    std::fs::write(
+        dir.path().join("table.json"),
+        r#"{"blocks": [{"type": "table", "caption": [{"type": "text", "text": "Sites."}], "label": "tab-sites", "rows": [{"cells": [{"content": [{"type": "paragraph", "content": [{"type": "text", "text": "a"}]}]}]}]}]}"#,
+    )
+    .unwrap();
+    let tabulated = dir.path().join("tabulated.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        figured.to_str().unwrap(),
+        tabulated.to_str().unwrap(),
+        "--content",
+        dir.path().join("table.json").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let (code, _, stderr) = run(&[
+        "image",
+        tabulated.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "tab-sites",
+        "--file",
+        dir.path().join("wren.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("no picture labelled tab-sites"), "{stderr}");
+    assert!(!out.exists());
+    // A picture of another kind does not take its place.
+    std::fs::write(
+        dir.path().join("vector.svg"),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"/>",
+    )
+    .unwrap();
+    let (code, _, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--file",
+        dir.path().join("vector.svg").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("cannot take the place of"), "{stderr}");
+    assert!(!out.exists());
+    // A missing file never reaches the document.
+    let (code, _, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--file",
+        dir.path().join("no-such.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("cannot read"), "{stderr}");
+}
+
+fn figured_doc(dir: &std::path::Path, caption: &str, label: &str) -> std::path::PathBuf {
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.join("figure.json"),
+        format!(
+            r#"{{"blocks": [{{"type": "figure", "image": {{"file": "wren.png"}}, "caption": [{{"type": "text", "text": "{caption}"}}], "label": "{label}"}}]}}"#
+        ),
+    )
+    .unwrap();
+    let template = dir.join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let figured = dir.join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.join("figure.json").to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    figured
+}
+
+#[test]
+fn image_refuses_a_part_shared_by_two_figures() {
+    let dir = tempfile::tempdir().unwrap();
+    let first = figured_doc(dir.path(), "First.", "fig-first");
+    let second = dir.path().join("second.docx");
+    // The same bytes insert under a second label; the writer stores the
+    // picture once, so both figures point at one part.
+    std::fs::write(
+        dir.path().join("figure2.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "Second."}], "label": "fig-second"}]}"#,
+    )
+    .unwrap();
+    let (code, _, stderr) = run(&[
+        "insert",
+        first.to_str().unwrap(),
+        second.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure2.json").to_str().unwrap(),
+        "--at",
+        "author",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "image",
+        second.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-first",
+        "--file",
+        dir.path().join("wren.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("is shared by 2 pictures"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn image_refuses_an_svg_with_a_fallback() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("art.svg"),
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"200\" height=\"100\"/>",
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "art.svg", "fallback": {"file": "wren.png"}}, "caption": [{"type": "text", "text": "A drawing."}], "label": "fig-svg"}]}"#,
+    )
+    .unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-svg",
+        "--file",
+        dir.path().join("wren.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("more than one picture"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn image_refuses_a_paragraph_with_a_vml_picture_too() {
+    let dir = tempfile::tempdir().unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(corpus("birds.docx"), &template).unwrap();
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../../samples/wren.png"),
+        dir.path().join("wren.png"),
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("figure.json"),
+        r#"{"blocks": [{"type": "figure", "image": {"file": "wren.png"}, "caption": [{"type": "text", "text": "A wren."}], "label": "fig-wren"}]}"#,
+    )
+    .unwrap();
+    let figured = dir.path().join("figured.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        figured.to_str().unwrap(),
+        "--content",
+        dir.path().join("figure.json").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // A VML picture reference in the figure paragraph: one DrawingML
+    // picture and one VML picture, so two references to replace.
+    {
+        use nebu_docx::{Document, ns};
+        const A: &str = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        const R: &str = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+        const VML: &str = "urn:schemas-microsoft-com:vml";
+        let mut doc = Document::open(&figured).unwrap();
+        let main = doc.main_part().to_string();
+        let caption = {
+            let views = doc.views().unwrap();
+            let label: nebu_docx::Locator = "bookmark:_Ref_fig-wren".parse().unwrap();
+            views.locate(&label).unwrap().index
+        };
+        let tree = doc.xml(&main).unwrap();
+        let root = tree.root_element();
+        let body = tree
+            .child(root, Some(ns::W), "body")
+            .unwrap()
+            .expect("a body");
+        let kids: Vec<_> = tree.children(body).unwrap().collect();
+        let para = kids[caption - 1];
+        let mut own: Vec<String> = Vec::new();
+        for id in tree.descendants(para).unwrap() {
+            if tree.is(id, Some(A), "blip").unwrap_or(false)
+                && let Some(rid) = tree.attribute(id, Some(R), "embed").unwrap()
+            {
+                own.push(rid.into_owned());
+            }
+        }
+        assert!(!own.is_empty(), "a blip");
+        let mut other: Option<String> = None;
+        for id in tree.descendants(body).unwrap() {
+            if tree.is(id, Some(A), "blip").unwrap_or(false)
+                && let Some(rid) = tree
+                    .attribute(id, Some(R), "embed")
+                    .unwrap()
+                    .map(|v| v.into_owned())
+                && !own.contains(&rid)
+            {
+                other = Some(rid);
+                break;
+            }
+        }
+        let other = other.expect("another blip");
+        // The VML reference points at a different part than the figure.
+        let pict = tree.create_element(Some(ns::W), "pict").unwrap();
+        let shape = tree.create_element(Some(VML), "shape").unwrap();
+        let imagedata = tree.create_element(Some(VML), "imagedata").unwrap();
+        tree.set_attribute(imagedata, Some(R), "id", &other)
+            .unwrap();
+        tree.append(shape, imagedata).unwrap();
+        tree.append(pict, shape).unwrap();
+        tree.append(para, pict).unwrap();
+        doc.save(&figured).unwrap();
+    }
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "image",
+        figured.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--target",
+        "fig-wren",
+        "--file",
+        dir.path().join("wren.png").to_str().unwrap(),
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("more than one picture"), "{stderr}");
+    assert!(!out.exists());
+}

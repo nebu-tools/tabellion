@@ -228,6 +228,29 @@ fn svg(b: &[u8], limits: &crate::Limits) -> Result<Header, String> {
 }
 
 /// The format and size of a picture from its first bytes.
+/// Checks new bytes for an image part: the same kind of picture the
+/// part holds, or an error naming the part and both kinds.
+pub(crate) fn check_replacement(
+    name: &str,
+    old: &str,
+    bytes: &[u8],
+    limits: &crate::Limits,
+) -> Result<(), Error> {
+    if !old.starts_with("image/") {
+        return Err(Error::Invalid(format!("{name}: not a picture part")));
+    }
+    let new = header(bytes, limits)
+        .map_err(|e| Error::Invalid(format!("{name}: {e}")))?
+        .format
+        .content_type();
+    if new != old {
+        return Err(Error::Invalid(format!(
+            "{name}: a {new} picture cannot take the place of {old}"
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn header(b: &[u8], limits: &crate::Limits) -> Result<Header, String> {
     if b.starts_with(b"\x89PNG\r\n\x1a\n") {
         return png(b);
@@ -316,38 +339,42 @@ fn store(
     let name = match s.media.parts.get(&hash) {
         Some(n) => n.clone(),
         None => {
-            let name = format!("word/media/image-{}.{}", &hash[..16], format.ext());
-            match doc.part_name(&name) {
-                Some(existing) if doc.read_part(existing)? == bytes => {}
-                Some(_) => {
-                    return Err(Error::Unsupported(format!(
-                        "the document has a part {name} with other bytes"
-                    )));
+            // The hash-derived name can hold other bytes when a part was
+            // replaced after planning (or two hashes collide): use the
+            // first free name, reusing a part that already holds these
+            // bytes.
+            let mut name = format!("word/media/image-{}.{}", &hash[..16], format.ext());
+            let mut n = 2u32;
+            while let Some(existing) = doc.part_name(&name) {
+                if doc.read_part(existing)? == bytes {
+                    break;
                 }
-                None => {
-                    // A default content type for the extension, added once,
-                    // as Word writes them; an override only where the
-                    // document maps the extension to another type.
-                    let ext = format.ext();
-                    let fits = match s.media.types.get(ext) {
-                        Some(f) => *f,
-                        None => {
-                            let f = match doc.content_type(&name) {
-                                None => {
-                                    doc.add_default_type(ext, format.content_type())?;
-                                    true
-                                }
-                                Some(t) => t == format.content_type(),
-                            };
-                            s.media.types.insert(ext, f);
-                            f
-                        }
-                    };
-                    if fits {
-                        doc.add_typed_part(&name, bytes)?;
-                    } else {
-                        doc.add_part(&name, format.content_type(), bytes)?;
+                name = format!("word/media/image-{}-{n}.{}", &hash[..16], format.ext());
+                n += 1;
+            }
+            if doc.part_name(&name).is_none() {
+                // A default content type for the extension, added once,
+                // as Word writes them; an override only where the
+                // document maps the extension to another type.
+                let ext = format.ext();
+                let fits = match s.media.types.get(ext) {
+                    Some(f) => *f,
+                    None => {
+                        let f = match doc.content_type(&name) {
+                            None => {
+                                doc.add_default_type(ext, format.content_type())?;
+                                true
+                            }
+                            Some(t) => t == format.content_type(),
+                        };
+                        s.media.types.insert(ext, f);
+                        f
                     }
+                };
+                if fits {
+                    doc.add_typed_part(&name, bytes)?;
+                } else {
+                    doc.add_part(&name, format.content_type(), bytes)?;
                 }
             }
             s.media.parts.insert(hash, name.clone());

@@ -2245,3 +2245,86 @@ fn picture_files_stay_inside_their_directory() {
     }
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn replacing_an_image_swaps_same_format_bytes() {
+    let mut doc = Document::from_bytes(corpus("birds.docx")).unwrap();
+    let before = doc.read_part("word/media/image1.png").unwrap();
+    let png = png(120, 60);
+    assert_ne!(png, before);
+    doc.replace_image("word/media/image1.png", png.clone())
+        .unwrap();
+    assert_eq!(doc.read_part("word/media/image1.png").unwrap(), png);
+    // Nothing else changed: the views still read both images.
+    assert_eq!(doc.views().unwrap().images().len(), 2);
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    // A missing part, a non-picture part, damaged bytes and a
+    // picture of another kind are all errors that name the part.
+    let err = doc
+        .replace_image("word/media/nope.png", png.clone())
+        .unwrap_err();
+    assert!(matches!(err, Error::MissingPart(_)), "{err}");
+    let err = doc
+        .replace_image("word/document.xml", png.clone())
+        .unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("word/document.xml: not a picture part"),
+        "{err}"
+    );
+    let err = doc
+        .replace_image("word/media/image1.png", b"nope".to_vec())
+        .unwrap_err();
+    assert!(err.to_string().contains("word/media/image1.png"), "{err}");
+    let svg = br#"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100"/>"#.to_vec();
+    let err = doc.replace_image("word/media/image1.png", svg).unwrap_err();
+    assert!(
+        err.to_string().contains(
+            "word/media/image1.png: a image/svg+xml picture cannot take the place of image/png"
+        ),
+        "{err}"
+    );
+}
+
+#[test]
+fn inserting_after_a_replacement_reuses_no_occupied_name() {
+    let mut doc = Document::from_bytes(corpus("birds.docx")).unwrap();
+    let a = png(60, 40);
+    let b = png(80, 20);
+    let picture = |bytes: &[u8]| {
+        content(json!([{"type": "image", "image": {"data": support::base64(bytes)}}]))
+    };
+    let c = picture(&a);
+    doc.insert(Place::End, &c.blocks, &WriteOptions::for_content(&c, None))
+        .unwrap();
+    let part = doc
+        .views()
+        .unwrap()
+        .images()
+        .last()
+        .unwrap()
+        .part
+        .clone()
+        .unwrap();
+    doc.replace_image(&part, b.clone()).unwrap();
+    assert_eq!(doc.read_part(&part).unwrap(), b);
+    // Inserting A again must allocate a fresh name, not fail on the
+    // occupied hash name and not disturb B.
+    doc.insert(Place::End, &c.blocks, &WriteOptions::for_content(&c, None))
+        .unwrap();
+    let out = doc.to_bytes().unwrap();
+    valid(&out);
+    let media: Vec<(String, Vec<u8>)> = support::entries(&out)
+        .into_iter()
+        .filter(|(n, _)| n.starts_with("word/media/"))
+        .collect();
+    let a_parts: Vec<_> = media.iter().filter(|(_, b)| **b == a).collect();
+    assert_eq!(
+        a_parts.len(),
+        1,
+        "{:?}",
+        media.iter().map(|m| &m.0).collect::<Vec<_>>()
+    );
+    assert_eq!(doc.read_part(&part).unwrap(), b);
+}

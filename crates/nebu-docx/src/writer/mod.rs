@@ -18,7 +18,7 @@
 mod build;
 mod fields;
 mod ids;
-mod media;
+pub(crate) mod media;
 mod notes;
 mod numbering;
 mod place;
