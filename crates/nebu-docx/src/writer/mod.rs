@@ -22,6 +22,7 @@ pub(crate) mod media;
 mod notes;
 mod numbering;
 mod place;
+pub mod revise;
 mod roles;
 mod session;
 mod tables;
