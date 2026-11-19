@@ -53,6 +53,19 @@ docx_blocks <- function(doc) {
   .Call("wrap__doc_blocks", doc, PACKAGE = "tabellion")
 }
 
+#' Read a document's tables.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @return A list of data frames, one per table in document order; a
+#'   table nested in a cell is its own entry. Each frame holds the grid
+#'   text row by row, with `NA` where a merged cell covers the grid.
+#'   The first row is data, not names; columns are named by position
+#'   (`V1`, `V2`, ...). Empty cells read back as empty strings.
+#' @export
+docx_tables <- function(doc) {
+  .Call("wrap__doc_tables", doc, PACKAGE = "tabellion")
+}
+
 #' Read a document's text.
 #'
 #' @param doc A document handle, as [`open_docx()`] makes.

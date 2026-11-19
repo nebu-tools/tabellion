@@ -90,6 +90,26 @@ pub fn docx_blocks(doc: &mut Document) -> Fallible<Vec<BlockRow>> {
         .collect())
 }
 
+/// One table read back: the text of each grid position, row by row,
+/// missing where a merged cell covers the grid.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TableGrid {
+    /// Grid text, `None` where a merged cell covers the position.
+    pub rows: Vec<Vec<Option<String>>>,
+}
+
+/// Every table in document order as grids of text.
+pub fn docx_tables(doc: &mut Document) -> Fallible<Vec<TableGrid>> {
+    Ok(doc
+        .views()?
+        .tables()
+        .iter()
+        .map(|table| TableGrid {
+            rows: table.rows.clone(),
+        })
+        .collect())
+}
+
 /// The text a reader sees, one line per paragraph.
 pub fn docx_text(doc: &mut Document) -> Fallible<String> {
     Ok(doc.views()?.text(&TextOptions::default()))
@@ -328,6 +348,35 @@ fn doc_add_table(
     )? as i32)
 }
 
+/// Every table in document order, one data frame per table: the grid
+/// text row by row, `NA` where a merged cell covers the grid. The first
+/// row is data, not names; columns are named by position.
+#[extendr]
+fn doc_tables(doc: Robj) -> Fallible<Robj> {
+    let grids = docx_tables(&mut checked_handle(&doc)?.borrow_mut())?;
+    let mut frames = Vec::with_capacity(grids.len());
+    for grid in &grids {
+        let width = grid.rows.iter().map(Vec::len).max().unwrap_or(0);
+        let mut names = Vec::with_capacity(width);
+        let mut values: Vec<Robj> = Vec::with_capacity(width);
+        for (i, column) in (0..width).enumerate() {
+            names.push(format!("V{}", i + 1));
+            let cells: Vec<Option<String>> = grid
+                .rows
+                .iter()
+                .map(|row| row.get(column).cloned().unwrap_or(None))
+                .collect();
+            values.push(Robj::from(cells));
+        }
+        let mut frame = List::from_names_and_values(names, values)?;
+        frame.set_class(["data.frame"])?;
+        let rownames: Vec<String> = (1..=grid.rows.len()).map(|i| i.to_string()).collect();
+        frame.set_attrib("row.names", rownames)?;
+        frames.push(Robj::from(frame));
+    }
+    Ok(List::from_values(frames).into())
+}
+
 extendr_module! {
     mod tabellion;
     fn doc_open;
@@ -337,6 +386,7 @@ extendr_module! {
     fn doc_add_paragraph;
     fn doc_add_typst;
     fn doc_add_table;
+    fn doc_tables;
 }
 
 #[cfg(test)]
@@ -375,6 +425,34 @@ mod tests {
         // The saved document opens again with the same text.
         let mut reopened = open_docx(output.to_str().unwrap()).unwrap();
         assert_eq!(docx_text(&mut reopened).unwrap(), text);
+    }
+
+    #[test]
+    fn reads_tables_back_as_grids() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        let headers = vec!["site".to_string(), "count".to_string()];
+        let columns = vec![
+            vec![Some("A".to_string()), Some("B".to_string())],
+            vec![Some("3".to_string()), None],
+        ];
+        add_table(&mut doc, &headers, &columns, None, None).unwrap();
+        let grids = docx_tables(&mut doc).unwrap();
+        let grid = grids.last().expect("the appended table");
+        assert_eq!(
+            grid.rows,
+            vec![
+                vec![Some("site".to_string()), Some("count".to_string())],
+                vec![Some("A".to_string()), Some("3".to_string())],
+                // An empty cell reads back as empty text; only a merged
+                // cell covering the grid reads back as missing.
+                vec![Some("B".to_string()), Some("".to_string())],
+            ],
+            "{grid:?}"
+        );
     }
 
     #[test]
