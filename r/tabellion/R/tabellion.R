@@ -77,6 +77,22 @@ docx_text <- function(doc) {
   strsplit(.Call("wrap__doc_text", doc, PACKAGE = "tabellion"), "\n", fixed = TRUE)[[1]]
 }
 
+#' Tabulate a document's images.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @return A data frame with one row per image in engine story
+#'   traversal order (body, headers and footers, footnotes, endnotes,
+#'   comments, then each story's text boxes — not rendered page order):
+#'   `index` (from 0), `placement` (`inline` or `floating`),
+#'   `relationship`, `part`, `link`, `content_type`, `width` and
+#'   `height` in points, and `name`, `title` and `alt`. Missing values
+#'   are `NA`: an embedded picture has a part but no link, a linked
+#'   picture the reverse.
+#' @export
+docx_images <- function(doc) {
+  .Call("wrap__doc_images", doc, PACKAGE = "tabellion")
+}
+
 #' Recompute a document's field results.
 #'
 #' Recomputes `SEQ` fields and bare `REF` fields (those without switches)

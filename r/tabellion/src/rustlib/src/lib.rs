@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use extendr_api::prelude::*;
 use extendr_ffi::{R_ExternalPtrProtected, R_ExternalPtrTag, R_SetExternalPtrProtected};
 use nebu_docx::content::{Block, Cell, Image, Inline, Row, Table};
-use nebu_docx::{BlockKind, Document, Place, TextOptions, WriteOptions};
+use nebu_docx::{BlockKind, Document, Place, Placement, TextOptions, WriteOptions};
 use thiserror::Error;
 
 /// A fallible result with a one-line error.
@@ -146,6 +146,58 @@ pub fn refresh_fields(doc: &mut Document) -> Fallible<usize> {
 /// The text a reader sees, one line per paragraph.
 pub fn docx_text(doc: &mut Document) -> Fallible<String> {
     Ok(doc.views()?.text(&TextOptions::default()))
+}
+
+/// One row of `docx_images`: what a picture is and where it sits.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImageRow {
+    /// The position among the document's images, from 0.
+    pub index: i32,
+    /// `inline` or `floating`.
+    pub placement: &'static str,
+    /// The relationship id that names the picture.
+    pub relationship: Option<String>,
+    /// The part that holds the picture, for an embedded picture.
+    pub part: Option<String>,
+    /// The address, for a linked picture.
+    pub link: Option<String>,
+    /// The content type of the part.
+    pub content_type: Option<String>,
+    /// The width in points, as placed.
+    pub width: Option<f64>,
+    /// The height in points, as placed.
+    pub height: Option<f64>,
+    /// The drawing's name.
+    pub name: Option<String>,
+    /// Its title.
+    pub title: Option<String>,
+    /// Its alternative text.
+    pub alt: Option<String>,
+}
+
+/// Every image in document order as rows.
+pub fn docx_images(doc: &mut Document) -> Fallible<Vec<ImageRow>> {
+    Ok(doc
+        .views()?
+        .images()
+        .iter()
+        .map(|image| ImageRow {
+            index: image.index as i32,
+            placement: match image.placement {
+                Placement::Inline => "inline",
+                Placement::Floating => "floating",
+            },
+            relationship: image.relationship.clone(),
+            part: image.part.clone(),
+            link: image.link.clone(),
+            content_type: image.content_type.clone(),
+            width: image.width,
+            height: image.height,
+            name: image.name.clone(),
+            title: image.title.clone(),
+            alt: image.alt.clone(),
+        })
+        .collect())
 }
 
 /// Appends one body-style paragraph, or one in a named style.
@@ -318,6 +370,54 @@ fn doc_text(doc: Robj) -> Fallible<String> {
     docx_text(&mut checked_handle(&doc)?.borrow_mut())
 }
 
+/// Every image in document order as a data frame.
+#[extendr]
+fn doc_images(doc: Robj) -> Fallible<Robj> {
+    let rows = docx_images(&mut checked_handle(&doc)?.borrow_mut())?;
+    let n = rows.len();
+    let mut index = Vec::with_capacity(n);
+    let mut placement = Vec::with_capacity(n);
+    let mut relationship: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut part: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut link: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut content_type: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut width: Vec<Option<f64>> = Vec::with_capacity(n);
+    let mut height: Vec<Option<f64>> = Vec::with_capacity(n);
+    let mut name: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut title: Vec<Option<String>> = Vec::with_capacity(n);
+    let mut alt: Vec<Option<String>> = Vec::with_capacity(n);
+    for row in rows {
+        index.push(row.index);
+        placement.push(row.placement.to_string());
+        relationship.push(row.relationship);
+        part.push(row.part);
+        link.push(row.link);
+        content_type.push(row.content_type);
+        width.push(row.width);
+        height.push(row.height);
+        name.push(row.name);
+        title.push(row.title);
+        alt.push(row.alt);
+    }
+    let mut frame = list!(
+        index = index,
+        placement = placement,
+        relationship = relationship,
+        part = part,
+        link = link,
+        content_type = content_type,
+        width = width,
+        height = height,
+        name = name,
+        title = title,
+        alt = alt,
+    );
+    frame.set_class(["data.frame"])?;
+    let rownames: Vec<String> = (1..=n).map(|i| i.to_string()).collect();
+    frame.set_attrib("row.names", rownames)?;
+    Ok(frame.into())
+}
+
 /// Appends one body-style paragraph, or one in a named style.
 /// Reports how many nodes were written.
 #[extendr]
@@ -442,6 +542,7 @@ extendr_module! {
     fn doc_save;
     fn doc_blocks;
     fn doc_text;
+    fn doc_images;
     fn doc_add_paragraph;
     fn doc_add_typst;
     fn doc_add_table;
@@ -573,6 +674,37 @@ mod tests {
         assert!(matches!(err, Error::Docx(_)), "{err:?}");
         let err = add_image(&mut doc, b"not a picture", None, None, None).unwrap_err();
         assert!(matches!(err, Error::Docx(_)), "{err:?}");
+    }
+
+    #[test]
+    fn lists_images_with_sizes_and_text() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let png = root
+            .ancestors()
+            .nth(4)
+            .expect("the workspace root")
+            .join("samples")
+            .join("wren.png");
+        let bytes = std::fs::read(png).expect("the sample picture");
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, sample()).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        assert!(docx_images(&mut doc).unwrap().is_empty());
+        add_image(&mut doc, &bytes, None, None, Some("A wren alt")).unwrap();
+        let rows = docx_images(&mut doc).unwrap();
+        assert_eq!(rows.len(), 1, "{rows:?}");
+        let row = &rows[0];
+        assert_eq!(row.index, 0);
+        assert_eq!(row.placement, "inline");
+        assert_eq!(row.content_type.as_deref(), Some("image/png"));
+        assert!(
+            row.part.as_deref().unwrap_or("").starts_with("word/media/"),
+            "{row:?}"
+        );
+        assert!(row.width.unwrap_or(0.0) > 0.0, "{row:?}");
+        assert!(row.height.unwrap_or(0.0) > 0.0, "{row:?}");
+        assert_eq!(row.alt.as_deref(), Some("A wren alt"));
     }
 
     #[test]
