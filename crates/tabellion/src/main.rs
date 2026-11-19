@@ -78,6 +78,7 @@ enum Command {
     /// without one, the content goes at the end of the body. Pictures given
     /// as files are read relative to the JSON file.
     #[command(group(clap::ArgGroup::new("place").args(["before", "after", "replace", "at"])))]
+    #[command(group(clap::ArgGroup::new("source").required(true).args(["content", "typst"])))]
     Insert {
         /// The document to read.
         input: PathBuf,
@@ -85,7 +86,10 @@ enum Command {
         output: PathBuf,
         /// The content: JSON in the shape crates/nebu-docx/schema/content.json gives.
         #[arg(long, value_name = "FILE")]
-        content: PathBuf,
+        content: Option<PathBuf>,
+        /// The content: Typst source with headings, paragraphs and lists.
+        #[arg(long, value_name = "FILE")]
+        typst: Option<PathBuf>,
         /// Before the block the locator names.
         #[arg(long, value_name = "LOCATOR")]
         before: Option<String>,
@@ -168,7 +172,8 @@ fn text(file: &Path, options: &TextOptions) -> Result<(), String> {
 struct InsertArgs<'a> {
     input: &'a Path,
     output: &'a Path,
-    content: &'a Path,
+    content: Option<&'a Path>,
+    typst: Option<&'a Path>,
     before: &'a Option<String>,
     after: &'a Option<String>,
     replace: &'a Option<String>,
@@ -179,9 +184,24 @@ struct InsertArgs<'a> {
 fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
     use nebu_docx::{Content, Locator, Place, WriteOptions};
     let mut doc = open(a.input)?;
-    let json = std::fs::read(a.content)
-        .map_err(|e| format!("cannot read {}: {e}", a.content.display()))?;
-    let content = Content::from_json(&json).map_err(|e| format!("{}: {e}", a.content.display()))?;
+    // Exactly one source: the argument group enforces it.
+    let (source, content) = match (a.content, a.typst) {
+        (Some(path), None) => {
+            let json =
+                std::fs::read(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let content =
+                Content::from_json(&json).map_err(|e| format!("{}: {e}", path.display()))?;
+            (path, content)
+        }
+        (None, Some(path)) => {
+            let text = std::fs::read_to_string(path)
+                .map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+            let content =
+                tabellion_typst::parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+            (path, content)
+        }
+        _ => return Err("give exactly one of --content and --typst".to_string()),
+    };
     let at = |e: nebu_docx::Error| format!("{}: {e}", a.input.display());
     let place = {
         let mut found = |loc: &str| -> Result<nebu_docx::xml::NodeId, String> {
@@ -199,8 +219,7 @@ fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
             _ => Place::End,
         }
     };
-    let dir = a
-        .content
+    let dir = source
         .parent()
         .map(|p| {
             if p.as_os_str().is_empty() {
@@ -217,14 +236,14 @@ fn insert(a: InsertArgs<'_>) -> Result<bool, String> {
     }
     let done = doc
         .insert(place, &content.blocks, &opts)
-        .map_err(|e| format!("{}: {e}", a.content.display()))?;
+        .map_err(|e| format!("{}: {e}", source.display()))?;
     doc.save(a.output).map_err(|e| e.to_string())?;
     let n = content.blocks.len();
     let mut line = format!(
         "{}: inserted {n} {} from {}",
         a.output.display(),
         if n == 1 { "block" } else { "blocks" },
-        a.content.display()
+        source.display()
     );
     if !done.styles_added.is_empty() {
         line.push_str(&format!(
@@ -343,6 +362,7 @@ fn main() -> ExitCode {
                 input,
                 output,
                 content,
+                typst,
                 before,
                 after,
                 replace,
@@ -351,7 +371,8 @@ fn main() -> ExitCode {
             } => insert(InsertArgs {
                 input,
                 output,
-                content,
+                content: content.as_deref(),
+                typst: typst.as_deref(),
                 before,
                 after,
                 replace,
