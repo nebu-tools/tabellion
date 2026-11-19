@@ -14,27 +14,61 @@ struct Face {
     bold: bool,
 }
 
+/// A n-ary operator with limits below and above it in display math.
+fn nary(op: &str, sub: Option<&str>, sup: Option<&str>) -> String {
+    let mut pr = format!("<m:naryPr><m:chr m:val=\"{op}\"/><m:limLoc m:val=\"undOvr\"/>");
+    if sub.is_none() {
+        pr.push_str("<m:subHide m:val=\"1\"/>");
+    }
+    if sup.is_none() {
+        pr.push_str("<m:supHide m:val=\"1\"/>");
+    }
+    pr.push_str("</m:naryPr>");
+    // The schema wants both slots even when one hides. The operand
+    // itself is a following sibling: repeating the glyph in `m:e`
+    // would render it twice.
+    let sub = sub.map_or("<m:sub/>".to_string(), |s| format!("<m:sub>{s}</m:sub>"));
+    let sup = sup.map_or("<m:sup/>".to_string(), |s| format!("<m:sup>{s}</m:sup>"));
+    format!("<m:nary>{pr}{sub}{sup}<m:e/></m:nary>")
+}
+
+/// The n-ary operator of a base expression, if it takes display limits.
+/// Dotted names resolve through the symbol table first.
+fn nary_op(expr: &ast::Expr) -> Option<&'static str> {
+    const OPS: [&str; 7] = ["∑", "∏", "∐", "⋀", "⋁", "⋂", "⋃"];
+    let text = match expr {
+        ast::Expr::MathIdent(id) => symbols::lookup(id.as_str())?,
+        ast::Expr::MathFieldAccess(access) => symbols::lookup(&dotted_name(*access))?,
+        ast::Expr::MathText(t) => match t.get() {
+            MathTextKind::Grapheme(s) => s.as_str(),
+            _ => return None,
+        },
+        _ => return None,
+    };
+    OPS.iter().find(|&&op| op == text).copied()
+}
+
 /// An equation as one `m:oMath` element.
-pub(crate) fn convert_equation(cx: &Cx, eq: ast::Equation) -> Result<Math, Error> {
-    let inner = convert_math(cx, eq.body(), Face::default())?;
+pub(crate) fn convert_equation(cx: &Cx, eq: ast::Equation, display: bool) -> Result<Math, Error> {
+    let inner = convert_math(cx, eq.body(), Face::default(), display)?;
     Ok(Math::omml(&format!("<m:oMath>{inner}</m:oMath>")))
 }
 
 /// Math content as Office Math without the outer element.
-fn convert_math(cx: &Cx, math: ast::Math, face: Face) -> Result<String, Error> {
+fn convert_math(cx: &Cx, math: ast::Math, face: Face, display: bool) -> Result<String, Error> {
     let mut out = String::new();
     for expr in math.exprs() {
         // Typst ignores whitespace in math.
         if matches!(expr, ast::Expr::Space(_)) {
             continue;
         }
-        out.push_str(&convert_math_expr(cx, expr, face)?);
+        out.push_str(&convert_math_expr(cx, expr, face, display)?);
     }
     Ok(out)
 }
 
 /// One math expression as Office Math.
-fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Error> {
+fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face, display: bool) -> Result<String, Error> {
     match expr {
         ast::Expr::MathText(t) => Ok(run(&math_text(t), face)),
         ast::Expr::MathIdent(id) => {
@@ -61,12 +95,14 @@ fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Err
             }
         }
         ast::Expr::MathAttach(attach) => {
-            let base = convert_math_expr(cx, attach.base(), face)?;
+            let base = convert_math_expr(cx, attach.base(), face, display)?;
             // Primes join any explicit superscript first: Typst sets
             // the prime before the superscript in the same slot, and a
             // subscript with any superscript shares one object.
+            // Scripts set in a smaller size, so they never take
+            // display limits.
             let mut sup = match attach.top() {
-                Some(top) => Some(convert_math_expr(cx, top, face)?),
+                Some(top) => Some(convert_math_expr(cx, top, face, false)?),
                 None => None,
             };
             if let Some(primes) = attach.primes() {
@@ -84,32 +120,52 @@ fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Err
             }
             match (attach.bottom(), sup) {
                 (Some(sub), Some(sup)) => {
-                    let sub = convert_math_expr(cx, sub, face)?;
+                    let sub = convert_math_expr(cx, sub, face, false)?;
+                    if display
+                        && attach.primes().is_none()
+                        && let Some(op) = nary_op(&attach.base())
+                    {
+                        return Ok(nary(op, Some(&sub), Some(&sup)));
+                    }
                     Ok(format!(
                         "<m:sSubSup><m:e>{base}</m:e><m:sub>{sub}</m:sub><m:sup>{sup}</m:sup></m:sSubSup>"
                     ))
                 }
                 (Some(sub), None) => {
-                    let sub = convert_math_expr(cx, sub, face)?;
+                    let sub = convert_math_expr(cx, sub, face, false)?;
+                    if display
+                        && attach.primes().is_none()
+                        && let Some(op) = nary_op(&attach.base())
+                    {
+                        return Ok(nary(op, Some(&sub), None));
+                    }
                     Ok(format!(
                         "<m:sSub><m:e>{base}</m:e><m:sub>{sub}</m:sub></m:sSub>"
                     ))
                 }
-                (None, Some(sup)) => Ok(format!(
-                    "<m:sSup><m:e>{base}</m:e><m:sup>{sup}</m:sup></m:sSup>"
-                )),
+                (None, Some(sup)) => {
+                    if display
+                        && attach.primes().is_none()
+                        && let Some(op) = nary_op(&attach.base())
+                    {
+                        return Ok(nary(op, None, Some(&sup)));
+                    }
+                    Ok(format!(
+                        "<m:sSup><m:e>{base}</m:e><m:sup>{sup}</m:sup></m:sSup>"
+                    ))
+                }
                 (None, None) => Ok(base),
             }
         }
         ast::Expr::MathFrac(frac) => {
-            let num = convert_math_expr(cx, frac.num(), face)?;
-            let den = convert_math_expr(cx, frac.denom(), face)?;
+            let num = convert_math_expr(cx, frac.num(), face, false)?;
+            let den = convert_math_expr(cx, frac.denom(), face, false)?;
             Ok(format!(
                 "<m:f><m:num>{num}</m:num><m:den>{den}</m:den></m:f>"
             ))
         }
         ast::Expr::MathRoot(root) => {
-            let radicand = convert_math_expr(cx, root.radicand(), face)?;
+            let radicand = convert_math_expr(cx, root.radicand(), face, display)?;
             match root.index() {
                 // A bare square root hides an empty degree, which the
                 // schema still requires.
@@ -125,18 +181,18 @@ fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Err
         ast::Expr::MathDelimited(delimited) => {
             let open = delim_char(cx, delimited.open())?;
             let close = delim_char(cx, delimited.close())?;
-            let body = convert_math(cx, delimited.body(), face)?;
+            let body = convert_math(cx, delimited.body(), face, display)?;
             Ok(format!(
                 "<m:d><m:dPr><m:begChr m:val=\"{open}\"/><m:endChr m:val=\"{close}\"/></m:dPr><m:e>{body}</m:e></m:d>"
             ))
         }
-        ast::Expr::MathCall(call) => convert_math_call(cx, call, face),
+        ast::Expr::MathCall(call) => convert_math_call(cx, call, face, display),
         ast::Expr::MathPrimes(_) => Err(unsupported(cx, expr, "a prime without a base")),
         ast::Expr::MathAlignPoint(_) => Err(unsupported(cx, expr, "an aligned equation")),
         ast::Expr::Linebreak(_) => Err(unsupported(cx, expr, "a multiline equation")),
-        ast::Expr::Math(m) => convert_math(cx, m, face),
-        ast::Expr::ContentBlock(block) => convert_math_group(cx, block, face),
-        ast::Expr::Parenthesized(inner) => convert_math_expr(cx, inner.expr(), face),
+        ast::Expr::Math(m) => convert_math(cx, m, face, display),
+        ast::Expr::ContentBlock(block) => convert_math_group(cx, block, face, display),
+        ast::Expr::Parenthesized(inner) => convert_math_expr(cx, inner.expr(), face, display),
         ast::Expr::Str(s) => Ok(run(
             &s.get(),
             Face {
@@ -155,13 +211,26 @@ fn convert_math_expr(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Err
 }
 
 /// A math call: fractions, roots, styled and literal text.
-fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String, Error> {
+fn convert_math_call(
+    cx: &Cx,
+    call: ast::MathCall,
+    face: Face,
+    display: bool,
+) -> Result<String, Error> {
     let name = match call.callee() {
         ast::MathAccess::MathIdent(id) => id.as_str().to_string(),
         _ => {
             return Err(unsupported_at(cx, call.span(), "a method call in math"));
         }
     };
+    // Matrices read their own arguments: cells are positional and `;`
+    // starts a new row.
+    if matches!(
+        name.as_str(),
+        "mat" | "pmat" | "bmat" | "Bmat" | "vmat" | "Vmat"
+    ) {
+        return convert_matrix(cx, call, &name, face);
+    }
     let mut args = Vec::new();
     for item in call.args().arg_items() {
         if item.ends_in_semicolon {
@@ -185,8 +254,8 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
     match name.as_str() {
         "frac" => match args.as_slice() {
             [num, den] => {
-                let num = math_arg(cx, *num, face)?;
-                let den = math_arg(cx, *den, face)?;
+                let num = math_arg(cx, *num, face, false)?;
+                let den = math_arg(cx, *den, face, false)?;
                 Ok(format!(
                     "<m:f><m:num>{num}</m:num><m:den>{den}</m:den></m:f>"
                 ))
@@ -199,7 +268,7 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
         },
         "sqrt" => match args.as_slice() {
             [body] => {
-                let body = math_arg(cx, *body, face)?;
+                let body = math_arg(cx, *body, face, display)?;
                 Ok(format!(
                     "<m:rad><m:radPr><m:degHide m:val=\"1\"/></m:radPr><m:deg/><m:e>{body}</m:e></m:rad>"
                 ))
@@ -208,8 +277,8 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
         },
         "root" => match args.as_slice() {
             [index, body] => {
-                let index = math_arg(cx, *index, face)?;
-                let body = math_arg(cx, *body, face)?;
+                let index = math_arg(cx, *index, face, display)?;
+                let body = math_arg(cx, *body, face, display)?;
                 Ok(format!(
                     "<m:rad><m:deg>{index}</m:deg><m:e>{body}</m:e></m:rad>"
                 ))
@@ -218,7 +287,7 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
         },
         "lr" => match args.as_slice() {
             [body] => match body {
-                ast::Expr::MathDelimited(_) => convert_math_expr(cx, *body, face),
+                ast::Expr::MathDelimited(_) => convert_math_expr(cx, *body, face, display),
                 _ => Err(unsupported_at(cx, call.span(), "a bare sided delimiter")),
             },
             _ => Err(unsupported_at(cx, call.span(), "`lr` with options")),
@@ -238,11 +307,12 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
                     upright: true,
                     ..face
                 },
+                display,
             ),
             _ => Err(unsupported_at(cx, call.span(), "text without content")),
         },
         "bold" => match args.as_slice() {
-            [body] => convert_math_expr(cx, *body, Face { bold: true, ..face }),
+            [body] => convert_math_expr(cx, *body, Face { bold: true, ..face }, display),
             _ => Err(unsupported_at(cx, call.span(), "bold without content")),
         },
         "upright" => match args.as_slice() {
@@ -253,13 +323,32 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
                     upright: true,
                     ..face
                 },
+                display,
             ),
             _ => Err(unsupported_at(cx, call.span(), "upright without content")),
         },
         "italic" => match args.as_slice() {
             // Italics are the math default.
-            [body] => convert_math_expr(cx, *body, face),
+            [body] => convert_math_expr(cx, *body, face, display),
             _ => Err(unsupported_at(cx, call.span(), "italic without content")),
+        },
+        "hat" | "tilde" | "dot" | "ddot" | "bar" | "arrow" => match args.as_slice() {
+            [body] => {
+                let body = math_arg(cx, *body, face, display)?;
+                let chr = match name.as_str() {
+                    // Combining circumflex, tilde, dot, diaeresis, macron.
+                    "hat" => "\u{302}",
+                    "tilde" => "\u{303}",
+                    "dot" => "\u{307}",
+                    "ddot" => "\u{308}",
+                    "bar" => "\u{304}",
+                    _ => "\u{20d7}",
+                };
+                Ok(format!(
+                    "<m:acc><m:accPr><m:chr m:val=\"{chr}\"/></m:accPr><m:e>{body}</m:e></m:acc>"
+                ))
+            }
+            _ => Err(unsupported_at(cx, call.span(), "an accent without a base")),
         },
         _ => Err(unsupported_at(
             cx,
@@ -273,7 +362,12 @@ fn convert_math_call(cx: &Cx, call: ast::MathCall, face: Face) -> Result<String,
 /// A grouped argument as math: plain text re-parsed as math, so
 /// `frac([x + y], [2])` numbers like `frac(x + y, 2)`. Anything else
 /// keeps its own error.
-fn convert_math_group(cx: &Cx, block: ast::ContentBlock, face: Face) -> Result<String, Error> {
+fn convert_math_group(
+    cx: &Cx,
+    block: ast::ContentBlock,
+    face: Face,
+    display: bool,
+) -> Result<String, Error> {
     let mut text = String::new();
     for expr in block.body().exprs() {
         match expr {
@@ -309,10 +403,67 @@ fn convert_math_group(cx: &Cx, block: ast::ContentBlock, face: Face) -> Result<S
     // The fragment's spans are detached: they cannot point back into
     // the source, so an unsupported construct reports the group's
     // line instead of a bogus line 1.
-    match convert_math(cx, math, face) {
+    match convert_math(cx, math, face, display) {
         Err(Error::Unsupported { what, .. }) => Err(unsupported_at(cx, block.span(), &what)),
         result => result,
     }
+}
+
+/// A `mat` call and its delimited variants: positional cells with
+/// `;` starting a new row. Cell content never takes display limits.
+fn convert_matrix(cx: &Cx, call: ast::MathCall, name: &str, face: Face) -> Result<String, Error> {
+    let mut rows: Vec<Vec<String>> = vec![Vec::new()];
+    for item in call.args().arg_items() {
+        match item.arg {
+            ast::Arg::Pos(expr) => {
+                let cell = math_arg(cx, expr, face, false)?;
+                rows.last_mut().expect("a current row").push(cell);
+            }
+            ast::Arg::Named(named) => {
+                return Err(unsupported_at(
+                    cx,
+                    named.span(),
+                    &format!("a `{}` matrix argument", named.name().as_str()),
+                ));
+            }
+            _ => {
+                return Err(unsupported_at(cx, call.span(), "spread matrix arguments"));
+            }
+        }
+        if item.ends_in_semicolon {
+            rows.push(Vec::new());
+        }
+    }
+    while rows.len() > 1 && rows.last().is_some_and(Vec::is_empty) {
+        rows.pop();
+    }
+    if rows.iter().all(|row| row.is_empty()) {
+        return Err(unsupported_at(cx, call.span(), "an empty matrix"));
+    }
+    let width = rows[0].len();
+    if width == 0 || rows.iter().any(|row| row.len() != width) {
+        return Err(unsupported_at(cx, call.span(), "a ragged matrix"));
+    }
+    let mut out = String::from("<m:m>");
+    for row in &rows {
+        out.push_str("<m:mr>");
+        for cell in row {
+            out.push_str(&format!("<m:e>{cell}</m:e>"));
+        }
+        out.push_str("</m:mr>");
+    }
+    out.push_str("</m:m>");
+    // Bare matrices default to parentheses, like `pmat`.
+    let (open, close) = match name {
+        "mat" | "pmat" => ("(", ")"),
+        "bmat" => ("[", "]"),
+        "Bmat" => ("{", "}"),
+        "vmat" => ("|", "|"),
+        _ => ("‖", "‖"),
+    };
+    Ok(format!(
+        "<m:d><m:dPr><m:begChr m:val=\"{open}\"/><m:endChr m:val=\"{close}\"/></m:dPr><m:e>{out}</m:e></m:d>"
+    ))
 }
 
 fn describeish_math(expr: &ast::Expr) -> String {
@@ -327,10 +478,10 @@ fn describeish_math(expr: &ast::Expr) -> String {
 }
 
 /// A call argument as math: grouped content or a bare expression.
-fn math_arg(cx: &Cx, expr: ast::Expr, face: Face) -> Result<String, Error> {
+fn math_arg(cx: &Cx, expr: ast::Expr, face: Face, display: bool) -> Result<String, Error> {
     match expr {
-        ast::Expr::ContentBlock(block) => convert_math_group(cx, block, face),
-        _ => convert_math_expr(cx, expr, face),
+        ast::Expr::ContentBlock(block) => convert_math_group(cx, block, face, display),
+        _ => convert_math_expr(cx, expr, face, display),
     }
 }
 
@@ -509,6 +660,144 @@ mod tests {
     }
 
     #[test]
+    fn converts_matrices_and_accents() {
+        // A 2x2 matrix with a delimited variant.
+        let content = parse("$mat(a, b; c, d) + pmat(x; y)$\n").unwrap();
+        assert_eq!(content.blocks.len(), 1, "{content:?}");
+        let Block::Paragraph { content, .. } = &content.blocks[0] else {
+            panic!("a paragraph: {content:?}");
+        };
+        let Some(Inline::Math { math }) = content.iter().find_map(|i| match i {
+            m @ Inline::Math { .. } => Some(m),
+            _ => None,
+        }) else {
+            panic!("inline math: {content:?}");
+        };
+        assert!(math.omml.contains("<m:m><m:mr>"), "{:?}", math.omml,);
+        assert_eq!(
+            math.omml.matches("<m:begChr").count(),
+            2,
+            "bare mat and pmat both parenthesize: {math:?}"
+        );
+        // An accented base carries the combining mark.
+        let content = parse("$hat(x) + tilde(y)$\n").unwrap();
+        let Block::Paragraph { content, .. } = &content.blocks[0] else {
+            panic!("a paragraph: {content:?}");
+        };
+        let Some(Inline::Math { math }) = content.iter().find_map(|i| match i {
+            m @ Inline::Math { .. } => Some(m),
+            _ => None,
+        }) else {
+            panic!("inline math: {content:?}");
+        };
+        assert!(math.omml.contains("<m:acc>"), "{}", math.omml);
+        assert!(math.omml.contains("m:val=\"\u{302}\""), "{:?}", math.omml);
+        assert!(math.omml.contains("m:val=\"\u{303}\""), "{:?}", math.omml);
+        // `arrow` is the combining arrow; `vec` stays unimplemented.
+        let content = parse("$arrow(x)$\n").unwrap();
+        let Block::Paragraph { content, .. } = &content.blocks[0] else {
+            panic!("a paragraph: {content:?}");
+        };
+        let Some(Inline::Math { math }) = content.iter().find_map(|i| match i {
+            m @ Inline::Math { .. } => Some(m),
+            _ => None,
+        }) else {
+            panic!("inline math: {content:?}");
+        };
+        assert!(math.omml.contains("m:val=\"\u{20d7}\""), "{:?}", math.omml);
+        let err = parse("$vec(x)$\n").unwrap_err();
+        assert_eq!(
+            err,
+            Error::Unsupported {
+                line: 1,
+                what: "`vec` in math".to_string()
+            },
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn converts_dotted_n_ary_operators() {
+        // Dotted Typst names resolve through the symbol table before
+        // the n-ary check: a coproduct numbers like a sum.
+        let content = parse("$ product.co_(i = 1)^n x_i $\n").unwrap();
+        assert_eq!(content.blocks.len(), 1, "{content:?}");
+        let Block::Equation { math, .. } = &content.blocks[0] else {
+            panic!("a display equation: {content:?}");
+        };
+        assert!(math.omml.contains("<m:nary>"), "{}", math.omml);
+        assert!(math.omml.contains("<m:chr m:val=\"∐\"/>"), "{}", math.omml);
+        assert_eq!(math.omml.matches('∐').count(), 1, "{}", math.omml);
+    }
+
+    #[test]
+    fn rejects_ragged_and_empty_matrices() {
+        for (source, what) in [
+            ("$mat(a, b; c)$\n", "a ragged matrix"),
+            ("$mat()$\n", "an empty matrix"),
+        ] {
+            let err = parse(source).unwrap_err();
+            assert_eq!(
+                err,
+                Error::Unsupported {
+                    line: 1,
+                    what: what.to_string()
+                },
+                "{source:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn hides_the_missing_side_of_display_n_ary() {
+        // A display sum with only a subscript still numbers as one
+        // operator: the missing superscript hides behind an empty tag.
+        let content = parse("$ sum_x $\n").unwrap();
+        let Block::Equation { math, .. } = &content.blocks[0] else {
+            panic!("a display equation: {content:?}");
+        };
+        assert!(math.omml.contains("<m:nary>"), "{:?}", math.omml);
+        assert!(
+            math.omml.contains("<m:supHide m:val=\"1\"/>"),
+            "{:?}",
+            math.omml
+        );
+        assert!(math.omml.contains("<m:sup/>"), "{:?}", math.omml);
+    }
+
+    #[test]
+    fn converts_display_sums_with_limits_below() {
+        // A display sum puts its limits below and above the operator.
+        let content = parse("$ sum_(i = 1)^n x_i $\n").unwrap();
+        assert_eq!(content.blocks.len(), 1, "{content:?}");
+        let Block::Equation { math, .. } = &content.blocks[0] else {
+            panic!("a display equation: {content:?}");
+        };
+        assert!(math.omml.contains("<m:nary>"), "{}", math.omml);
+        assert!(
+            math.omml.contains("<m:limLoc m:val=\"undOvr\"/>"),
+            "{}",
+            math.omml
+        );
+        assert!(!math.omml.contains("<m:sSubSup>"), "{}", math.omml);
+        // The operand slot stays empty: the glyph lives only in m:chr
+        // and the operand follows as a sibling.
+        assert!(math.omml.contains("<m:e/>"), "{}", math.omml);
+        assert_eq!(math.omml.matches('∑').count(), 1, "{}", math.omml);
+        // The same sum inline keeps beside-scripts.
+        let content = parse("$sum_(i = 1)^n x_i$\n").unwrap();
+        assert_eq!(content.blocks.len(), 1, "{content:?}");
+        let Block::Paragraph { content, .. } = &content.blocks[0] else {
+            panic!("a paragraph: {content:?}");
+        };
+        let Inline::Math { math } = &content[0] else {
+            panic!("inline math: {content:?}");
+        };
+        assert!(math.omml.contains("<m:sSubSup>"), "{}", math.omml);
+        assert!(!math.omml.contains("<m:nary>"), "{}", math.omml);
+    }
+
+    #[test]
     fn converts_fractions() {
         // The numerator stays on top: exact bytes, not just tags.
         assert_eq!(
@@ -593,7 +882,7 @@ mod tests {
     #[test]
     fn rejects_what_math_cannot_hold() {
         for (source, line, what) in [
-            ("$mat(a, b)$\n", 1, "`mat` in math"),
+            ("$mat(a, b; c)$\n", 1, "a ragged matrix"),
             (
                 "$table(columns: 1, [a])$\n",
                 1,
@@ -622,15 +911,15 @@ mod tests {
         // inner spans are detached: an unsupported construct inside
         // it reports the group's line, not line 1.
         for source in [
-            "Intro\n\n$frac([mat(a)], [2])$\n",
-            "Intro\n\n$frac(#[mat(a)], [2])$\n",
+            "Intro\n\n$frac([mat(a, b; c)], [2])$\n",
+            "Intro\n\n$frac(#[mat(a, b; c)], [2])$\n",
         ] {
             let err = parse(source).unwrap_err();
             assert_eq!(
                 err,
                 Error::Unsupported {
                     line: 3,
-                    what: "`mat` in math".to_string()
+                    what: "a ragged matrix".to_string()
                 },
                 "{source:?}: {err:?}"
             );
