@@ -8,7 +8,7 @@ use std::cell::RefCell;
 
 use extendr_api::prelude::*;
 use extendr_ffi::{R_ExternalPtrProtected, R_ExternalPtrTag, R_SetExternalPtrProtected};
-use nebu_docx::content::{Block, Inline};
+use nebu_docx::content::{Block, Cell, Inline, Row, Table};
 use nebu_docx::{BlockKind, Document, Place, TextOptions, WriteOptions};
 use thiserror::Error;
 
@@ -112,6 +112,64 @@ pub fn add_paragraph(doc: &mut Document, text: &str, style: Option<&str>) -> Fal
 pub fn add_typst(doc: &mut Document, source: &str) -> Fallible<usize> {
     let content = tabellion_typst::parse(source).map_err(|e| Error::Typst(e.to_string()))?;
     let done = doc.insert(Place::End, &content.blocks, &WriteOptions::default())?;
+    Ok(done.nodes.iter().map(Vec::len).sum())
+}
+
+/// A cell holding one paragraph of plain text.
+fn text_cell(text: &str) -> Cell {
+    Cell::new(vec![Block::Paragraph {
+        style: None,
+        align: None,
+        content: vec![Inline::text(text)],
+    }])
+}
+
+/// Appends columns of text as a table with a header row of the column
+/// names. Missing cells stay empty; every column must be as long as the
+/// first. Reports how many nodes were written.
+pub fn add_table(
+    doc: &mut Document,
+    headers: &[String],
+    columns: &[Vec<Option<String>>],
+    caption: Option<&str>,
+    label: Option<&str>,
+) -> Fallible<usize> {
+    if headers.is_empty() {
+        return Err(Error::Docx("a table needs at least one column".to_string()));
+    }
+    if columns.len() != headers.len() {
+        return Err(Error::Docx(
+            "table columns must match the column names".to_string(),
+        ));
+    }
+    let height = columns.first().map_or(0, Vec::len);
+    if columns.iter().any(|column| column.len() != height) {
+        return Err(Error::Docx(
+            "table columns must all be the same length".to_string(),
+        ));
+    }
+    let mut rows = Vec::with_capacity(height + 1);
+    rows.push(Row {
+        cells: headers.iter().map(|header| text_cell(header)).collect(),
+    });
+    for i in 0..height {
+        rows.push(Row {
+            cells: columns
+                .iter()
+                .map(|column| text_cell(column[i].as_deref().unwrap_or("")))
+                .collect(),
+        });
+    }
+    let table = Table {
+        rows,
+        header_rows: 1,
+        first_column: false,
+        style: None,
+        widths: None,
+        caption: caption.map(|text| vec![Inline::text(text)]),
+        label: label.map(str::to_string),
+    };
+    let done = doc.insert(Place::End, &[Block::Table(table)], &WriteOptions::default())?;
     Ok(done.nodes.iter().map(Vec::len).sum())
 }
 
@@ -221,6 +279,55 @@ fn doc_add_typst(doc: Robj, source: &str) -> Fallible<i32> {
     Ok(add_typst(&mut checked_handle(&doc)?.borrow_mut(), source)? as i32)
 }
 
+/// Reads a character column, keeping missing values as missing.
+fn strings_or_none(column: &Robj) -> Fallible<Vec<Option<String>>> {
+    let strings = column
+        .as_str_iter()
+        .ok_or_else(|| Error::Docx("table columns must be character vectors".to_string()))?;
+    Ok(strings
+        .map(|s| if s.is_na() { None } else { Some(s.to_string()) })
+        .collect())
+}
+
+/// Appends a data frame as a table with a header row of its names.
+/// Missing cells stay empty. Reports how many nodes were written.
+#[extendr]
+fn doc_add_table(
+    doc: Robj,
+    frame: Robj,
+    caption: Option<&str>,
+    label: Option<&str>,
+) -> Fallible<i32> {
+    if !frame.is_list() || !frame.inherits("data.frame") {
+        return Err(Error::Docx("a table needs a data frame".to_string()));
+    }
+    let names = frame
+        .get_attrib("names")
+        .ok_or_else(|| Error::Docx("a data frame has column names".to_string()))?;
+    let mut headers = Vec::new();
+    for name in names
+        .as_str_iter()
+        .ok_or_else(|| Error::Docx("a data frame has column names".to_string()))?
+    {
+        if name.is_na() {
+            return Err(Error::Docx("column names must not be missing".to_string()));
+        }
+        headers.push(name.to_string());
+    }
+    let list = List::try_from(&frame)?;
+    let mut columns = Vec::with_capacity(headers.len());
+    for value in list.values() {
+        columns.push(strings_or_none(&value)?);
+    }
+    Ok(add_table(
+        &mut checked_handle(&doc)?.borrow_mut(),
+        &headers,
+        &columns,
+        caption,
+        label,
+    )? as i32)
+}
+
 extendr_module! {
     mod tabellion;
     fn doc_open;
@@ -229,6 +336,7 @@ extendr_module! {
     fn doc_text;
     fn doc_add_paragraph;
     fn doc_add_typst;
+    fn doc_add_table;
 }
 
 #[cfg(test)]
@@ -279,5 +387,36 @@ mod tests {
         let mut doc = open_docx(input.to_str().unwrap()).unwrap();
         let err = add_typst(&mut doc, "#grid(columns: 2, [a])\n").unwrap_err();
         assert!(matches!(err, Error::Typst(_)), "{err:?}");
+    }
+
+    #[test]
+    fn appends_tables_with_empty_missing_cells() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        let headers = vec!["site".to_string(), "count".to_string()];
+        let columns = vec![
+            vec![Some("A".to_string()), Some("B".to_string())],
+            vec![Some("3".to_string()), None],
+        ];
+        assert!(add_table(&mut doc, &headers, &columns, None, None).is_ok());
+        let text = docx_text(&mut doc).unwrap();
+        assert!(text.contains("site\tcount\n"), "{text}");
+        assert!(text.contains("A\t3\n"), "{text}");
+        assert!(text.contains("B\t\n"), "{text}");
+        // No columns, mismatched names, and ragged columns are errors.
+        let err = add_table(&mut doc, &[], &[], None, None).unwrap_err();
+        assert!(matches!(err, Error::Docx(_)), "{err:?}");
+        let short = vec![vec![Some("A".to_string())]];
+        let err = add_table(&mut doc, &headers, &short, None, None).unwrap_err();
+        assert!(matches!(err, Error::Docx(_)), "{err:?}");
+        let ragged = vec![
+            vec![Some("A".to_string()), Some("B".to_string())],
+            vec![Some("3".to_string())],
+        ];
+        let err = add_table(&mut doc, &headers, &ragged, None, None).unwrap_err();
+        assert!(matches!(err, Error::Docx(_)), "{err:?}");
     }
 }

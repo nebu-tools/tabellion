@@ -2,6 +2,7 @@
 
 S3method(print,tabellion_doc)
 export(add_paragraph)
+export(add_table)
 export(add_typst)
 export(docx_blocks)
 export(docx_text)
