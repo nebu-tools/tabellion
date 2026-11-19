@@ -20,4 +20,3 @@ extendr-ffi = "0.8"
 
 [dev-dependencies]
 tempfile = "3.27"
-extendr-engine = "0.8"

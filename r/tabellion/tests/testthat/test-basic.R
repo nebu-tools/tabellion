@@ -57,6 +57,12 @@ test_that("only this package's handles are accepted", {
   expect_error(docx_text("report.docx"))
   expect_error(docx_text(42L))
   expect_error(docx_blocks(list()))
+  # A real foreign external pointer is an R error, never a crash.
+  skip_if_not_installed("curl")
+  foreign <- curl::new_handle()
+  expect_identical(typeof(foreign), "externalptr")
+  expect_error(docx_text(foreign))
+  expect_error(docx_blocks(foreign))
   # Validation looks at the handle itself, not its class.
   other <- doc
   class(other) <- "other"

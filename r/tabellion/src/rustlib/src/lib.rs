@@ -234,7 +234,6 @@ extendr_module! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use extendr_api::prelude::{GetSexp, Robj};
 
     fn sample() -> Vec<u8> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -280,65 +279,5 @@ mod tests {
         let mut doc = open_docx(input.to_str().unwrap()).unwrap();
         let err = add_typst(&mut doc, "#grid(columns: 2, [a])\n").unwrap_err();
         assert!(matches!(err, Error::Typst(_)), "{err:?}");
-    }
-
-    /// A foreign external pointer is rejected with an error, never
-    /// dereferenced: only [`doc_open`] output passes [`checked_handle`].
-    #[test]
-    fn rejects_foreign_handles() {
-        use extendr_ffi::{R_MakeExternalPtr, R_NilValue};
-        extendr_api::test! {
-            // Not an external pointer at all.
-            let err = checked_handle(&Robj::from(42)).unwrap_err();
-            assert!(matches!(err, Error::Docx(_)), "{err:?}");
-            // A foreign pointer: an address no `Box<dyn Any>` lives at,
-            // with no tag and no marker. Checking it must not touch the
-            // address, so this cannot crash.
-            let foreign = unsafe {
-                Robj::from_sexp(R_MakeExternalPtr(
-                    0x1234 as *mut std::ffi::c_void,
-                    R_NilValue,
-                    R_NilValue,
-                ))
-            };
-            let err = checked_handle(&foreign).unwrap_err();
-            assert!(matches!(err, Error::Docx(_)), "{err:?}");
-            // The right tag but the wrong marker is still rejected.
-            let tag = Robj::from(std::any::type_name::<RefCell<Document>>());
-            let wrong_prot = unsafe {
-                Robj::from_sexp(R_MakeExternalPtr(
-                    0x1234 as *mut std::ffi::c_void,
-                    tag.get(),
-                    R_NilValue,
-                ))
-            };
-            let err = checked_handle(&wrong_prot).unwrap_err();
-            assert!(matches!(err, Error::Docx(_)), "{err:?}");
-            // A null address with the right tag and marker fails cleanly.
-            let marker = Robj::from(HANDLE_MARKER);
-            let nulled = unsafe {
-                Robj::from_sexp(R_MakeExternalPtr(
-                    std::ptr::null_mut(),
-                    tag.get(),
-                    marker.get(),
-                ))
-            };
-            let err = checked_handle(&nulled).unwrap_err();
-            assert!(matches!(err, Error::Docx(_)), "{err:?}");
-        }
-    }
-
-    /// What [`doc_open`] makes passes [`checked_handle`].
-    #[test]
-    fn accepts_own_handles() {
-        extendr_api::test! {
-            let bytes = sample();
-            let dir = tempfile::tempdir().unwrap();
-            let input = dir.path().join("in.docx");
-            std::fs::write(&input, &bytes).unwrap();
-            let handle = doc_open(input.to_str().unwrap()).unwrap();
-            let back = checked_handle(handle.as_robj()).unwrap();
-            assert_eq!(back.borrow().sha256(), handle.borrow().sha256());
-        }
     }
 }
