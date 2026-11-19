@@ -1,11 +1,9 @@
 OBJECTS = entrypoint.o
 RUSTLIB = rustlib/target/release/libtabellion.a
-PKG_LIBS = $(RUSTLIB) -lgcc_s -lutil -lrt -lpthread -lm -ldl
+PKG_LIBS = $(RUSTLIB)
 
-all: $(SHLIB)
+ifeq ($(shell uname -s),Linux)
+PKG_LIBS += -lgcc_s -lutil -lrt -lpthread -lm -ldl
+endif
 
-$(SHLIB): $(RUSTLIB)
-
-.PHONY: cargo-force
-$(RUSTLIB): cargo-force
-	R_HOME="$(R_HOME)" cargo build --release --manifest-path rustlib/Cargo.toml --target-dir rustlib/target
+include Makevars.rust

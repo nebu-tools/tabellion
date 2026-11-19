@@ -1,0 +1,14 @@
+OBJECTS = entrypoint.o
+
+RUST_TARGET ?= $(shell "$(R_HOME)/bin$(R_ARCH_BIN)/Rscript.exe" "../tools/rustarch.R")
+RUST_TARGET_FLAG = --target=$(RUST_TARGET)
+RUSTLIB = rustlib/target/$(RUST_TARGET)/release/libtabellion.a
+
+PKG_LIBS = $(RUSTLIB) -lws2_32 -ladvapi32 -luserenv -lbcrypt -lntdll -lsynchronization
+
+LIBGCC_MOCK = $(CURDIR)/.cargo/libgcc_mock
+RUST_PREPARE = mkdir -p "$(LIBGCC_MOCK)" && touch "$(LIBGCC_MOCK)/libgcc_eh.a"
+RUST_BUILD_ENV = LIBRARY_PATH="$(LIBRARY_PATH);$(LIBGCC_MOCK)" \
+                 RUSTFLAGS="$(RUSTFLAGS) --print=native-static-libs"
+
+include Makevars.rust

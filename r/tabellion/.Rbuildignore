@@ -1,4 +1,6 @@
 ^src/rustlib/target$
+^src/\.cargo$
+^src/rust/vendor$
 \.so$
 \.o$
 symbols\.rds$

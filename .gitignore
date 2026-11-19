@@ -6,4 +6,6 @@ r/tabellion/src/*.o
 r/tabellion/src/*.so
 r/tabellion/src/*.dll
 r/tabellion/src/symbols.rds
+r/tabellion/src/.cargo/
 r/tabellion/src/rustlib/target/
+r/tabellion/src/rust/vendor/
