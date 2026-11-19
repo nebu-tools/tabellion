@@ -22,7 +22,7 @@ mod props;
 mod reader;
 mod styles;
 mod text;
-mod walk;
+pub(crate) mod walk;
 
 #[cfg(test)]
 mod linear;

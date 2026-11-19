@@ -39,6 +39,7 @@ pub mod xml;
 pub use content::{Content, ContentLimits};
 pub use document::{Document, Relationship, Target};
 pub use view::*;
+pub use writer::revise;
 pub use writer::{
     Captions, Inserted, Place, Role, RoleSource, Roles, TableStyle, Track, WriteOptions,
 };
