@@ -1,0 +1,4 @@
+#!/bin/sh
+set -eu
+rm -rf src/rustlib/target
+rm -f src/*.o src/*.so src/*.dll src/symbols.rds

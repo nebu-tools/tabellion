@@ -1,0 +1,18 @@
+Package: tabellion
+Title: Build and Edit Word Documents from R
+Version: 0.1.0
+Authors@R: person("Tabellion", role = c("aut", "cre"), email = "tabellion@example.com")
+Author: Tabellion [aut, cre]
+Maintainer: Tabellion <tabellion@example.com>
+Description: Build and edit Word (.docx) documents from R, backed by a
+    Rust engine through extendr. Functions take the document first and
+    return it invisibly, so calls pipe.
+License: AGPL-3
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+NeedsCompilation: yes
+SystemRequirements: Cargo
+Suggests: testthat,
+    curl
+Config/testthat/edition: 3
+Config/roxygen2/version: 8.0.0

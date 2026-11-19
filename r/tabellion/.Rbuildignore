@@ -1,0 +1,5 @@
+^src/rustlib/target$
+\.so$
+\.o$
+symbols\.rds$
+^\.github$

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/nebu-docx", "crates/tabellion", "crates/tabellion-typst"]
+members = ["crates/nebu-docx", "crates/tabellion", "crates/tabellion-typst", "r/tabellion/src/rustlib"]
 exclude = ["fuzz"]
 
 [workspace.package]
@@ -12,6 +12,7 @@ repository = "https://github.com/nebu-tools/tabellion"
 
 [workspace.dependencies]
 nebu-docx = { path = "crates/nebu-docx" }
+tabellion-typst = { path = "crates/tabellion-typst" }
 zip = { version = "9.7", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

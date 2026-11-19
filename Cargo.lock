@@ -287,6 +287,35 @@ dependencies = [
 ]
 
 [[package]]
+name = "extendr-api"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e002a15028421248374d3beb66d1802ce70d738b666a043a1f4dfffad14bc595"
+dependencies = [
+ "extendr-ffi",
+ "extendr-macros",
+ "once_cell",
+ "paste",
+]
+
+[[package]]
+name = "extendr-ffi"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "acf3ace33b895bdfc13d02fd7486b26dc71078c256f3399f6272f8bd70fc3a1e"
+
+[[package]]
+name = "extendr-macros"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6b27baf9abffe403f3051efea3c19a0f315be9ec5f1c80efbade1aee5ccccbc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -469,6 +498,12 @@ dependencies = [
  "smallvec",
  "windows-link",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "portable-atomic"
@@ -778,6 +813,18 @@ dependencies = [
  "serde_json",
  "tabellion-typst",
  "tempfile",
+]
+
+[[package]]
+name = "tabellion-r"
+version = "0.1.0"
+dependencies = [
+ "extendr-api",
+ "extendr-ffi",
+ "nebu-docx",
+ "tabellion-typst",
+ "tempfile",
+ "thiserror",
 ]
 
 [[package]]
