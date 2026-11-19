@@ -1,9 +1,5 @@
 OBJECTS = entrypoint.o
 RUSTLIB = rustlib/target/release/libtabellion.a
-PKG_LIBS = $(RUSTLIB)
-
-ifeq ($(shell uname -s),Linux)
-PKG_LIBS += -lgcc_s -lutil -lrt -lpthread -lm -ldl
-endif
+PKG_LIBS = $(RUSTLIB) -lgcc_s -lutil -lrt -lpthread -lm -ldl
 
 include Makevars.rust

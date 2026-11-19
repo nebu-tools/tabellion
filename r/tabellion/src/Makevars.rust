@@ -18,6 +18,7 @@ $(SHLIB): $(RUSTLIB)
 
 $(RUSTLIB): cargo-force
 	@set -e; \
+	rustc --version; \
 	if [ -f rust/vendor.tar.xz ] || [ -d rust/vendor ]; then \
 	    if [ ! -d rust/vendor ]; then tar -xJf rust/vendor.tar.xz -C rust; fi; \
 	    mkdir -p .cargo; \
