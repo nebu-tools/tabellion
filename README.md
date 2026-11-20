@@ -202,7 +202,11 @@ under the caption that carries the label with the CSV rows; the
 caption and the table style stay. `tabellion image IN OUT --target
 LABEL --file PICTURE` swaps the figure's picture for a file of the
 same kind. `tabellion replace IN OUT --find TEXT --with TEXT` swaps
-literal text wherever a reader sees it, keeping the runs' formatting:
+literal text in every story but comments — the body with its tables
+and text boxes, headers and footers, footnotes and endnotes — and
+refuses matches it cannot cut through, such as a field, a hyperlink
+or another object, writing nothing then. The replacement takes the
+first run's formatting:
 
 ```console
 $ tabellion table survey.docx survey-table.docx --target tab-sites --csv samples/sites.csv

@@ -200,15 +200,15 @@ enum Command {
         #[arg(long, value_name = "FILE")]
         file: PathBuf,
     },
-    /// Replace literal text wherever a reader sees it.
+    /// Replace literal text in the paragraphs a reader sees.
     ///
     /// Every occurrence of the find text is replaced in each paragraph of
     /// every story but comments: the body with its tables and text boxes,
-    /// headers and footers, footnotes and endnotes. Runs keep their
-    /// formatting. With an author the replacement is tracked. A paragraph
-    /// that refuses — a match inside a field, a hyperlink or another
-    /// object — aborts the command and names every refused paragraph,
-    /// and nothing is written.
+    /// headers and footers, footnotes and endnotes. The replacement takes
+    /// the first run's formatting. With an author the replacement is
+    /// tracked. A paragraph that refuses — a match inside a field, a
+    /// hyperlink or another object — aborts the command and names every
+    /// refused paragraph, and nothing is written.
     Replace {
         /// The document to read.
         input: PathBuf,

@@ -203,14 +203,15 @@ add_image <- function(doc, path, caption = NULL, label = NULL, alt = NULL) {
   invisible(doc)
 }
 
-#' Replace literal text wherever a reader sees it.
+#' Replace literal text in the paragraphs a reader sees.
 #'
 #' Every occurrence of the find text is replaced in each paragraph of
 #' every story but comments: the body with its tables and text boxes,
-#' headers and footers, footnotes and endnotes. Runs keep their
-#' formatting. With an author the replacement is tracked. A paragraph
-#' that refuses — a match inside a field, a hyperlink or another
-#' object — aborts with every refused paragraph named.
+#' headers and footers, footnotes and endnotes. The replacement takes
+#' the first run's formatting. With an author the replacement is
+#' tracked. A paragraph that refuses — a match inside a field, a
+#' hyperlink or another object — aborts with every refused paragraph
+#' named.
 #'
 #' @param doc A document handle, as [`open_docx()`] makes.
 #' @param find The literal text to find.
