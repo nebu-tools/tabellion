@@ -1913,6 +1913,7 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         concat!(
             "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
             "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
+            "<w:pPr><w:rPr><w:moveTo w:id=\"22\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr></w:pPr>",
             "<w:moveTo w:id=\"21\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
             "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
             "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
@@ -1967,7 +1968,10 @@ fn accept_settles_a_move_pair() {
     assert_eq!(revisions["revisions"].as_array().unwrap().len(), 0);
     let xml = document_xml(&out);
     assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("moveTo"), "{xml}");
+    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    // The paragraph-mark revision stays put.
+    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
 }
 
 #[test]
@@ -1983,7 +1987,9 @@ fn reject_restores_a_move_pair() {
     assert!(!text.contains("goes rover"), "{text}");
     let xml = document_xml(&out);
     assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("moveTo"), "{xml}");
+    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
 }
 
 #[test]

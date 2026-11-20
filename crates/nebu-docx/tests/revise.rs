@@ -1171,6 +1171,7 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
             concat!(
                 "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
                 "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
+                "<w:pPr><w:rPr><w:moveTo w:id=\"22\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr></w:pPr>",
                 "<w:moveTo w:id=\"21\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
                 "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
                 "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
@@ -1195,9 +1196,12 @@ fn settle_accepts_a_move_pair() {
     assert_eq!(nebu_docx::revise::settle(&mut doc, true, None).unwrap(), 2);
     assert_eq!(text_of(&mut doc, source), " stays");
     assert_eq!(text_of(&mut doc, dest), "goes rover");
+    // The two text records settle; the paragraph-mark revision stays
+    // put, as do no range markers. Views never surface property-nested
+    // moves, so preservation shows in the XML.
     assert!(
         doc.views().unwrap().revisions().is_empty(),
-        "no records left"
+        "no text records left"
     );
     let xml = String::from_utf8(support::entry(
         &doc.to_bytes().unwrap(),
@@ -1205,7 +1209,9 @@ fn settle_accepts_a_move_pair() {
     ))
     .unwrap();
     assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("moveTo"), "{xml}");
+    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
 }
 
 #[test]
@@ -1223,9 +1229,12 @@ fn settle_rejects_a_move_pair() {
     assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 2);
     assert_eq!(text_of(&mut doc, source), "rover stays");
     assert_eq!(text_of(&mut doc, dest), "goes ");
+    // The two text records settle; the paragraph-mark revision stays
+    // put, as do no range markers. Views never surface property-nested
+    // moves, so preservation shows in the XML.
     assert!(
         doc.views().unwrap().revisions().is_empty(),
-        "no records left"
+        "no text records left"
     );
     let xml = String::from_utf8(support::entry(
         &doc.to_bytes().unwrap(),
@@ -1233,7 +1242,9 @@ fn settle_rejects_a_move_pair() {
     ))
     .unwrap();
     assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("moveTo"), "{xml}");
+    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
 }
 
 #[test]

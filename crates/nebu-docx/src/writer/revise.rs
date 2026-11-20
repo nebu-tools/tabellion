@@ -1426,6 +1426,20 @@ fn attached(tree: &Tree, root: NodeId, node: NodeId) -> Result<bool, Error> {
     }
 }
 
+/// True when the node sits inside properties: an ancestor's name ends
+/// in `Pr`. The traversal never settles those, so lookups must skip
+/// them too.
+fn inside_properties(tree: &Tree, mut node: NodeId) -> Result<bool, Error> {
+    while let Some(parent) = tree.parent(node)? {
+        let name = tree.name(parent)?;
+        if name.is_some_and(|n| n.namespace == Some(W) && n.local.ends_with("Pr")) {
+            return Ok(true);
+        }
+        node = parent;
+    }
+    Ok(false)
+}
+
 /// One side of a move: the start/end markers sharing an id, with the
 /// start marker's name pairing it to the other side.
 struct MoveRange {
@@ -1539,12 +1553,22 @@ fn settle_move(
     let Some(dest) = dest else {
         return settle_children(tree, root, node, accept, author, settled);
     };
-    // The destination record the range holds.
-    let wrapper = order[dest.start + 1..dest.end].iter().find(|&&n| {
-        tree.name(n)
-            .is_ok_and(|name| name.is_some_and(|n| n.namespace == Some(W) && n.local == "moveTo"))
-    });
-    let Some(&wrapper) = wrapper else {
+    // The destination record the range holds: the first moveTo the
+    // traversal itself could settle, skipping paragraph-mark revisions
+    // as it does.
+    let mut wrapper = None;
+    for &n in &order[dest.start + 1..dest.end] {
+        let name = tree.name(n)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && n.local == "moveTo") {
+            continue;
+        }
+        if inside_properties(tree, n)? {
+            continue;
+        }
+        wrapper = Some(n);
+        break;
+    }
+    let Some(wrapper) = wrapper else {
         return settle_children(tree, root, node, accept, author, settled);
     };
     let mine = match &author {
