@@ -1148,7 +1148,8 @@ fn settle_leaves_moves_and_property_marks() {
 /// holds the moveFrom record, the destination the moveTo record. The
 /// ids are realistic: each range has its own marker id shared by its
 /// start and end, the wrappers carry separate ids, and the two ranges
-/// pair by name.
+/// pair by name. The destination paragraph also carries a paragraph-mark
+/// move in its natural properties, inside body-level range markers.
 fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
     set_runs(
         doc,
@@ -1170,15 +1171,51 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
         &format!(
             concat!(
                 "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
-                "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
-                "<w:pPr><w:rPr><w:moveTo w:id=\"22\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr></w:pPr>",
                 "<w:moveTo w:id=\"21\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
                 "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
-                "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
             ),
             a = author,
         ),
     );
+    let main = doc.main_part().to_string();
+    let tree = doc.xml(&main).unwrap();
+    // The paragraph-mark move lives in the destination's own properties.
+    let props = tree
+        .elements(dest)
+        .unwrap()
+        .find(|&n| tree.is(n, Some(nebu_docx::ns::W), "pPr").unwrap_or(false))
+        .expect("destination properties");
+    for n in tree
+        .parse_fragment(
+            &format!(
+                "<w:rPr><w:moveTo w:id=\"22\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr>",
+                a = author,
+            ),
+            &[("w", nebu_docx::ns::W)],
+        )
+        .unwrap()
+    {
+        tree.append(props, n).unwrap();
+    }
+    // The destination range markers wrap the whole paragraph.
+    for (xml, place) in [
+        ("<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>", true),
+        ("<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>", false),
+    ] {
+        let mut marker = None;
+        for n in tree
+            .parse_fragment(xml, &[("w", nebu_docx::ns::W)])
+            .unwrap()
+        {
+            marker = Some(n);
+        }
+        let marker = marker.expect("a range marker");
+        if place {
+            tree.insert_before(dest, marker).unwrap();
+        } else {
+            tree.insert_after(dest, marker).unwrap();
+        }
+    }
 }
 
 #[test]
@@ -1199,19 +1236,28 @@ fn settle_accepts_a_move_pair() {
     // The two text records settle; the paragraph-mark revision stays
     // put, as do no range markers. Views never surface property-nested
     // moves, so preservation shows in the XML.
-    assert!(
-        doc.views().unwrap().revisions().is_empty(),
-        "no text records left"
-    );
+    // The two text records settle; the paragraph-mark revision stays
+    // pending.
+    let revisions = doc.views().unwrap().revisions();
+    assert_eq!(revisions.len(), 1, "{revisions:?}");
+    assert_eq!(revisions[0].kind, RevisionKind::MoveTo, "{revisions:?}");
+    assert_eq!(revisions[0].author, "Lark", "{revisions:?}");
     let xml = String::from_utf8(support::entry(
         &doc.to_bytes().unwrap(),
         "word/document.xml",
     ))
     .unwrap();
-    assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("Range"), "{xml}");
+    // The text wrappers are gone, the paragraph-mark record stays, and
+    // both ranges stay with it: id 22 remains inside its destination
+    // range with the matching source range.
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
     assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
-    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
 }
 
 #[test]
@@ -1232,19 +1278,28 @@ fn settle_rejects_a_move_pair() {
     // The two text records settle; the paragraph-mark revision stays
     // put, as do no range markers. Views never surface property-nested
     // moves, so preservation shows in the XML.
-    assert!(
-        doc.views().unwrap().revisions().is_empty(),
-        "no text records left"
-    );
+    // The two text records settle; the paragraph-mark revision stays
+    // pending.
+    let revisions = doc.views().unwrap().revisions();
+    assert_eq!(revisions.len(), 1, "{revisions:?}");
+    assert_eq!(revisions[0].kind, RevisionKind::MoveTo, "{revisions:?}");
+    assert_eq!(revisions[0].author, "Lark", "{revisions:?}");
     let xml = String::from_utf8(support::entry(
         &doc.to_bytes().unwrap(),
         "word/document.xml",
     ))
     .unwrap();
-    assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("Range"), "{xml}");
+    // The text wrappers are gone, the paragraph-mark record stays, and
+    // both ranges stay with it: id 22 remains inside its destination
+    // range with the matching source range.
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
     assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
-    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
 }
 
 #[test]
@@ -1269,7 +1324,14 @@ fn settle_moves_only_touch_the_named_author() {
     assert_eq!(text_of(&mut doc, source), " stays");
     assert_eq!(text_of(&mut doc, dest), "goes rover");
     assert!(rejected_text(&mut doc).contains("rover stays"));
-    assert_eq!(doc.views().unwrap().revisions().len(), 2);
+    let pre: Vec<_> = doc
+        .views()
+        .unwrap()
+        .revisions()
+        .iter()
+        .map(|r| (r.kind, r.author.clone(), r.text.clone()))
+        .collect();
+    assert_eq!(pre.len(), 2, "{pre:?}");
     assert_eq!(
         nebu_docx::revise::settle(&mut doc, true, Some("Lark")).unwrap(),
         2

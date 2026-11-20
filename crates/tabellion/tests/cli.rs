@@ -1912,13 +1912,46 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         dest,
         concat!(
             "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
-            "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
-            "<w:pPr><w:rPr><w:moveTo w:id=\"22\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr></w:pPr>",
             "<w:moveTo w:id=\"21\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
             "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
-            "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
         ),
     );
+    // The paragraph-mark move lives in the destination's own properties;
+    // the destination range markers wrap the whole paragraph.
+    let main = doc.main_part().to_string();
+    let tree = doc.xml(&main).unwrap();
+    let props = tree
+        .elements(dest)
+        .unwrap()
+        .find(|&n| tree.is(n, Some(nebu_docx::ns::W), "pPr").unwrap_or(false))
+        .expect("destination properties");
+    for n in tree
+        .parse_fragment(
+            "<w:rPr><w:moveTo w:id=\"22\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr>",
+            &[("w", nebu_docx::ns::W)],
+        )
+        .unwrap()
+    {
+        tree.append(props, n).unwrap();
+    }
+    for (xml, before) in [
+        ("<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>", true),
+        ("<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>", false),
+    ] {
+        let mut marker = None;
+        for n in tree
+            .parse_fragment(xml, &[("w", nebu_docx::ns::W)])
+            .unwrap()
+        {
+            marker = Some(n);
+        }
+        let marker = marker.expect("a range marker");
+        if before {
+            tree.insert_before(dest, marker).unwrap();
+        } else {
+            tree.insert_after(dest, marker).unwrap();
+        }
+    }
     let moved = dir.join("moved.docx");
     std::fs::write(&moved, doc.to_bytes().unwrap()).unwrap();
     moved
@@ -1957,21 +1990,28 @@ fn accept_settles_a_move_pair() {
     assert_eq!(report["command"], "accept");
     assert_eq!(report["author"], "Lark");
     assert_eq!(report["settled"], 2, "{report}");
-    // The destination keeps the text, the source loses it, and the
-    // records with their range markers are gone.
+    // The destination keeps the text and the source loses it. The
+    // text records settle; the paragraph-mark revision stays pending
+    // inside its destination range, with the matching source range.
     let (_, text, _) = run(&["text", out.to_str().unwrap()]);
     assert!(text.contains("goes rover"), "{text}");
     assert!(!text.contains("rover stays"), "{text}");
     let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
     assert_eq!(code, Some(0), "{err}");
     let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
-    assert_eq!(revisions["revisions"].as_array().unwrap().len(), 0);
+    let pending = revisions["revisions"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "{revisions}");
+    assert_eq!(pending[0]["kind"], "move_to", "{revisions}");
+    assert_eq!(pending[0]["author"], "Lark", "{revisions}");
     let xml = document_xml(&out);
-    assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
     assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
-    // The paragraph-mark revision stays put.
-    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
 }
 
 #[test]
@@ -1986,10 +2026,14 @@ fn reject_restores_a_move_pair() {
     assert!(text.contains("rover stays"), "{text}");
     assert!(!text.contains("goes rover"), "{text}");
     let xml = document_xml(&out);
-    assert!(!xml.contains("moveFrom"), "{xml}");
-    assert!(!xml.contains("Range"), "{xml}");
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
     assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
-    assert!(xml.contains("w:moveTo w:id=\"22\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
 }
 
 #[test]

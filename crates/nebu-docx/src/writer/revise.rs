@@ -1440,6 +1440,27 @@ fn inside_properties(tree: &Tree, mut node: NodeId) -> Result<bool, Error> {
     Ok(false)
 }
 
+/// True when the range holds a move record the settlement leaves in
+/// place: a move wrapper inside paragraph properties. Its range must
+/// stay for the record to remain valid.
+fn range_holds_property_move(
+    tree: &Tree,
+    order: &[NodeId],
+    range: &MoveRange,
+) -> Result<bool, Error> {
+    for &n in &order[range.start + 1..range.end] {
+        let name = tree.name(n)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && matches!(n.local, "moveFrom" | "moveTo"))
+        {
+            continue;
+        }
+        if inside_properties(tree, n)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// One side of a move: the start/end markers sharing an id, with the
 /// start marker's name pairing it to the other side.
 struct MoveRange {
@@ -1519,10 +1540,12 @@ fn move_ranges(tree: &Tree, root: NodeId) -> Result<Vec<MoveRange>, Error> {
 }
 
 /// Settles a move from its source record: the pair keeps one side and
-/// drops the other, and the range markers go either way. Accepting
-/// keeps the destination text; rejecting restores the source text. A
-/// source record without a complete paired range stays, as does one
-/// belonging to another author — though what they hold still settles.
+/// drops the other. Accepting keeps the destination text; rejecting
+/// restores the source text. The range markers go when the pair
+/// settles whole, but stay when a paragraph-mark move record survives
+/// inside either range. A source record without a complete paired
+/// range stays, as does one belonging to another author — though what
+/// they hold still settles.
 fn settle_move(
     tree: &mut Tree,
     root: NodeId,
@@ -1582,16 +1605,22 @@ fn settle_move(
         return settle_children(tree, root, node, accept, author, settled);
     }
     // The kept side unwraps where it stands and its children settle in
-    // turn; the dropped side goes with its record, and both ranges'
-    // markers go either way.
+    // turn; the dropped side goes with its record. The ranges' markers
+    // go when the pair settles whole, but stay when a paragraph-mark
+    // move record survives inside either range, which needs its range
+    // to remain valid.
     let keep = if accept { wrapper } else { node };
+    let keep_markers = range_holds_property_move(tree, &order, source)?
+        || range_holds_property_move(tree, &order, dest)?;
     let kept: Vec<NodeId> = tree.children(keep)?.collect();
     for child in &kept {
         tree.insert_before(keep, *child)?;
     }
     tree.detach(keep)?;
-    for marker in source.markers.into_iter().chain(dest.markers) {
-        tree.detach(marker)?;
+    if !keep_markers {
+        for marker in source.markers.into_iter().chain(dest.markers) {
+            tree.detach(marker)?;
+        }
     }
     for child in kept {
         settle_node(tree, root, child, accept, author, settled)?;
