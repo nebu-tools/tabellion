@@ -1144,6 +1144,126 @@ fn settle_leaves_moves_and_property_marks() {
     assert_eq!(kinds.len(), 2, "{kinds:?}");
 }
 
+/// A move pair between two paragraphs, with range markers: the source
+/// holds the moveFrom record, the destination the moveTo record.
+fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
+    set_runs(
+        doc,
+        source,
+        &format!(
+            concat!(
+                "<w:moveFromRangeStart w:id=\"42\" w:name=\"m1\"/>",
+                "<w:moveFrom w:id=\"42\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+                "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
+                "<w:moveFromRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+                "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
+            ),
+            a = author,
+        ),
+    );
+    set_runs(
+        doc,
+        dest,
+        &format!(
+            concat!(
+                "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
+                "<w:moveToRangeStart w:id=\"42\" w:name=\"m1\"/>",
+                "<w:moveTo w:id=\"42\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+                "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
+                "<w:moveToRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+            ),
+            a = author,
+        ),
+    );
+}
+
+#[test]
+fn settle_accepts_a_move_pair() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([
+            { "type": "paragraph", "content": [{"type": "text", "text": "source here"}] },
+            { "type": "paragraph", "content": [{"type": "text", "text": "dest here"}] },
+        ]),
+    );
+    let source = paragraph_with(&mut doc, "source");
+    let dest = paragraph_with(&mut doc, "dest");
+    moved_pair(&mut doc, source, dest, "Lark");
+    assert_eq!(nebu_docx::revise::settle(&mut doc, true, None).unwrap(), 2);
+    assert_eq!(text_of(&mut doc, source), " stays");
+    assert_eq!(text_of(&mut doc, dest), "goes rover");
+    assert!(
+        doc.views().unwrap().revisions().is_empty(),
+        "no records left"
+    );
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert!(!xml.contains("moveFrom"), "{xml}");
+    assert!(!xml.contains("moveTo"), "{xml}");
+}
+
+#[test]
+fn settle_rejects_a_move_pair() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([
+            { "type": "paragraph", "content": [{"type": "text", "text": "source here"}] },
+            { "type": "paragraph", "content": [{"type": "text", "text": "dest here"}] },
+        ]),
+    );
+    let source = paragraph_with(&mut doc, "source");
+    let dest = paragraph_with(&mut doc, "dest");
+    moved_pair(&mut doc, source, dest, "Lark");
+    assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 2);
+    assert_eq!(text_of(&mut doc, source), "rover stays");
+    assert_eq!(text_of(&mut doc, dest), "goes ");
+    assert!(
+        doc.views().unwrap().revisions().is_empty(),
+        "no records left"
+    );
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert!(!xml.contains("moveFrom"), "{xml}");
+    assert!(!xml.contains("moveTo"), "{xml}");
+}
+
+#[test]
+fn settle_moves_only_touch_the_named_author() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([
+            { "type": "paragraph", "content": [{"type": "text", "text": "source here"}] },
+            { "type": "paragraph", "content": [{"type": "text", "text": "dest here"}] },
+        ]),
+    );
+    let source = paragraph_with(&mut doc, "source");
+    let dest = paragraph_with(&mut doc, "dest");
+    moved_pair(&mut doc, source, dest, "Lark");
+    // Another author's move stays whole: nothing settles. The accepted
+    // text already reads through the pending move; the rejected text
+    // still holds the source side.
+    assert_eq!(
+        nebu_docx::revise::settle(&mut doc, true, Some("Wren")).unwrap(),
+        0
+    );
+    assert_eq!(text_of(&mut doc, source), " stays");
+    assert_eq!(text_of(&mut doc, dest), "goes rover");
+    assert!(rejected_text(&mut doc).contains("rover stays"));
+    assert_eq!(doc.views().unwrap().revisions().len(), 2);
+    assert_eq!(
+        nebu_docx::revise::settle(&mut doc, true, Some("Lark")).unwrap(),
+        2
+    );
+    assert_eq!(text_of(&mut doc, source), " stays");
+    assert_eq!(text_of(&mut doc, dest), "goes rover");
+}
+
 #[test]
 fn replace_survives_the_node_limit() {
     // Budget the main part tightly. The template paragraph below holds

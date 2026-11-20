@@ -1300,23 +1300,30 @@ fn set_revision(tree: &mut Tree, node: NodeId, rev: &Track, ids: &mut Ids) -> Re
 /// Accepts or rejects tracked revisions and reports how many records
 /// settled.
 ///
-/// Every story is walked: insertions and deletions of text that belong
-/// to `author` — or to anyone, when no author is given — are accepted
-/// or rejected. Accepting unwraps an insertion and removes a deletion;
-/// rejecting removes an insertion and unwraps a deletion, turning
-/// deleted text back into text. A record inside another settles with
-/// the outer one first: dropping the outer record drops what it holds.
-/// Moves and property marks are left as they are, as are records in
-/// properties, such as paragraph-mark revisions.
+/// Every story is walked: insertions, deletions and moves of text that
+/// belong to `author` — or to anyone, when no author is given — are
+/// accepted or rejected. Accepting unwraps an insertion and removes a
+/// deletion; rejecting removes an insertion and unwraps a deletion,
+/// turning deleted text back into text. Accepting a move keeps the
+/// destination text and removes the source; rejecting keeps the source
+/// and removes the destination, with the range markers going either
+/// way. A move whose mate is missing stays, as do property marks and
+/// records in properties, such as paragraph-mark revisions. A record
+/// inside another settles with the outer one first: dropping the outer
+/// record drops what it holds.
 pub fn settle(doc: &mut Document, accept: bool, author: Option<&str>) -> Result<usize, Error> {
+    use std::collections::HashSet;
     let stories = place::stories(doc)?;
     let mut settled = 0usize;
     for (part, _) in &stories {
         let tree = doc.xml(part)?;
         let root = tree.root_element();
+        // Move ids already settled in this part, so a mate reached
+        // through a stale child list is not settled twice.
+        let mut moves: HashSet<String> = HashSet::new();
         let kids: Vec<NodeId> = tree.children(root)?.collect();
         for kid in kids {
-            settle_node(tree, kid, accept, author, &mut settled)?;
+            settle_node(tree, root, kid, accept, author, &mut settled, &mut moves)?;
         }
     }
     Ok(settled)
@@ -1325,25 +1332,37 @@ pub fn settle(doc: &mut Document, accept: bool, author: Option<&str>) -> Result<
 /// Settles one node and, when it survives unwrapped, what it holds.
 fn settle_node(
     tree: &mut Tree,
+    root: NodeId,
     node: NodeId,
     accept: bool,
     author: Option<&str>,
     settled: &mut usize,
+    moves: &mut std::collections::HashSet<String>,
 ) -> Result<(), Error> {
     let Some(name) = tree.name(node)? else {
         return Ok(());
     };
     if name.namespace != Some(W) {
-        return settle_children(tree, node, accept, author, settled);
+        return settle_children(tree, root, node, accept, author, settled, moves);
     }
     // Property records stay: only text revisions settle, and paragraph
     // marks with them are left for a later slice.
     if name.local.ends_with("Pr") {
         return Ok(());
     }
-    // Moves stay, whoever made them.
-    if matches!(name.local, "moveFrom" | "moveTo") {
-        return Ok(());
+    if name.local == "moveFrom" {
+        return settle_move(tree, root, node, accept, author, settled, moves);
+    }
+    if name.local == "moveTo" {
+        // The source side settles the pair; a destination reached on its
+        // own only settles what it holds. One whose pair already settled
+        // is gone from the tree: leave it alone.
+        if let Some(id) = tree.attribute(node, Some(W), "id")?
+            && moves.contains(id.as_ref())
+        {
+            return Ok(());
+        }
+        return settle_children(tree, root, node, accept, author, settled, moves);
     }
     if matches!(name.local, "ins" | "del") {
         // An empty or missing author never matches a named filter, as in
@@ -1353,7 +1372,7 @@ fn settle_node(
             Some(want) => revision_author(tree, node)?.as_deref() == Some(*want),
         };
         if !mine {
-            return settle_children(tree, node, accept, author, settled);
+            return settle_children(tree, root, node, accept, author, settled, moves);
         }
         if name.local == "ins" && accept || name.local == "del" && !accept {
             // Unwrap: the content stays, the record goes.
@@ -1366,7 +1385,7 @@ fn settle_node(
             }
             tree.detach(node)?;
             for child in moved {
-                settle_node(tree, child, accept, author, settled)?;
+                settle_node(tree, root, child, accept, author, settled, moves)?;
             }
             *settled += 1;
             return Ok(());
@@ -1376,20 +1395,136 @@ fn settle_node(
         *settled += 1;
         return Ok(());
     }
-    settle_children(tree, node, accept, author, settled)
+    settle_children(tree, root, node, accept, author, settled, moves)
 }
 
 /// Settles the children of a node that itself stands.
 fn settle_children(
     tree: &mut Tree,
+    root: NodeId,
     node: NodeId,
     accept: bool,
     author: Option<&str>,
     settled: &mut usize,
+    moves: &mut std::collections::HashSet<String>,
 ) -> Result<(), Error> {
     let kids: Vec<NodeId> = tree.children(node)?.collect();
     for kid in kids {
-        settle_node(tree, kid, accept, author, settled)?;
+        settle_node(tree, root, kid, accept, author, settled, moves)?;
+    }
+    Ok(())
+}
+
+/// Settles a move from its source record: the pair keeps one side and
+/// drops the other, and the range markers go either way. Accepting
+/// keeps the destination text; rejecting restores the source text. A
+/// move without a mate in this part stays, as does one belonging to
+/// another author — though what they hold still settles.
+fn settle_move(
+    tree: &mut Tree,
+    root: NodeId,
+    node: NodeId,
+    accept: bool,
+    author: Option<&str>,
+    settled: &mut usize,
+    moves: &mut std::collections::HashSet<String>,
+) -> Result<(), Error> {
+    let id = tree
+        .attribute(node, Some(W), "id")?
+        .map(|id| id.into_owned())
+        .filter(|id| !id.is_empty());
+    let Some(id) = id else {
+        return settle_children(tree, root, node, accept, author, settled, moves);
+    };
+    if moves.contains(&id) {
+        return Ok(());
+    }
+    let mate = find_mate(tree, root, node, &id)?;
+    let Some(mate) = mate else {
+        // Half a move cannot settle: leave the record, settle inside.
+        return settle_children(tree, root, node, accept, author, settled, moves);
+    };
+    let mine = match &author {
+        None => true,
+        Some(want) => {
+            revision_author(tree, node)?.as_deref() == Some(*want)
+                || revision_author(tree, mate)?.as_deref() == Some(*want)
+        }
+    };
+    if !mine {
+        return settle_children(tree, root, node, accept, author, settled, moves);
+    }
+    // The kept side unwraps where it stands and its children settle in
+    // turn; the dropped side goes with its record.
+    let (keep, drop) = if accept { (mate, node) } else { (node, mate) };
+    let keep_side = if accept { "moveTo" } else { "moveFrom" };
+    remove_markers(tree, root, keep_side, &id)?;
+    let kept: Vec<NodeId> = tree.children(keep)?.collect();
+    for child in &kept {
+        tree.insert_before(keep, *child)?;
+    }
+    tree.detach(keep)?;
+    for child in kept {
+        settle_node(tree, root, child, accept, author, settled, moves)?;
+    }
+    let drop_side = if accept { "moveFrom" } else { "moveTo" };
+    remove_markers(tree, root, drop_side, &id)?;
+    tree.detach(drop)?;
+    moves.insert(id);
+    *settled += 2;
+    Ok(())
+}
+
+/// The mate of a move record: the attached record on the other side
+/// with the same id. Detached records never match, so a half-settled
+/// or half-dropped pair leaves its survivor alone.
+fn find_mate(tree: &Tree, root: NodeId, node: NodeId, id: &str) -> Result<Option<NodeId>, Error> {
+    let want = tree
+        .name(node)?
+        .map(|n| n.local == "moveFrom")
+        .unwrap_or(false);
+    let want = if want { "moveTo" } else { "moveFrom" };
+    for candidate in tree.descendants(root)? {
+        if candidate == node {
+            continue;
+        }
+        let name = tree.name(candidate)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && n.local == want) {
+            continue;
+        }
+        if tree
+            .attribute(candidate, Some(W), "id")?
+            .is_some_and(|other| other.as_ref() == id)
+        {
+            return Ok(Some(candidate));
+        }
+    }
+    Ok(None)
+}
+
+/// Detaches the range markers of one side of a move: the start and end
+/// elements carrying the move id. The records themselves are unwrapped
+/// or dropped by the caller.
+fn remove_markers(tree: &mut Tree, root: NodeId, side: &str, id: &str) -> Result<(), Error> {
+    let (start, end) = match side {
+        "moveFrom" => ("moveFromRangeStart", "moveFromRangeEnd"),
+        _ => ("moveToRangeStart", "moveToRangeEnd"),
+    };
+    let mut markers = Vec::new();
+    for candidate in tree.descendants(root)? {
+        let name = tree.name(candidate)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && (n.local == start || n.local == end)) {
+            continue;
+        }
+        if tree
+            .attribute(candidate, Some(W), "id")?
+            .is_some_and(|other| other.as_ref() == id)
+        {
+            markers.push(candidate);
+        }
+    }
+    for marker in markers {
+        tree.detach(marker)?;
     }
     Ok(())
 }

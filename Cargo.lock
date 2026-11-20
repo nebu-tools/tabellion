@@ -841,6 +841,7 @@ dependencies = [
  "serde_json",
  "tabellion-typst",
  "tempfile",
+ "zip",
 ]
 
 [[package]]

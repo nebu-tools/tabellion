@@ -801,6 +801,42 @@ fn count(word: &str, n: usize) -> String {
     format!("{n} {word}{}", if n == 1 { "" } else { "s" })
 }
 
+/// Prints a machine report for programs; serialization of a report
+/// built from strings and counts cannot fail in practice.
+fn print_json(report: serde_json::Value) {
+    println!(
+        "{}",
+        serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string())
+    );
+}
+
+/// The machine report for a replace sweep: inputs echoed back, what
+/// the sweep changed, and every refused paragraph with its reason.
+/// Before a sweep produces results the counts are zero and nothing is
+/// refused.
+fn replace_report(
+    find: &str,
+    with: &str,
+    block: Option<&str>,
+    author: Option<&str>,
+    occurrences: usize,
+    paragraphs: usize,
+    refused: &[(String, String)],
+) -> serde_json::Value {
+    serde_json::json!({
+        "command": "replace",
+        "find": find,
+        "with": with,
+        "block": block,
+        "tracked_by": author,
+        "occurrences": occurrences,
+        "paragraphs": paragraphs,
+        "refused": refused.iter().map(|(paragraph, reason)| {
+            serde_json::json!({"paragraph": paragraph, "reason": reason})
+        }).collect::<Vec<_>>(),
+    })
+}
+
 fn replace_text(
     input: &Path,
     output: &Path,
@@ -813,10 +849,35 @@ fn replace_text(
     use nebu_docx::{StoryKind, revise};
     let rev = author.map(nebu_docx::Track::now);
     let rev = rev.as_ref();
-    revise::validate(find, with, rev).map_err(|e| format!("{}: {e}", input.display()))?;
-    let mut doc = open(input)?;
+    // With --json every invocation that reaches the handler reports,
+    // even one that fails before the sweep: programs get one parseable
+    // shape with the inputs echoed back and zero counts.
+    let zeros = || replace_report(find, with, block, author, 0, 0, &[]);
+    if let Err(e) = revise::validate(find, with, rev) {
+        if json {
+            print_json(zeros());
+        }
+        return Err(format!("{}: {e}", input.display()));
+    }
+    let mut doc = match open(input) {
+        Ok(doc) => doc,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
-    let (targets, _wanted) = sweep_targets(&mut doc, input, block)?;
+    let (targets, _wanted) = match sweep_targets(&mut doc, input, block) {
+        Ok(targets) => targets,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     // Every refusal is collected before anything is reported, so one
     // message names them all; nothing is saved unless all can be. One
     // walk per story seeds every paragraph, so the sweep costs a story
@@ -825,7 +886,15 @@ fn replace_text(
     // the sweep's edits and restores.
     let counts = block_counts(&targets);
     let nodes: Vec<nebu_docx::xml::NodeId> = targets.iter().map(|p| p.node).collect();
-    let report = revise::replace_all(&mut doc, &nodes, find, with, rev).map_err(at)?;
+    let report = match revise::replace_all(&mut doc, &nodes, find, with, rev).map_err(at) {
+        Ok(report) => report,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     let mut occurrences = 0usize;
     let mut changed = 0usize;
     let mut refused: Vec<(String, String)> = Vec::new();
@@ -847,22 +916,15 @@ fn replace_text(
         refused.push((where_, refusal_kind(error)));
     }
     if json {
-        let out = serde_json::json!({
-            "command": "replace",
-            "find": find,
-            "with": with,
-            "block": block,
-            "tracked_by": author,
-            "occurrences": occurrences,
-            "paragraphs": changed,
-            "refused": refused.iter().map(|(paragraph, reason)| {
-                serde_json::json!({"paragraph": paragraph, "reason": reason})
-            }).collect::<Vec<_>>(),
-        });
-        println!(
-            "{}",
-            serde_json::to_string(&out).map_err(|e| e.to_string())?
-        );
+        print_json(replace_report(
+            find,
+            with,
+            block,
+            author,
+            occurrences,
+            changed,
+            &refused,
+        ));
     }
     if !report.refused.is_empty() {
         let listed: Vec<String> = report
@@ -913,20 +975,41 @@ fn settle_revisions(
     use nebu_docx::revise;
     let verb = if accept { "accept" } else { "reject" };
     let past = if accept { "accepted" } else { "rejected" };
-    let mut doc = open(input)?;
+    // With --json every invocation reports, even one that fails before
+    // settling: programs get one parseable shape with zero settled.
+    let zeros = || {
+        print_json(serde_json::json!({
+            "command": verb,
+            "author": author,
+            "settled": 0,
+        }))
+    };
+    let mut doc = match open(input) {
+        Ok(doc) => doc,
+        Err(e) => {
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    };
     let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
-    let settled = revise::settle(&mut doc, accept, author).map_err(at)?;
+    let settled = match revise::settle(&mut doc, accept, author).map_err(at) {
+        Ok(settled) => settled,
+        Err(e) => {
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    };
     doc.save(output).map_err(|e| e.to_string())?;
     if json {
-        let out = serde_json::json!({
+        print_json(serde_json::json!({
             "command": verb,
             "author": author,
             "settled": settled,
-        });
-        println!(
-            "{}",
-            serde_json::to_string(&out).map_err(|e| e.to_string())?
-        );
+        }));
         return Ok(true);
     }
     if settled == 0 {
