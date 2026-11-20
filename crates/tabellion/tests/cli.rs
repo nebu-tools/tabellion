@@ -1900,10 +1900,10 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         &mut doc,
         source,
         concat!(
-            "<w:moveFromRangeStart w:id=\"42\" w:name=\"m1\"/>",
-            "<w:moveFrom w:id=\"42\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+            "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\"/>",
+            "<w:moveFrom w:id=\"11\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
             "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
-            "<w:moveFromRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+            "<w:moveFromRangeEnd w:id=\"10\" w:name=\"m1\"/>",
             "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
         ),
     );
@@ -1912,10 +1912,10 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         dest,
         concat!(
             "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
-            "<w:moveToRangeStart w:id=\"42\" w:name=\"m1\"/>",
-            "<w:moveTo w:id=\"42\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+            "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
+            "<w:moveTo w:id=\"21\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
             "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
-            "<w:moveToRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+            "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
         ),
     );
     let moved = dir.join("moved.docx");
@@ -2021,6 +2021,30 @@ fn settle_moves_respect_the_author() {
     ]);
     assert_eq!(code, Some(0), "{stderr}");
     assert!(stdout.contains("accepted 2 revisions"), "{stdout}");
+}
+
+#[test]
+fn settle_json_reports_a_failed_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let moved = moved_doc(dir.path());
+    // Saving into an existing directory fails: with --json the report
+    // still prints, saying nothing was saved, and the diagnostic stays
+    // on stderr.
+    let out = dir.path().join("existing");
+    std::fs::create_dir(&out).unwrap();
+    for command in ["accept", "reject"] {
+        let (code, stdout, stderr) = run(&[
+            command,
+            moved.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--json",
+        ]);
+        assert_ne!(code, Some(0), "{stderr}");
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(report["command"], command, "{report}");
+        assert_eq!(report["settled"], 0, "{report}");
+        assert!(!stderr.is_empty(), "the diagnostic stays");
+    }
 }
 
 #[test]

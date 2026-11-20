@@ -1003,7 +1003,16 @@ fn settle_revisions(
             return Err(e);
         }
     };
-    doc.save(output).map_err(|e| e.to_string())?;
+    match doc.save(output).map_err(|e| e.to_string()) {
+        Ok(()) => {}
+        Err(e) => {
+            // Nothing was saved, so the report says so.
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    }
     if json {
         print_json(serde_json::json!({
             "command": verb,

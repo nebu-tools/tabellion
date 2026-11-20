@@ -1145,17 +1145,20 @@ fn settle_leaves_moves_and_property_marks() {
 }
 
 /// A move pair between two paragraphs, with range markers: the source
-/// holds the moveFrom record, the destination the moveTo record.
+/// holds the moveFrom record, the destination the moveTo record. The
+/// ids are realistic: each range has its own marker id shared by its
+/// start and end, the wrappers carry separate ids, and the two ranges
+/// pair by name.
 fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
     set_runs(
         doc,
         source,
         &format!(
             concat!(
-                "<w:moveFromRangeStart w:id=\"42\" w:name=\"m1\"/>",
-                "<w:moveFrom w:id=\"42\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+                "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\"/>",
+                "<w:moveFrom w:id=\"11\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
                 "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
-                "<w:moveFromRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+                "<w:moveFromRangeEnd w:id=\"10\" w:name=\"m1\"/>",
                 "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
             ),
             a = author,
@@ -1167,10 +1170,10 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
         &format!(
             concat!(
                 "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
-                "<w:moveToRangeStart w:id=\"42\" w:name=\"m1\"/>",
-                "<w:moveTo w:id=\"42\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+                "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>",
+                "<w:moveTo w:id=\"21\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
                 "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
-                "<w:moveToRangeEnd w:id=\"42\" w:name=\"m1\"/>",
+                "<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>",
             ),
             a = author,
         ),
