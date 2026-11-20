@@ -215,19 +215,6 @@ impl Document {
         self.views = None;
     }
 
-    /// A copy of one parsed part's tree, to put back with
-    /// [`Document::restore_part`] if an edit of that part fails.
-    pub(crate) fn snapshot_part(&mut self, name: &str) -> Result<Tree, Error> {
-        self.package.snapshot_part(name)
-    }
-
-    /// Puts back a part tree taken by [`Document::snapshot_part`]. The
-    /// views are read again on next use.
-    pub(crate) fn restore_part(&mut self, name: &str, tree: Tree) {
-        self.package.restore_part(name, tree);
-        self.views = None;
-    }
-
     /// The stamp of the parsed trees and the list of parts.
     pub(crate) fn stamp(&self) -> Vec<(u64, u64)> {
         self.package.stamp()

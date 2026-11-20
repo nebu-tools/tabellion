@@ -131,6 +131,29 @@ enum Command {
         #[arg(long, value_enum, default_value = "csv")]
         format: TableFormat,
     },
+    /// Time a text replacement without writing anything.
+    ///
+    /// Runs the same sweep as `replace` — every story but comments, or
+    /// the block the locator names — and reports how long the sweep and
+    /// one single-paragraph replacement took. Fails when a replacement
+    /// costs more than twice the 20 ms budget. With an author the
+    /// replacement is tracked.
+    Bench {
+        /// The document to read.
+        input: PathBuf,
+        /// The literal text to find.
+        #[arg(long, value_name = "TEXT")]
+        find: String,
+        /// The literal replacement; empty deletes the matches.
+        #[arg(long, value_name = "TEXT")]
+        with: String,
+        /// Track the replacement by this author.
+        #[arg(long, value_name = "AUTHOR")]
+        author: Option<String>,
+        /// Only paragraphs of the block the locator names.
+        #[arg(long, value_name = "LOCATOR")]
+        block: Option<String>,
+    },
     /// Write each embedded picture to a file of its own.
     ///
     /// One file per image in document order, named after the part that
@@ -725,35 +748,11 @@ fn replace_text(
     with: &str,
     block: Option<&str>,
 ) -> Result<bool, String> {
-    use nebu_docx::{BlockId, Locator, StoryKind, revise};
-    revise::validate(find, with).map_err(|e| format!("{}: {e}", input.display()))?;
+    use nebu_docx::{StoryKind, revise};
+    revise::validate(find, with, None).map_err(|e| format!("{}: {e}", input.display()))?;
     let mut doc = open(input)?;
     let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
-    // The paragraphs to sweep: every story but comments, or the block
-    // the locator names.
-    let wanted: Option<BlockId> = block
-        .map(|l| {
-            l.parse::<Locator>()
-                .map_err(|e: nebu_docx::Error| format!("{}: {e}", input.display()))
-        })
-        .transpose()?
-        .map(|locator| {
-            doc.views()
-                .map_err(at)?
-                .locate(&locator)
-                .map(|b| b.id)
-                .map_err(at)
-        })
-        .transpose()?;
-    let targets: Vec<nebu_docx::Paragraph> = doc
-        .views()
-        .map_err(at)?
-        .paragraphs()
-        .iter()
-        .filter(|p| p.location.story != StoryKind::Comment)
-        .filter(|p| wanted.is_none_or(|b| p.location.block == Some(b)))
-        .cloned()
-        .collect();
+    let (targets, _wanted) = sweep_targets(&mut doc, input, block)?;
     // Every refusal is collected before anything is reported, so one
     // message names them all; nothing is saved unless all can be. One
     // walk per story seeds every paragraph, so the sweep costs a story
@@ -806,6 +805,139 @@ fn replace_text(
         count("paragraph", changed),
     );
     Ok(true)
+}
+
+/// The paragraphs a sweep covers: every story but comments, or the
+/// block the locator names. Returns the paragraphs with the block id.
+fn sweep_targets(
+    doc: &mut Document,
+    input: &Path,
+    block: Option<&str>,
+) -> Result<(Vec<nebu_docx::Paragraph>, Option<nebu_docx::BlockId>), String> {
+    use nebu_docx::{BlockId, Locator, StoryKind};
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    let wanted: Option<BlockId> = block
+        .map(|l| {
+            l.parse::<Locator>()
+                .map_err(|e: nebu_docx::Error| format!("{}: {e}", input.display()))
+        })
+        .transpose()?
+        .map(|locator| {
+            doc.views()
+                .map_err(at)?
+                .locate(&locator)
+                .map(|b| b.id)
+                .map_err(at)
+        })
+        .transpose()?;
+    let targets: Vec<nebu_docx::Paragraph> = doc
+        .views()
+        .map_err(at)?
+        .paragraphs()
+        .iter()
+        .filter(|p| p.location.story != StoryKind::Comment)
+        .filter(|p| wanted.is_none_or(|b| p.location.block == Some(b)))
+        .cloned()
+        .collect();
+    Ok((targets, wanted))
+}
+
+/// The budget for one tracked replacement, in milliseconds, and the
+/// factor past it that fails the run.
+const REPLACE_BUDGET_MS: u64 = 20;
+const BUDGET_FACTOR: u64 = 2;
+
+/// Times a replacement without writing anything: the sweep reports its
+/// wall time, and one single-paragraph replacement is timed on its own.
+/// Fails when a single replacement costs more than twice the budget.
+fn bench(
+    input: &Path,
+    find: &str,
+    with: &str,
+    author: Option<&str>,
+    block: Option<&str>,
+) -> Result<bool, String> {
+    use nebu_docx::{StoryKind, revise};
+    let rev = author.map(nebu_docx::Track::now);
+    let rev = rev.as_ref();
+    revise::validate(find, with, rev).map_err(|e| format!("{}: {e}", input.display()))?;
+    let bytes =
+        std::fs::read(input).map_err(|e| format!("cannot read {}: {e}", input.display()))?;
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    // The whole sweep first, on its own document: refusals and empty
+    // matches report exactly as `replace` reports them.
+    let mut doc =
+        Document::from_bytes(bytes.clone()).map_err(|e| format!("{}: {e}", input.display()))?;
+    let (targets, _) = sweep_targets(&mut doc, input, block)?;
+    let nodes: Vec<nebu_docx::xml::NodeId> = targets.iter().map(|p| p.node).collect();
+    let tick = std::time::Instant::now();
+    let report = revise::replace_all(&mut doc, &nodes, find, with, rev).map_err(at)?;
+    let sweep = tick.elapsed();
+    if !report.refused.is_empty() {
+        let mut refused: Vec<String> = Vec::new();
+        let counts = block_counts(&targets);
+        for (node, error) in &report.refused {
+            let paragraph = targets.iter().find(|p| p.node == *node);
+            let shared = paragraph.is_some_and(|p| {
+                p.location.story == StoryKind::Main
+                    && counts.get(&p.location.block).is_some_and(|&n| n > 1)
+            });
+            let where_ = paragraph
+                .map(|p| describe(p, shared))
+                .unwrap_or_else(|| "?".into());
+            refused.push(format!("{where_} ({})", short(error)));
+        }
+        return Err(format!(
+            "{}: refused {}: {}",
+            input.display(),
+            count("paragraph", refused.len()),
+            refused.join(", ")
+        ));
+    }
+    let occurrences: usize = report.replaced.iter().map(|(_, n)| n).sum();
+    if occurrences == 0 {
+        return Err(match block {
+            Some(b) => format!("{}: no occurrences of {find:?} in {b}", input.display()),
+            None => format!("{}: no occurrences of {find:?}", input.display()),
+        });
+    }
+    // One single-paragraph replacement from the sweep, timed on its own
+    // in a fresh document: the budget item. Nodes do not survive a
+    // reparse, so the paragraph is resolved by position — looked up in
+    // the original targets by node, as the report groups by part and
+    // omits refused paragraphs, so its own positions do not line up.
+    let single_node = report
+        .replaced
+        .iter()
+        .find(|(_, n)| *n > 0)
+        .map(|(node, _)| *node)
+        .expect("a replaced paragraph");
+    let single_pos = targets
+        .iter()
+        .position(|p| p.node == single_node)
+        .expect("a swept paragraph");
+    let mut doc = Document::from_bytes(bytes).map_err(|e| format!("{}: {e}", input.display()))?;
+    let (targets, _) = sweep_targets(&mut doc, input, block)?;
+    let single = targets
+        .get(single_pos)
+        .map(|p| p.node)
+        .expect("a replaced paragraph");
+    let tick = std::time::Instant::now();
+    let single_count =
+        revise::replace_in_paragraph(&mut doc, single, find, with, rev).map_err(at)?;
+    let single_elapsed = tick.elapsed();
+    assert!(single_count > 0, "the timed replacement replaced nothing");
+    let changed = report.replaced.iter().filter(|(_, n)| *n > 0).count();
+    println!(
+        "{}: bench {find:?} with {with:?} ({} in {}, sweep {:?}, single {:?} against a {:?} budget)",
+        input.display(),
+        count("occurrence", occurrences),
+        count("paragraph", changed),
+        sweep,
+        single_elapsed,
+        std::time::Duration::from_millis(REPLACE_BUDGET_MS),
+    );
+    Ok(single_elapsed <= std::time::Duration::from_millis(REPLACE_BUDGET_MS * BUDGET_FACTOR))
 }
 
 /// The file name for a package part: its last segment, when that is a
@@ -968,6 +1100,13 @@ fn main() -> ExitCode {
             Command::Fields { input, output } => fields(input, output),
             Command::Images { file, dir } => images(file, dir),
             Command::Tables { file, dir, format } => tables(file, dir, *format),
+            Command::Bench {
+                input,
+                find,
+                with,
+                author,
+                block,
+            } => bench(input, find, with, author.as_deref(), block.as_deref()),
             Command::Image {
                 input,
                 output,

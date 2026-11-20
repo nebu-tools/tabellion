@@ -1145,6 +1145,99 @@ fn settle_leaves_moves_and_property_marks() {
 }
 
 #[test]
+fn replace_survives_the_node_limit() {
+    // Budget the main part tightly. The template paragraph below holds
+    // one plain run whose text needs a head split to match, so a
+    // tracked replace proceeds through text splits, run splits, a
+    // deletion with moved and renamed runs, and an insertion before the
+    // node budget runs out. Rolling back must restore the original
+    // nodes — not copies — and their serialized form, and free the
+    // arena for another edit. Room for nine nodes lets the tracked edit
+    // allocate eight of them before failing; the untracked follow-up
+    // needs eight of its own, so it only fits on reclaimed ground.
+    let bytes = support::sample_with(&[("word/styles.xml", None), ("word/numbering.xml", None)]);
+    let arena = {
+        let mut probe = Document::from_bytes(bytes.clone()).unwrap();
+        let main = probe.main_part().to_string();
+        let tree = probe.xml(&main).unwrap();
+        tree.descendants(tree.document()).unwrap().count() + 1
+    };
+    let mut doc = Document::from_bytes_with_limits(
+        bytes,
+        nebu_docx::Limits {
+            max_xml_nodes: arena + 9,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let para = paragraph_with(&mut doc, "summary");
+    // The head text node and its run, to check identity after rollback.
+    let (head, run) = {
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let mut found = None;
+        for r in tree.elements(para).unwrap() {
+            if !tree.is(r, Some(nebu_docx::ns::W), "r").unwrap_or(false) {
+                continue;
+            }
+            for child in tree.elements(r).unwrap() {
+                if tree.is(child, Some(nebu_docx::ns::W), "t").unwrap_or(false) {
+                    found = Some((child, r));
+                    break;
+                }
+            }
+            if found.is_some() {
+                break;
+            }
+        }
+        found.expect("a head text node")
+    };
+    let rev = tracking();
+    let before = doc.to_bytes().unwrap();
+    let err = replace_in_paragraph(&mut doc, para, "summary", "findings", Some(&rev)).unwrap_err();
+    assert!(matches!(err, nebu_docx::Error::Limit { .. }), "{err:?}");
+    // The document is byte-identical, with no pending revisions, and
+    // the original head text node is back where it stood.
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    assert!(doc.views().unwrap().revisions().is_empty());
+    {
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        assert!(
+            tree.children(run).unwrap().any(|k| k == head),
+            "the head text node"
+        );
+        assert_eq!(
+            tree.text_content(head).unwrap().as_str(),
+            "The summary goes here."
+        );
+    }
+    // The rollback reclaimed its arena share.
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "summary", "findings", None).unwrap(),
+        1
+    );
+    assert_eq!(text_of(&mut doc, para), "The findings goes here.");
+}
+
+#[test]
+fn validate_names_a_bad_tracking_stamp() {
+    let bad = Track {
+        author: "Max\x01".into(),
+        date: "2026-11-20T12:00:00Z".into(),
+    };
+    let err = nebu_docx::revise::validate("wren", "thrush", Some(&bad)).unwrap_err();
+    assert!(err.to_string().contains("tracking author"), "{err:?}");
+    let bad = Track {
+        author: "Max".into(),
+        date: "2026-11-20\x0100:00:00Z".into(),
+    };
+    let err = nebu_docx::revise::validate("wren", "thrush", Some(&bad)).unwrap_err();
+    assert!(err.to_string().contains("tracking date"), "{err:?}");
+    assert!(nebu_docx::revise::validate("wren", "thrush", Some(&tracking())).is_ok());
+}
+
+#[test]
 fn batch_reports_each_paragraph_and_keeps_going() {
     let (mut doc, _) = insert(
         support::sample(),
@@ -1256,4 +1349,90 @@ fn batch_refuses_a_paragraph_in_a_detached_container() {
         report.refused[0].1.to_string().contains("not attached"),
         "{report:?}"
     );
+}
+
+#[test]
+fn replace_keeps_a_foreign_prefix_on_rollback() {
+    // The matched text uses another prefix bound to the same
+    // namespace. Rolling back must restore that spelling, not the
+    // canonical one: `set_name` marks elements renamed, after which
+    // the serializer no longer reuses the original tag. Style parts
+    // are stripped so the node budget binds the main part.
+    let stripped = support::sample_with(&[("word/styles.xml", None), ("word/numbering.xml", None)]);
+    let (mut doc, _) = insert(
+        stripped,
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    {
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let runs: Vec<NodeId> = tree
+            .elements(para)
+            .unwrap()
+            .filter(|&n| tree.is(n, Some(nebu_docx::ns::W), "r").unwrap_or(false))
+            .collect();
+        for r in runs {
+            tree.detach(r).unwrap();
+        }
+        for n in tree
+            .parse_fragment(
+                "<w:r><x:t xmlns:x=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">wren</x:t></w:r>",
+                &[("w", nebu_docx::ns::W)],
+            )
+            .unwrap()
+        {
+            tree.append(para, n).unwrap();
+        }
+    }
+    let arena = {
+        let mut probe = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+        let main = probe.main_part().to_string();
+        let tree = probe.xml(&main).unwrap();
+        tree.descendants(tree.document()).unwrap().count() + 1
+    };
+    // Room for three new nodes: the deletion, the insertion and its
+    // run all fit, so the replacement text fails to parse and the
+    // rollback must restore the original qualified name.
+    let bytes = doc.to_bytes().unwrap();
+    let mut doc = Document::from_bytes_with_limits(
+        bytes.clone(),
+        nebu_docx::Limits {
+            max_xml_nodes: arena + 3,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let para = paragraph_with(&mut doc, "wren");
+    let rev = tracking();
+    let before = doc.to_bytes().unwrap();
+    let before_xml = String::from_utf8(support::entry(&before, "word/document.xml")).unwrap();
+    assert!(before_xml.contains("<x:t"), "{before_xml}");
+    let err = replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap_err();
+    assert!(matches!(err, nebu_docx::Error::Limit { .. }), "{err:?}");
+    // The rollback restored the foreign spelling, byte for byte — and
+    // in memory too: the passthrough serializer reuses the original
+    // tag while the node looks untouched, so bytes alone would miss a
+    // rename left behind.
+    assert_eq!(doc.to_bytes().unwrap(), before);
+    {
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let mut text = None;
+        for r in tree.elements(para).unwrap() {
+            if !tree.is(r, Some(nebu_docx::ns::W), "r").unwrap_or(false) {
+                continue;
+            }
+            for child in tree.elements(r).unwrap() {
+                if tree.is(child, Some(nebu_docx::ns::W), "t").unwrap_or(false) {
+                    text = Some(child);
+                }
+            }
+        }
+        let text = text.expect("the restored text");
+        let got = tree.name(text).unwrap().expect("an element name");
+        assert_eq!(got.namespace, Some(nebu_docx::ns::W));
+        assert_eq!(got.prefix, "x");
+        assert_eq!(got.local, "t");
+    }
 }

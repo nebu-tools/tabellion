@@ -59,6 +59,20 @@ jobs:
       - run: Rscript -e 'install.packages(c("testthat", "curl"), repos = "https://cloud.r-project.org")'
       - run: R CMD check r/tabellion --no-manual --no-vignettes
 
+  bench:
+    # The replacement budget: one tracked replacement under twice the
+    # 20 ms target on the 300-chapter document, plus the command itself
+    # on a real file. Release only: debug builds are several times
+    # slower, which the unit tests already cover.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install stable --profile minimal && rustup default stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo run --release -p tabellion -- bench corpus/birds.docx --find Marshes --with Fens
+      - run: cargo run --release -p tabellion -- bench corpus/birds.docx --find Marshes --with Fens --author Bench
+      - run: cargo test --release -p nebu-docx --test perf -- --ignored --nocapture
+
   fuzz:
     # Every fuzz target for a short time, from seeds of the corpus.
     runs-on: ubuntu-24.04
