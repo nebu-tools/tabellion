@@ -229,7 +229,11 @@ pub fn replace_in_paragraph(
     with: &str,
     rev: Option<&Track>,
 ) -> Result<usize, Error> {
-    let mut report = replace_all(doc, &[para], find, with, rev)?;
+    // The single-paragraph path skips the document snapshot: its
+    // per-paragraph undo log already rolls back a failed match, and a
+    // whole-package copy would blow the replacement time budget.
+    validate(find, with, rev)?;
+    let mut report = replace_each(doc, &[para], find, with, rev)?;
     if let Some((_, error)) = report.refused.pop() {
         return Err(error);
     }
