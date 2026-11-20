@@ -3,9 +3,9 @@
 mod support;
 
 use nebu_docx::content::Content;
-use nebu_docx::revise::replace_in_paragraph;
+use nebu_docx::revise::{replace_all, replace_in_paragraph};
 use nebu_docx::xml::NodeId;
-use nebu_docx::{Document, Place, WriteOptions};
+use nebu_docx::{Document, Place, RevisionKind, Revisions, TextOptions, Track, WriteOptions};
 use serde_json::{Value, json};
 
 fn insert(bytes: Vec<u8>, v: Value) -> (Document, Vec<u8>) {
@@ -52,7 +52,7 @@ fn replaces_across_runs_and_keeps_formatting() {
     // A match inside one run keeps that run's formatting.
     let para = paragraph_with(&mut doc, "sang");
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "sang", "called").unwrap(),
+        replace_in_paragraph(&mut doc, para, "sang", "called", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "A wren called sweetly.");
@@ -89,7 +89,14 @@ fn a_replacement_takes_the_first_runs_formatting() {
     );
     let para = paragraph_with(&mut doc, "sang");
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "wren sang sweetly", "thrush called loudly").unwrap(),
+        replace_in_paragraph(
+            &mut doc,
+            para,
+            "wren sang sweetly",
+            "thrush called loudly",
+            None
+        )
+        .unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "A thrush called loudly.");
@@ -122,7 +129,10 @@ fn replaces_every_occurrence_and_counts() {
         json!([{ "type": "paragraph", "content": [{"type": "text", "text": "aa aaa aa"}] }]),
     );
     let para = paragraph_with(&mut doc, "aaa");
-    assert_eq!(replace_in_paragraph(&mut doc, para, "aa", "b").unwrap(), 3);
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "aa", "b", None).unwrap(),
+        3
+    );
     assert_eq!(text_of(&mut doc, para), "b ba b");
 }
 
@@ -134,7 +144,7 @@ fn a_match_is_left_alone_when_nothing_matches() {
     );
     let para = paragraph_with(&mut doc, "wren");
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "nightingale", "thrush").unwrap(),
+        replace_in_paragraph(&mut doc, para, "nightingale", "thrush", None).unwrap(),
         0
     );
     assert_eq!(text_of(&mut doc, para), "A wren sang.");
@@ -147,7 +157,7 @@ fn refuses_an_unknown_place_an_empty_find_and_a_non_paragraph() {
         json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
     );
     let para = paragraph_with(&mut doc, "wren");
-    let err = replace_in_paragraph(&mut doc, para, "", "thrush").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "", "thrush", None).unwrap_err();
     assert!(matches!(err, nebu_docx::Error::Invalid(_)), "{err:?}");
     let other = {
         let bytes = support::sample();
@@ -169,7 +179,7 @@ fn refuses_an_unknown_place_an_empty_find_and_a_non_paragraph() {
             .unwrap()
             .node
     };
-    let err = replace_in_paragraph(&mut doc, other, "x", "y").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, other, "x", "y", None).unwrap_err();
     assert!(
         err.to_string().contains("no story of this document"),
         "{err:?}"
@@ -192,7 +202,7 @@ fn refuses_anything_but_a_paragraph() {
         .find(|b| b.kind == nebu_docx::BlockKind::Table)
         .expect("a table")
         .node;
-    let err = replace_in_paragraph(&mut doc, table, "North", "South").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, table, "North", "South", None).unwrap_err();
     assert!(err.to_string().contains("not a paragraph"), "{err:?}");
 }
 
@@ -210,7 +220,7 @@ fn refuses_fields_hyperlinks_and_notes() {
     // The field's result reads as text, so the match spans it and
     // refuses, naming the field; the document is unchanged.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "See Table 1 now", "Look").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "See Table 1 now", "Look", None).unwrap_err();
     assert!(err.to_string().contains("a field"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     let (mut doc, _) = insert(
@@ -225,12 +235,13 @@ fn refuses_fields_hyperlinks_and_notes() {
     // The link text reads as text, so the visible sentence refuses,
     // naming the link, and the document is unchanged.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "Visit the marsh today", "Go").unwrap_err();
+    let err =
+        replace_in_paragraph(&mut doc, para, "Visit the marsh today", "Go", None).unwrap_err();
     assert!(err.to_string().contains("a hyperlink"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     // The sentence with the link text left out is not there at all.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "Visit  today", "Go").unwrap(),
+        replace_in_paragraph(&mut doc, para, "Visit  today", "Go", None).unwrap(),
         0
     );
     let (mut doc, _) = insert(
@@ -242,7 +253,7 @@ fn refuses_fields_hyperlinks_and_notes() {
         ]}]),
     );
     let para = paragraph_with(&mut doc, "sang");
-    let err = replace_in_paragraph(&mut doc, para, "wren sang", "thrush called").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "wren sang", "thrush called", None).unwrap_err();
     assert!(err.to_string().contains("a footnote"), "{err:?}");
 }
 
@@ -260,12 +271,12 @@ fn refuses_a_match_wholly_inside_a_field_result() {
     // The result alone is still a cached field value: replacing it
     // would edit what Word can overwrite on refresh.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "Table 1", "Table 2").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "Table 1", "Table 2", None).unwrap_err();
     assert!(err.to_string().contains("a field"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     // Text beside the field stays replaceable.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "See ", "Look ").unwrap(),
+        replace_in_paragraph(&mut doc, para, "See ", "Look ", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "Look Table 1 now.");
@@ -278,7 +289,10 @@ fn keeps_trailing_space_on_a_split_tail() {
         json!([{ "type": "paragraph", "content": [{"type": "text", "text": "abc "}] }]),
     );
     let para = paragraph_with(&mut doc, "abc");
-    assert_eq!(replace_in_paragraph(&mut doc, para, "b", "B").unwrap(), 1);
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "b", "B", None).unwrap(),
+        1
+    );
     assert_eq!(text_of(&mut doc, para), "aBc ");
     // The tail ends with a space, so the file must keep it preserved:
     // check the serialized attribute, not just the tree's text.
@@ -306,7 +320,7 @@ fn replacement_text_escapes_markup() {
     );
     let para = paragraph_with(&mut doc, "wren");
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "wren", "<wren> & thrush").unwrap(),
+        replace_in_paragraph(&mut doc, para, "wren", "<wren> & thrush", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "A <wren> & thrush sang.");
@@ -325,7 +339,7 @@ fn refuses_carriage_returns_like_other_line_ends() {
     );
     let para = paragraph_with(&mut doc, "wren");
     for (find, with) in [("wr\ren", "x"), ("wren", "x\ry"), ("a\rb", "x")] {
-        let err = replace_in_paragraph(&mut doc, para, find, with).unwrap_err();
+        let err = replace_in_paragraph(&mut doc, para, find, with, None).unwrap_err();
         assert!(matches!(err, nebu_docx::Error::Invalid(_)), "{err:?}");
     }
     assert_eq!(text_of(&mut doc, para), "A wren sang.");
@@ -342,7 +356,7 @@ fn replaces_inside_table_cells() {
     );
     let para = paragraph_with(&mut doc, "North");
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "North", "South").unwrap(),
+        replace_in_paragraph(&mut doc, para, "North", "South", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "South Fen");
@@ -355,7 +369,10 @@ fn keeps_spaces_at_the_edges() {
         json!([{ "type": "paragraph", "content": [{"type": "text", "text": "a b c"}] }]),
     );
     let para = paragraph_with(&mut doc, "a b");
-    assert_eq!(replace_in_paragraph(&mut doc, para, "b", " X ").unwrap(), 1);
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "b", " X ", None).unwrap(),
+        1
+    );
     assert_eq!(text_of(&mut doc, para), "a  X  c");
 }
 
@@ -472,12 +489,12 @@ fn refuses_field_results_continued_from_an_earlier_paragraph() {
     assert_eq!(text_of(&mut doc, second), "two Beta");
     // The result in the second paragraph still belongs to the field.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, second, "two", "2").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, second, "two", "2", None).unwrap_err();
     assert!(err.to_string().contains("a field"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     // Text after the closing marker stays replaceable.
     assert_eq!(
-        replace_in_paragraph(&mut doc, second, "Beta", "Gamma").unwrap(),
+        replace_in_paragraph(&mut doc, second, "Beta", "Gamma", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, second), "two Gamma");
@@ -501,12 +518,12 @@ fn refuses_a_match_crossing_a_wrapper_boundary() {
     assert_eq!(text_of(&mut doc, para), "river bank");
     // The match starts inside the wrapper and ends outside it.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "river bank", "stream shore").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "river bank", "stream shore", None).unwrap_err();
     assert!(err.to_string().contains("a custom XML element"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     // Wholly inside the wrapper stays replaceable.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "river", "stream").unwrap(),
+        replace_in_paragraph(&mut doc, para, "river", "stream", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "stream bank");
@@ -534,12 +551,12 @@ fn projects_only_the_chosen_alternate_content_branch() {
     assert_eq!(text_of(&mut doc, para), "A seen sang.");
     // The fallback text is not there to replace.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "hidden", "shown").unwrap(),
+        replace_in_paragraph(&mut doc, para, "hidden", "shown", None).unwrap(),
         0
     );
     // A match across the block refuses, naming it.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "A seen sang", "x").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "A seen sang", "x", None).unwrap_err();
     assert!(
         err.to_string().contains("an alternate content block"),
         "{err:?}"
@@ -570,7 +587,7 @@ fn refuses_a_match_leaving_the_shown_fallback_branch() {
     assert_eq!(text_of(&mut doc, para), "seen sang.");
     // The match starts in the shown branch and ends outside it.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "seen sang", "heard call").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "seen sang", "heard call", None).unwrap_err();
     assert!(
         err.to_string().contains("an alternate content block"),
         "{err:?}"
@@ -578,7 +595,7 @@ fn refuses_a_match_leaving_the_shown_fallback_branch() {
     assert_eq!(doc.to_bytes().unwrap(), before);
     // Wholly inside the shown branch stays replaceable.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "seen", "heard").unwrap(),
+        replace_in_paragraph(&mut doc, para, "seen", "heard", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "heard sang.");
@@ -605,18 +622,638 @@ fn leaves_ruby_annotations_alone() {
     assert_eq!(text_of(&mut doc, para), "base plain");
     // The annotation is not the paragraph's text.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "anno", "note").unwrap(),
+        replace_in_paragraph(&mut doc, para, "anno", "note", None).unwrap(),
         0
     );
     // A match from the base across the ruby refuses, naming it.
     let before = doc.to_bytes().unwrap();
-    let err = replace_in_paragraph(&mut doc, para, "base plain", "x").unwrap_err();
+    let err = replace_in_paragraph(&mut doc, para, "base plain", "x", None).unwrap_err();
     assert!(err.to_string().contains("a ruby"), "{err:?}");
     assert_eq!(doc.to_bytes().unwrap(), before);
     // The base alone stays replaceable.
     assert_eq!(
-        replace_in_paragraph(&mut doc, para, "base", "stem").unwrap(),
+        replace_in_paragraph(&mut doc, para, "base", "stem", None).unwrap(),
         1
     );
     assert_eq!(text_of(&mut doc, para), "stem plain");
+}
+
+/// A tracking author with a fixed stamp, so the XML stays comparable.
+fn tracking() -> Track {
+    Track {
+        author: "Max".into(),
+        date: "2026-11-20T12:00:00Z".into(),
+    }
+}
+
+/// The text of the whole document with revisions rejected.
+fn rejected_text(doc: &mut Document) -> String {
+    doc.views().unwrap().text(&TextOptions {
+        revisions: Revisions::Rejected,
+        ..Default::default()
+    })
+}
+
+/// Wraps a paragraph's runs in an insertion by an author: detaches the
+/// runs and appends an `w:ins` holding them.
+fn wrap_runs(doc: &mut Document, para: NodeId, author: &str, id: u64) {
+    let main = doc.main_part().to_string();
+    let tree = doc.xml(&main).unwrap();
+    let runs: Vec<NodeId> = tree
+        .elements(para)
+        .unwrap()
+        .filter(|&n| tree.is(n, Some(nebu_docx::ns::W), "r").unwrap_or(false))
+        .collect();
+    let ins = tree
+        .parse_fragment(
+            &format!(
+                "<w:ins w:id=\"{id}\" w:author=\"{author}\" w:date=\"2026-11-20T12:00:00Z\"/>"
+            ),
+            &[("w", nebu_docx::ns::W)],
+        )
+        .unwrap()
+        .pop()
+        .expect("an insertion");
+    tree.insert_before(runs[0], ins).unwrap();
+    for r in runs {
+        tree.append(ins, r).unwrap();
+    }
+}
+
+#[test]
+fn tracks_a_replacement_as_a_deletion_and_an_insertion() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(text_of(&mut doc, para), "A thrush sang.");
+    assert!(rejected_text(&mut doc).contains("A wren sang."));
+    // One deletion of the old text and one insertion of the new text,
+    // both by the tracking author.
+    let mine: Vec<_> = doc
+        .views()
+        .unwrap()
+        .revisions()
+        .iter()
+        .filter(|r| r.author == "Max")
+        .cloned()
+        .collect();
+    assert!(
+        mine.iter()
+            .any(|r| r.kind == RevisionKind::Deletion && r.text.contains("wren")),
+        "{mine:?}"
+    );
+    assert!(
+        mine.iter()
+            .any(|r| r.kind == RevisionKind::Insertion && r.text.contains("thrush")),
+        "{mine:?}"
+    );
+    // The file names the old text as deleted text inside a deletion and
+    // the new text inside an insertion, both stamped.
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert!(xml.contains("<w:del "), "{xml}");
+    assert!(xml.contains("<w:delText>wren</w:delText>"), "{xml}");
+    assert!(xml.contains("<w:ins "), "{xml}");
+    assert!(xml.contains("w:author=\"Max\""), "{xml}");
+    assert!(xml.contains("<w:t>thrush</w:t>"), "{xml}");
+}
+
+#[test]
+fn tracks_a_replacement_inside_its_own_insertion() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    wrap_runs(&mut doc, para, "Max", 7);
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(text_of(&mut doc, para), "A thrush sang.");
+    // The whole paragraph is the author's pending insertion, so
+    // rejecting drops it entirely.
+    assert!(!rejected_text(&mut doc).contains("sang."));
+    // The deletion nests inside the author's own insertion, where the
+    // runs stood, rather than moving text across structures.
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    let ins = xml.find("<w:ins ").expect("an insertion");
+    let del = xml.find("<w:del ").expect("a deletion");
+    assert!(ins < del, "{xml}");
+}
+
+#[test]
+fn keeps_bookmark_order_across_a_tracked_replacement() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    // The bookmark starts between the runs the match covers.
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:r><w:t>a</w:t></w:r>",
+            "<w:bookmarkStart w:id=\"20\" w:name=\"bkm\"/>",
+            "<w:r><w:t>b</w:t></w:r>",
+            "<w:bookmarkEnd w:id=\"20\"/>",
+        ),
+    );
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "ab", "x", Some(&rev)).unwrap(),
+        1
+    );
+    // Two deletions, one per side of the marker: rejecting either puts
+    // its run back exactly where it stood.
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert_eq!(xml.matches("<w:del ").count(), 2, "{xml}");
+    let mut doc = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let para = paragraph_with(&mut doc, "x");
+    // Two deletions and one insertion settle.
+    assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 3);
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    let start = xml
+        .find("<w:bookmarkStart w:id=\"20\"")
+        .expect("a bookmark start");
+    let run = xml.find("<w:t>b</w:t>").expect("the restored run");
+    let end = xml
+        .find("<w:bookmarkEnd w:id=\"20\"")
+        .expect("a bookmark end");
+    assert!(start < run && run < end, "{xml}");
+    assert_eq!(text_of(&mut doc, para), "ab");
+}
+
+#[test]
+fn tracks_a_replacement_over_its_own_property_change() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:r><w:rPr>",
+            "<w:rPrChange w:id=\"9\" w:author=\"Max\" w:date=\"2026-11-20T12:00:00Z\"><w:rPr/></w:rPrChange>",
+            "<w:b/></w:rPr><w:t>bold draft</w:t></w:r>",
+        ),
+    );
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "draft", "final", Some(&rev)).unwrap(),
+        1
+    );
+    // Every revision id in the file is distinct: the split and the new
+    // run record the same property change under fresh ids, and none
+    // reuses the fixture's change or the sample's bookmark ids.
+    // (Bookmark starts and ends legitimately share one id.)
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    let mut ids: Vec<&str> = vec![];
+    for prefix in ["<w:del w:id=\"", "<w:ins w:id=\"", "<w:rPrChange w:id=\""] {
+        let mut rest = xml.as_str();
+        while let Some(at) = rest.find(prefix) {
+            rest = &rest[at + prefix.len()..];
+            ids.push(rest.split('"').next().unwrap_or(""));
+        }
+    }
+    assert!(ids.len() >= 4, "del, ins and two copied marks: {ids:?}");
+    let mut sorted = ids.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(ids.len(), sorted.len(), "duplicate revision ids: {ids:?}");
+    // Both settlement outcomes keep the bold text.
+    let mut accepted = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let para = paragraph_with(&mut accepted, "final");
+    assert_eq!(
+        nebu_docx::revise::settle(&mut accepted, true, None).unwrap(),
+        2
+    );
+    assert_eq!(text_of(&mut accepted, para), "bold final");
+    assert!(accepted.views().unwrap().paragraphs().iter().any(|p| p.node == para && p.content.iter().any(|item| matches!(item, nebu_docx::Inline::Text { toggles, .. } if toggles.has(nebu_docx::Toggle::Bold)))));
+    let mut rejected = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let para = paragraph_with(&mut rejected, "final");
+    assert_eq!(
+        nebu_docx::revise::settle(&mut rejected, false, None).unwrap(),
+        2
+    );
+    assert_eq!(text_of(&mut rejected, para), "bold draft");
+}
+
+#[test]
+fn settle_leaves_a_nested_foreign_deletion_pending() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:r><w:t xml:space=\"preserve\">A </w:t></w:r>",
+            "<w:del w:id=\"1\" w:author=\"Max\" w:date=\"2026-11-20T12:00:00Z\">",
+            "<w:r><w:t xml:space=\"preserve\">old </w:t></w:r>",
+            "<w:del w:id=\"2\" w:author=\"Pip\" w:date=\"2026-11-20T12:00:00Z\">",
+            "<w:r><w:delText>ancient</w:delText></w:r>",
+            "</w:del></w:del>",
+            "<w:r><w:t xml:space=\"preserve\"> text</w:t></w:r>",
+        ),
+    );
+    // Rejecting Max's deletion unwraps it but leaves Pip's alone: the
+    // nested deleted text stays deleted text.
+    assert_eq!(
+        nebu_docx::revise::settle(&mut doc, false, Some("Max")).unwrap(),
+        1
+    );
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert!(!xml.contains("<w:del w:id=\"1\""), "{xml}");
+    assert!(xml.contains("<w:del w:id=\"2\""), "{xml}");
+    assert!(xml.contains("<w:delText>ancient</w:delText>"), "{xml}");
+    // Rejecting Max's deletion restores his text; Pip's stays deleted.
+    assert_eq!(text_of(&mut doc, para), "A old  text");
+}
+
+#[test]
+fn tracks_a_match_spanning_plain_text_and_its_own_insertion() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:r><w:t xml:space=\"preserve\">A </w:t></w:r>",
+            "<w:ins w:id=\"7\" w:author=\"Max\" w:date=\"2026-11-20T12:00:00Z\">",
+            "<w:r><w:t xml:space=\"preserve\">wren </w:t></w:r></w:ins>",
+            "<w:r><w:t>sang.</w:t></w:r>",
+        ),
+    );
+    assert_eq!(text_of(&mut doc, para), "A wren sang.");
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "A wren sang", "A thrush called", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(text_of(&mut doc, para), "A thrush called.");
+    // Rejecting drops the author's own insertion wholesale, with the
+    // nested deletion inside it.
+    let mut doc = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let para = paragraph_with(&mut doc, "thrush");
+    assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 4);
+    assert_eq!(text_of(&mut doc, para), "A sang.");
+}
+
+#[test]
+fn refuses_a_foreign_insertion() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    wrap_runs(&mut doc, para, "Pip", 7);
+    let before = doc.to_bytes().unwrap();
+    let rev = tracking();
+    let err = replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap_err();
+    match err {
+        nebu_docx::Error::ForeignRevision { authors } => assert_eq!(authors, ["Pip"]),
+        other => panic!("a foreign revision, not {other:?}"),
+    }
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[test]
+fn refuses_a_foreign_move_even_by_the_same_author() {
+    // Moves always belong to someone else: the engine never rewrites
+    // moved text, tracked or not.
+    for author in ["Max", "Pip"] {
+        let (mut doc, _) = insert(
+            support::sample(),
+            json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+        );
+        let para = paragraph_with(&mut doc, "placeholder");
+        set_runs(
+            &mut doc,
+            para,
+            &format!(
+                concat!(
+                    "<w:moveTo w:id=\"8\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\">",
+                    "<w:r><w:t>river</w:t></w:r></w:moveTo>",
+                    "<w:r><w:t xml:space=\"preserve\"> bank</w:t></w:r>",
+                ),
+                a = author,
+            ),
+        );
+        assert_eq!(text_of(&mut doc, para), "river bank");
+        let before = doc.to_bytes().unwrap();
+        let rev = tracking();
+        let err = replace_in_paragraph(&mut doc, para, "river bank", "stream shore", Some(&rev))
+            .unwrap_err();
+        match err {
+            nebu_docx::Error::ForeignRevision { authors } => assert_eq!(authors, [author]),
+            other => panic!("a foreign revision, not {other:?}"),
+        }
+        assert_eq!(doc.to_bytes().unwrap(), before);
+    }
+}
+
+#[test]
+fn refuses_a_foreign_property_change_and_ignores_its_own() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    let run_with_mark = |author: &str| {
+        format!(
+            concat!(
+                "<w:r><w:rPr>",
+                "<w:rPrChange w:id=\"9\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\"><w:rPr/></w:rPrChange>",
+                "<w:b/></w:rPr><w:t>bold draft</w:t></w:r>",
+            ),
+            a = author,
+        )
+    };
+    set_runs(&mut doc, para, &run_with_mark("Pip"));
+    let rev = tracking();
+    let err = replace_in_paragraph(&mut doc, para, "draft", "final", Some(&rev)).unwrap_err();
+    match err {
+        nebu_docx::Error::ForeignRevision { authors } => assert_eq!(authors, ["Pip"]),
+        other => panic!("a foreign revision, not {other:?}"),
+    }
+    set_runs(&mut doc, para, &run_with_mark("Max"));
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "draft", "final", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(text_of(&mut doc, para), "bold final");
+}
+
+#[test]
+fn settle_accepts_a_tracked_replacement() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(nebu_docx::revise::settle(&mut doc, true, None).unwrap(), 2);
+    assert_eq!(text_of(&mut doc, para), "A thrush sang.");
+    assert!(rejected_text(&mut doc).contains("A thrush sang."));
+    assert!(
+        doc.views().unwrap().revisions().is_empty(),
+        "no records left"
+    );
+}
+
+#[test]
+fn settle_rejects_a_tracked_replacement() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "wren", "thrush", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 2);
+    assert_eq!(text_of(&mut doc, para), "A wren sang.");
+    assert!(
+        doc.views().unwrap().revisions().is_empty(),
+        "no records left"
+    );
+}
+
+#[test]
+fn settle_only_touches_the_named_author() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([
+            { "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] },
+            { "type": "paragraph", "content": [{"type": "text", "text": "A pipit called."}] },
+        ]),
+    );
+    let first = paragraph_with(&mut doc, "wren");
+    let second = paragraph_with(&mut doc, "pipit");
+    let max = tracking();
+    let pip = Track {
+        author: "Pip".into(),
+        date: "2026-11-20T12:00:00Z".into(),
+    };
+    assert_eq!(
+        replace_in_paragraph(&mut doc, first, "wren", "thrush", Some(&max)).unwrap(),
+        1
+    );
+    assert_eq!(
+        replace_in_paragraph(&mut doc, second, "pipit", "lark", Some(&pip)).unwrap(),
+        1
+    );
+    assert_eq!(
+        nebu_docx::revise::settle(&mut doc, true, Some("Max")).unwrap(),
+        2
+    );
+    assert_eq!(text_of(&mut doc, first), "A thrush sang.");
+    assert_eq!(text_of(&mut doc, second), "A lark called.");
+    let rest: Vec<_> = doc
+        .views()
+        .unwrap()
+        .revisions()
+        .iter()
+        .map(|r| r.author.clone())
+        .collect();
+    assert!(rest.iter().all(|a| a == "Pip"), "{rest:?}");
+    assert!(!rest.is_empty(), "Pip's records stay");
+}
+
+#[test]
+fn settle_leaves_moves_and_property_marks() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:moveTo w:id=\"8\" w:author=\"Mover\" w:date=\"2026-11-20T12:00:00Z\">",
+            "<w:r><w:t xml:space=\"preserve\">M </w:t></w:r></w:moveTo>",
+            "<w:r><w:t>draft</w:t></w:r>",
+            "<w:r><w:rPr>",
+            "<w:rPrChange w:id=\"9\" w:author=\"Pip\" w:date=\"2026-11-20T12:00:00Z\"><w:rPr/></w:rPrChange>",
+            "</w:rPr><w:t xml:space=\"preserve\"> here</w:t></w:r>",
+        ),
+    );
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "draft", "final", Some(&rev)).unwrap(),
+        1
+    );
+    assert_eq!(nebu_docx::revise::settle(&mut doc, true, None).unwrap(), 2);
+    assert_eq!(text_of(&mut doc, para), "M final here");
+    let kinds: Vec<_> = doc
+        .views()
+        .unwrap()
+        .revisions()
+        .iter()
+        .map(|r| r.kind)
+        .collect();
+    assert!(kinds.contains(&RevisionKind::MoveTo), "{kinds:?}");
+    assert!(kinds.contains(&RevisionKind::Formatting), "{kinds:?}");
+    assert_eq!(kinds.len(), 2, "{kinds:?}");
+}
+
+#[test]
+fn batch_reports_each_paragraph_and_keeps_going() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([
+            { "type": "paragraph", "content": [{"type": "text", "text": "plain draft here"}] },
+            { "type": "table", "rows": [{"cells": [
+                {"content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF a \\h", "result": "draft"},
+                    {"type": "text", "text": " A"},
+                ]}]},
+                {"content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF b \\h", "result": "draft"},
+                    {"type": "text", "text": " B"},
+                ]}]},
+            ]}]},
+            { "type": "paragraph", "content": [{"type": "text", "text": "plain draft there"}] },
+        ]),
+    );
+    let paras: Vec<NodeId> = doc
+        .views()
+        .unwrap()
+        .paragraphs()
+        .iter()
+        .map(|p| p.node)
+        .collect();
+    let report = replace_all(&mut doc, &paras, "draft", "final", None).unwrap();
+    // Both plain paragraphs change; both field results refuse.
+    assert_eq!(report.replaced.iter().map(|(_, n)| n).sum::<usize>(), 2);
+    assert_eq!(report.refused.len(), 2);
+    for (_, error) in &report.refused {
+        assert!(error.to_string().contains("a field"), "{error:?}");
+    }
+    let text = rejected_text(&mut doc);
+    assert!(text.contains("plain final here"), "{text}");
+    assert!(text.contains("plain final there"), "{text}");
+}
+
+#[test]
+fn keeps_non_element_siblings_in_place_across_a_tracked_replacement() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "placeholder"}] }]),
+    );
+    let para = paragraph_with(&mut doc, "placeholder");
+    // A comment and a processing instruction stand between the covered
+    // runs. They are not elements the flat scan names, but they still
+    // hold the two runs apart.
+    set_runs(
+        &mut doc,
+        para,
+        concat!(
+            "<w:r><w:t>a</w:t></w:r>",
+            "<!--keep-->",
+            "<?tgt data?>",
+            "<w:r><w:t>b</w:t></w:r>",
+        ),
+    );
+    let rev = tracking();
+    assert_eq!(
+        replace_in_paragraph(&mut doc, para, "ab", "x", Some(&rev)).unwrap(),
+        1
+    );
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    assert_eq!(xml.matches("<w:del ").count(), 2, "{xml}");
+    let mut doc = Document::from_bytes(doc.to_bytes().unwrap()).unwrap();
+    let para = paragraph_with(&mut doc, "x");
+    assert_eq!(nebu_docx::revise::settle(&mut doc, false, None).unwrap(), 3);
+    let xml = String::from_utf8(support::entry(
+        &doc.to_bytes().unwrap(),
+        "word/document.xml",
+    ))
+    .unwrap();
+    let a = xml.find("<w:t>a</w:t>").expect("the first run");
+    let comment = xml.find("keep").expect("the comment");
+    let pi = xml.find("<?tgt").expect("the processing instruction");
+    let b = xml.find("<w:t>b</w:t>").expect("the second run");
+    assert!(a < comment && comment < pi && pi < b, "{xml}");
+    assert_eq!(text_of(&mut doc, para), "ab");
+}
+
+#[test]
+fn batch_refuses_a_paragraph_in_a_detached_container() {
+    let (mut doc, _) = insert(
+        support::sample(),
+        json!([{ "type": "paragraph", "content": [{"type": "text", "text": "A wren sang."}] }]),
+    );
+    let para = paragraph_with(&mut doc, "wren");
+    // Pull the paragraph out of the body into a text box that belongs
+    // to no part: the seed walk would still find it, but the edit could
+    // never serialize.
+    let main = doc.main_part().to_string();
+    let tree = doc.xml(&main).unwrap();
+    let boxy = tree
+        .parse_fragment("<w:txbxContent/>", &[("w", nebu_docx::ns::W)])
+        .unwrap()
+        .pop()
+        .expect("a text box");
+    tree.append(boxy, para).unwrap();
+    let report = replace_all(&mut doc, &[para], "wren", "thrush", None).unwrap();
+    assert!(report.replaced.is_empty(), "{report:?}");
+    assert_eq!(report.refused.len(), 1);
+    assert!(
+        report.refused[0].1.to_string().contains("not attached"),
+        "{report:?}"
+    );
 }
