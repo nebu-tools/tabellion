@@ -1507,7 +1507,7 @@ fn validate_names_a_bad_tracking_stamp() {
 }
 
 #[test]
-fn batch_reports_each_paragraph_and_keeps_going() {
+fn batch_restores_the_document_on_refusal() {
     let (mut doc, _) = insert(
         support::sample(),
         json!([
@@ -1534,16 +1534,21 @@ fn batch_reports_each_paragraph_and_keeps_going() {
         .iter()
         .map(|p| p.node)
         .collect();
+    let before = doc.to_bytes().unwrap();
     let report = replace_all(&mut doc, &paras, "draft", "final", None).unwrap();
-    // Both plain paragraphs change; both field results refuse.
+    // The report still names every paragraph: both plain paragraphs
+    // would change, and both field results refuse.
     assert_eq!(report.replaced.iter().map(|(_, n)| n).sum::<usize>(), 2);
     assert_eq!(report.refused.len(), 2);
     for (_, error) in &report.refused {
         assert!(error.to_string().contains("a field"), "{error:?}");
     }
+    // But the sweep is atomic: a refusal restores the whole document,
+    // so the editable paragraphs still read draft.
+    assert_eq!(doc.to_bytes().unwrap(), before);
     let text = rejected_text(&mut doc);
-    assert!(text.contains("plain final here"), "{text}");
-    assert!(text.contains("plain final there"), "{text}");
+    assert!(text.contains("plain draft here"), "{text}");
+    assert!(text.contains("plain draft there"), "{text}");
 }
 
 #[test]

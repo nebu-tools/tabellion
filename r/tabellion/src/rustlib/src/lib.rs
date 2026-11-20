@@ -143,6 +143,87 @@ pub fn refresh_fields(doc: &mut Document) -> Fallible<usize> {
     Ok(doc.update_fields()?)
 }
 
+/// Replaces literal text wherever a reader sees it: every occurrence
+/// in each paragraph of every story but comments. Runs keep their
+/// formatting; with an author the replacement is tracked. Reports the
+/// number of occurrences replaced. A paragraph that refuses — a match
+/// inside a field, a hyperlink or another object — aborts with every
+/// refused paragraph named, and nothing after the refusal is trusted.
+pub fn replace_text(
+    doc: &mut Document,
+    find: &str,
+    with: &str,
+    author: Option<&str>,
+) -> Fallible<i32> {
+    let rev = author.map(nebu_docx::Track::now);
+    let rev = rev.as_ref();
+    nebu_docx::revise::validate(find, with, rev)?;
+    let targets: Vec<nebu_docx::Paragraph> = doc
+        .views()?
+        .paragraphs()
+        .iter()
+        .filter(|p| p.location.story != nebu_docx::StoryKind::Comment)
+        .cloned()
+        .collect();
+    let nodes: Vec<nebu_docx::xml::NodeId> = targets.iter().map(|p| p.node).collect();
+    let report = nebu_docx::revise::replace_all(doc, &nodes, find, with, rev)?;
+    if !report.refused.is_empty() {
+        let mut refused = Vec::new();
+        for (node, error) in &report.refused {
+            let where_ = targets
+                .iter()
+                .find(|p| p.node == *node)
+                .map(describe_paragraph)
+                .unwrap_or_else(|| "?".to_string());
+            refused.push(format!("{where_} ({error})"));
+        }
+        return Err(Error::Docx(format!(
+            "replace refused {}: {}",
+            plural(refused.len(), "paragraph"),
+            refused.join(", ")
+        )));
+    }
+    let occurrences: usize = report.replaced.iter().map(|(_, n)| n).sum();
+    if occurrences == 0 {
+        return Err(Error::Docx(format!(
+            "no occurrences of {find:?} to replace"
+        )));
+    }
+    Ok(occurrences as i32)
+}
+
+/// Accepts tracked revisions, optionally only one author's. Reports how
+/// many records settled.
+pub fn accept_revisions(doc: &mut Document, author: Option<&str>) -> Fallible<i32> {
+    Ok(nebu_docx::revise::settle(doc, true, author)? as i32)
+}
+
+/// Rejects tracked revisions, optionally only one author's. Reports how
+/// many records settled.
+pub fn reject_revisions(doc: &mut Document, author: Option<&str>) -> Fallible<i32> {
+    Ok(nebu_docx::revise::settle(doc, false, author)? as i32)
+}
+
+/// Where a swept paragraph stands, for refusal diagnostics: the story
+/// and the paragraph's index within it.
+fn describe_paragraph(paragraph: &nebu_docx::Paragraph) -> String {
+    let story = match paragraph.location.story {
+        nebu_docx::StoryKind::Main => "body",
+        nebu_docx::StoryKind::Header => "header",
+        nebu_docx::StoryKind::Footer => "footer",
+        nebu_docx::StoryKind::Footnote => "footnote",
+        nebu_docx::StoryKind::Endnote => "endnote",
+        nebu_docx::StoryKind::TextBox => "text box",
+        nebu_docx::StoryKind::Comment => "comment",
+    };
+    format!("{} paragraph {}", story, paragraph.index)
+}
+
+/// `1 paragraph` or `2 paragraphs`.
+fn plural(n: usize, word: &str) -> String {
+    format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+}
+
 /// The text a reader sees, one line per paragraph.
 pub fn docx_text(doc: &mut Document) -> Fallible<String> {
     Ok(doc.views()?.text(&TextOptions::default()))
@@ -536,6 +617,27 @@ fn doc_update_fields(doc: Robj) -> Fallible<()> {
     Ok(())
 }
 
+/// Replaces literal text wherever a reader sees it, tracked when an
+/// author is given. Reports how many occurrences were replaced.
+#[extendr]
+fn doc_replace_text(doc: Robj, find: &str, with: &str, author: Option<&str>) -> Fallible<i32> {
+    replace_text(&mut checked_handle(&doc)?.borrow_mut(), find, with, author)
+}
+
+/// Accepts tracked revisions, optionally only one author's. Reports
+/// how many records settled.
+#[extendr]
+fn doc_accept_revisions(doc: Robj, author: Option<&str>) -> Fallible<i32> {
+    accept_revisions(&mut checked_handle(&doc)?.borrow_mut(), author)
+}
+
+/// Rejects tracked revisions, optionally only one author's. Reports
+/// how many records settled.
+#[extendr]
+fn doc_reject_revisions(doc: Robj, author: Option<&str>) -> Fallible<i32> {
+    reject_revisions(&mut checked_handle(&doc)?.borrow_mut(), author)
+}
+
 extendr_module! {
     mod tabellion;
     fn doc_open;
@@ -549,6 +651,9 @@ extendr_module! {
     fn doc_tables;
     fn doc_add_image;
     fn doc_update_fields;
+    fn doc_replace_text;
+    fn doc_accept_revisions;
+    fn doc_reject_revisions;
 }
 
 #[cfg(test)]
@@ -748,5 +853,65 @@ mod tests {
         ];
         let err = add_table(&mut doc, &headers, &ragged, None, None).unwrap_err();
         assert!(matches!(err, Error::Docx(_)), "{err:?}");
+    }
+
+    #[test]
+    fn refuses_are_atomic_through_the_handle() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        add_paragraph(&mut doc, "A draft plan.", None).unwrap();
+        let fielded = nebu_docx::content::Content::from_json(
+            br#"{"blocks": [
+                {"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF a \\h", "result": "draft"}
+                ]}
+            ]}"#,
+        )
+        .unwrap();
+        doc.insert(Place::End, &fielded.blocks, &WriteOptions::default())
+            .unwrap();
+        // The sweep replaces the editable paragraph, then refuses the
+        // field: the error names the field, and the handle still reads
+        // draft in the editable paragraph.
+        let err = replace_text(&mut doc, "draft", "final", None).unwrap_err();
+        assert!(err.to_string().contains("a field"), "{err:?}");
+        assert!(docx_text(&mut doc).unwrap().contains("A draft plan."));
+    }
+
+    #[test]
+    fn replaces_text_and_settles_revisions() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        add_paragraph(&mut doc, "A draft plan.", None).unwrap();
+        // Untracked: one occurrence replaced.
+        assert_eq!(replace_text(&mut doc, "draft", "final", None).unwrap(), 1);
+        assert!(docx_text(&mut doc).unwrap().contains("A final plan."));
+        // Tracked: one deletion and one insertion per match.
+        add_paragraph(&mut doc, "A draft tally.", None).unwrap();
+        assert_eq!(
+            replace_text(&mut doc, "draft", "final", Some("Lark")).unwrap(),
+            1
+        );
+        assert_eq!(accept_revisions(&mut doc, Some("Wren")).unwrap(), 0);
+        assert_eq!(accept_revisions(&mut doc, Some("Lark")).unwrap(), 2);
+        assert!(docx_text(&mut doc).unwrap().contains("A final tally."));
+        // Rejecting restores the source text.
+        add_paragraph(&mut doc, "A draft sketch.", None).unwrap();
+        assert_eq!(
+            replace_text(&mut doc, "draft", "final", Some("Lark")).unwrap(),
+            1
+        );
+        assert_eq!(reject_revisions(&mut doc, None).unwrap(), 2);
+        assert!(docx_text(&mut doc).unwrap().contains("A draft sketch."));
+        // Nothing to replace and bad arguments are errors.
+        assert!(replace_text(&mut doc, "nightingale", "thrush", None).is_err());
+        assert!(replace_text(&mut doc, "", "final", None).is_err());
     }
 }
