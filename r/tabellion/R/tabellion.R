@@ -202,3 +202,52 @@ add_image <- function(doc, path, caption = NULL, label = NULL, alt = NULL) {
   .Call("wrap__doc_add_image", doc, bytes, caption, label, alt, PACKAGE = "tabellion")
   invisible(doc)
 }
+
+#' Replace literal text wherever a reader sees it.
+#'
+#' Every occurrence of the find text is replaced in each paragraph of
+#' every story but comments: the body with its tables and text boxes,
+#' headers and footers, footnotes and endnotes. Runs keep their
+#' formatting. With an author the replacement is tracked. A paragraph
+#' that refuses — a match inside a field, a hyperlink or another
+#' object — aborts with every refused paragraph named.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @param find The literal text to find.
+#' @param with The literal replacement; empty deletes the matches.
+#' @param author Track the replacement by this author, or `NULL` for
+#'   an untracked replacement.
+#' @return The document, invisibly.
+#' @export
+replace_text <- function(doc, find, with, author = NULL) {
+  .Call("wrap__doc_replace_text", doc, find, with, author, PACKAGE = "tabellion")
+  invisible(doc)
+}
+
+#' Accept tracked revisions.
+#'
+#' Settles every insertion, deletion and move by the author — or by
+#' anyone, when no author is given.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @param author Only revisions by this author, or `NULL` for anyone's.
+#' @return The document, invisibly.
+#' @export
+accept_revisions <- function(doc, author = NULL) {
+  .Call("wrap__doc_accept_revisions", doc, author, PACKAGE = "tabellion")
+  invisible(doc)
+}
+
+#' Reject tracked revisions.
+#'
+#' Settles every insertion, deletion and move by the author — or by
+#' anyone, when no author is given.
+#'
+#' @param doc A document handle, as [`open_docx()`] makes.
+#' @param author Only revisions by this author, or `NULL` for anyone's.
+#' @return The document, invisibly.
+#' @export
+reject_revisions <- function(doc, author = NULL) {
+  .Call("wrap__doc_reject_revisions", doc, author, PACKAGE = "tabellion")
+  invisible(doc)
+}
