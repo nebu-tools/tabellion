@@ -1300,14 +1300,19 @@ fn set_revision(tree: &mut Tree, node: NodeId, rev: &Track, ids: &mut Ids) -> Re
 /// Accepts or rejects tracked revisions and reports how many records
 /// settled.
 ///
-/// Every story is walked: insertions and deletions of text that belong
-/// to `author` — or to anyone, when no author is given — are accepted
-/// or rejected. Accepting unwraps an insertion and removes a deletion;
-/// rejecting removes an insertion and unwraps a deletion, turning
-/// deleted text back into text. A record inside another settles with
-/// the outer one first: dropping the outer record drops what it holds.
-/// Moves and property marks are left as they are, as are records in
-/// properties, such as paragraph-mark revisions.
+/// Every story is walked: insertions, deletions and moves of text that
+/// belong to `author` — or to anyone, when no author is given — are
+/// accepted or rejected. Accepting unwraps an insertion and removes a
+/// deletion; rejecting removes an insertion and unwraps a deletion,
+/// turning deleted text back into text. Accepting a move keeps the
+/// destination text and removes the source; rejecting keeps the source
+/// and removes the destination, with the range markers going either
+/// way. Moves pair by range name, as Word writes them: each side is a
+/// start/end marker pair sharing an id, and the records sit inside the
+/// ranges. A move without a complete paired range stays, as do property
+/// marks and records in properties, such as paragraph-mark revisions.
+/// A record inside another settles with the outer one first: dropping
+/// the outer record drops what it holds.
 pub fn settle(doc: &mut Document, accept: bool, author: Option<&str>) -> Result<usize, Error> {
     let stories = place::stories(doc)?;
     let mut settled = 0usize;
@@ -1316,34 +1321,44 @@ pub fn settle(doc: &mut Document, accept: bool, author: Option<&str>) -> Result<
         let root = tree.root_element();
         let kids: Vec<NodeId> = tree.children(root)?.collect();
         for kid in kids {
-            settle_node(tree, kid, accept, author, &mut settled)?;
+            settle_node(tree, root, kid, accept, author, &mut settled)?;
         }
     }
     Ok(settled)
 }
 
 /// Settles one node and, when it survives unwrapped, what it holds.
+/// Nodes detached by an earlier settlement in the same walk — reached
+/// through a child list collected before they moved — are left alone.
 fn settle_node(
     tree: &mut Tree,
+    root: NodeId,
     node: NodeId,
     accept: bool,
     author: Option<&str>,
     settled: &mut usize,
 ) -> Result<(), Error> {
+    if node != root && !attached(tree, root, node)? {
+        return Ok(());
+    }
     let Some(name) = tree.name(node)? else {
         return Ok(());
     };
     if name.namespace != Some(W) {
-        return settle_children(tree, node, accept, author, settled);
+        return settle_children(tree, root, node, accept, author, settled);
     }
     // Property records stay: only text revisions settle, and paragraph
     // marks with them are left for a later slice.
     if name.local.ends_with("Pr") {
         return Ok(());
     }
-    // Moves stay, whoever made them.
-    if matches!(name.local, "moveFrom" | "moveTo") {
-        return Ok(());
+    if name.local == "moveFrom" {
+        return settle_move(tree, root, node, accept, author, settled);
+    }
+    if name.local == "moveTo" {
+        // The source side settles the pair; a destination reached on its
+        // own only settles what it holds.
+        return settle_children(tree, root, node, accept, author, settled);
     }
     if matches!(name.local, "ins" | "del") {
         // An empty or missing author never matches a named filter, as in
@@ -1353,7 +1368,7 @@ fn settle_node(
             Some(want) => revision_author(tree, node)?.as_deref() == Some(*want),
         };
         if !mine {
-            return settle_children(tree, node, accept, author, settled);
+            return settle_children(tree, root, node, accept, author, settled);
         }
         if name.local == "ins" && accept || name.local == "del" && !accept {
             // Unwrap: the content stays, the record goes.
@@ -1366,7 +1381,7 @@ fn settle_node(
             }
             tree.detach(node)?;
             for child in moved {
-                settle_node(tree, child, accept, author, settled)?;
+                settle_node(tree, root, child, accept, author, settled)?;
             }
             *settled += 1;
             return Ok(());
@@ -1376,12 +1391,13 @@ fn settle_node(
         *settled += 1;
         return Ok(());
     }
-    settle_children(tree, node, accept, author, settled)
+    settle_children(tree, root, node, accept, author, settled)
 }
 
 /// Settles the children of a node that itself stands.
 fn settle_children(
     tree: &mut Tree,
+    root: NodeId,
     node: NodeId,
     accept: bool,
     author: Option<&str>,
@@ -1389,8 +1405,229 @@ fn settle_children(
 ) -> Result<(), Error> {
     let kids: Vec<NodeId> = tree.children(node)?.collect();
     for kid in kids {
-        settle_node(tree, kid, accept, author, settled)?;
+        settle_node(tree, root, kid, accept, author, settled)?;
     }
+    Ok(())
+}
+
+/// True when the node is attached under the root: its parent chain
+/// reaches the root. Settle walks collect child lists up front, so a
+/// node detached later in the walk is only ever reached stale.
+fn attached(tree: &Tree, root: NodeId, node: NodeId) -> Result<bool, Error> {
+    let mut current = node;
+    loop {
+        if current == root {
+            return Ok(true);
+        }
+        match tree.parent(current)? {
+            Some(parent) => current = parent,
+            None => return Ok(false),
+        }
+    }
+}
+
+/// True when the node sits inside properties: an ancestor's name ends
+/// in `Pr`. The traversal never settles those, so lookups must skip
+/// them too.
+fn inside_properties(tree: &Tree, mut node: NodeId) -> Result<bool, Error> {
+    while let Some(parent) = tree.parent(node)? {
+        let name = tree.name(parent)?;
+        if name.is_some_and(|n| n.namespace == Some(W) && n.local.ends_with("Pr")) {
+            return Ok(true);
+        }
+        node = parent;
+    }
+    Ok(false)
+}
+
+/// True when the range holds a move record the settlement leaves in
+/// place: a move wrapper inside paragraph properties. Its range must
+/// stay for the record to remain valid.
+fn range_holds_property_move(
+    tree: &Tree,
+    order: &[NodeId],
+    range: &MoveRange,
+) -> Result<bool, Error> {
+    for &n in &order[range.start + 1..range.end] {
+        let name = tree.name(n)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && matches!(n.local, "moveFrom" | "moveTo"))
+        {
+            continue;
+        }
+        if inside_properties(tree, n)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// One side of a move: the start/end markers sharing an id, with the
+/// start marker's name pairing it to the other side.
+struct MoveRange {
+    /// Whether this is the source side.
+    from: bool,
+    /// Document-order index of the start marker.
+    start: usize,
+    /// Document-order index of the end marker.
+    end: usize,
+    /// The range name.
+    name: String,
+    /// The range's markers, to detach on settlement.
+    markers: [NodeId; 2],
+}
+
+/// Every complete move range in the part, in document order: a start
+/// marker with a non-empty id and name, closed by an end marker of the
+/// same side with the same id. Unmatched markers never pair, so a half
+/// range cannot settle.
+fn move_ranges(tree: &Tree, root: NodeId) -> Result<Vec<MoveRange>, Error> {
+    use std::collections::HashMap;
+    let order: Vec<NodeId> = tree.descendants(root)?.collect();
+    let mut position: HashMap<NodeId, usize> = HashMap::new();
+    for (index, node) in order.iter().enumerate() {
+        position.insert(*node, index);
+    }
+    // Open starts: side, id, name and node.
+    let mut open: Vec<(bool, String, String, NodeId)> = Vec::new();
+    let mut ranges = Vec::new();
+    for node in &order {
+        let name = tree.name(*node)?;
+        let Some(marker) = name.filter(|n| {
+            n.namespace == Some(W)
+                && matches!(
+                    n.local,
+                    "moveFromRangeStart"
+                        | "moveFromRangeEnd"
+                        | "moveToRangeStart"
+                        | "moveToRangeEnd"
+                )
+        }) else {
+            continue;
+        };
+        let from = marker.local.starts_with("moveFrom");
+        let is_start = marker.local.ends_with("RangeStart");
+        let id = tree
+            .attribute(*node, Some(W), "id")?
+            .map(|id| id.into_owned())
+            .filter(|id| !id.is_empty());
+        let Some(id) = id else { continue };
+        if is_start {
+            let name = tree
+                .attribute(*node, Some(W), "name")?
+                .map(|name| name.into_owned())
+                .filter(|name| !name.is_empty());
+            let Some(name) = name else { continue };
+            open.push((from, id, name, *node));
+        } else if let Some(at) = open
+            .iter()
+            .rposition(|(side, open_id, _, _)| *side == from && *open_id == id)
+        {
+            let (_, _, name, start) = open.remove(at);
+            let start_at = position[&start];
+            let end_at = position[node];
+            if start_at < end_at {
+                ranges.push(MoveRange {
+                    from,
+                    start: start_at,
+                    end: end_at,
+                    name,
+                    markers: [start, *node],
+                });
+            }
+        }
+    }
+    Ok(ranges)
+}
+
+/// Settles a move from its source record: the pair keeps one side and
+/// drops the other. Accepting keeps the destination text; rejecting
+/// restores the source text. The range markers go when the pair
+/// settles whole, but stay when a paragraph-mark move record survives
+/// inside either range. A source record without a complete paired
+/// range stays, as does one belonging to another author — though what
+/// they hold still settles.
+fn settle_move(
+    tree: &mut Tree,
+    root: NodeId,
+    node: NodeId,
+    accept: bool,
+    author: Option<&str>,
+    settled: &mut usize,
+) -> Result<(), Error> {
+    let ranges = move_ranges(tree, root)?;
+    let order: Vec<NodeId> = tree.descendants(root)?.collect();
+    let position = order.iter().position(|&n| n == node);
+    let Some(at) = position else {
+        return settle_children(tree, root, node, accept, author, settled);
+    };
+    // The innermost source range holding the record.
+    let source = ranges
+        .iter()
+        .filter(|range| range.from && range.start < at && at < range.end)
+        .max_by_key(|range| range.start);
+    let Some(source) = source else {
+        return settle_children(tree, root, node, accept, author, settled);
+    };
+    // The first destination range with the source range's name.
+    let dest = ranges
+        .iter()
+        .filter(|range| !range.from && range.name == source.name)
+        .min_by_key(|range| range.start);
+    let Some(dest) = dest else {
+        return settle_children(tree, root, node, accept, author, settled);
+    };
+    // The destination record the range holds: the first moveTo the
+    // traversal itself could settle, skipping paragraph-mark revisions
+    // as it does.
+    let mut wrapper = None;
+    for &n in &order[dest.start + 1..dest.end] {
+        let name = tree.name(n)?;
+        if !name.is_some_and(|n| n.namespace == Some(W) && n.local == "moveTo") {
+            continue;
+        }
+        if inside_properties(tree, n)? {
+            continue;
+        }
+        wrapper = Some(n);
+        break;
+    }
+    let Some(wrapper) = wrapper else {
+        return settle_children(tree, root, node, accept, author, settled);
+    };
+    let mine = match &author {
+        None => true,
+        Some(want) => {
+            revision_author(tree, node)?.as_deref() == Some(*want)
+                || revision_author(tree, wrapper)?.as_deref() == Some(*want)
+        }
+    };
+    if !mine {
+        return settle_children(tree, root, node, accept, author, settled);
+    }
+    // The kept side unwraps where it stands and its children settle in
+    // turn; the dropped side goes with its record. The ranges' markers
+    // go when the pair settles whole, but stay when a paragraph-mark
+    // move record survives inside either range, which needs its range
+    // to remain valid.
+    let keep = if accept { wrapper } else { node };
+    let keep_markers = range_holds_property_move(tree, &order, source)?
+        || range_holds_property_move(tree, &order, dest)?;
+    let kept: Vec<NodeId> = tree.children(keep)?.collect();
+    for child in &kept {
+        tree.insert_before(keep, *child)?;
+    }
+    tree.detach(keep)?;
+    if !keep_markers {
+        for marker in source.markers.into_iter().chain(dest.markers) {
+            tree.detach(marker)?;
+        }
+    }
+    for child in kept {
+        settle_node(tree, root, child, accept, author, settled)?;
+    }
+    let drop = if accept { node } else { wrapper };
+    tree.detach(drop)?;
+    *settled += 2;
     Ok(())
 }
 

@@ -1557,6 +1557,715 @@ fn replace_sweeps_headers_and_leaves_comments_alone() {
 }
 
 #[test]
+fn replace_tracks_the_replacement_for_an_author() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("tracked.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // The human line keeps its shape and names the tracker.
+    assert!(
+        stdout.contains(
+            r#"replaced "draft" with "final" (4 occurrences in 3 paragraphs, tracked by Lark)"#
+        ),
+        "{stdout}"
+    );
+    // The file holds Lark's pending revisions; the accepted text reads
+    // through them.
+    let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
+    let authors: Vec<&str> = revisions["revisions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["author"].as_str().unwrap())
+        .collect();
+    assert!(!authors.is_empty(), "{revisions}");
+    assert!(authors.iter().all(|a| *a == "Lark"), "{revisions}");
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("A final plan"), "{text}");
+}
+
+#[test]
+fn replace_rejects_a_bad_tracking_author() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("out.docx");
+    // A control character names --author, not one refusal per paragraph.
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "La\x01rk",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("tracking author"), "{stderr}");
+    assert!(!stderr.contains("refused"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_reports_json_for_programs() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let out = dir.path().join("tracked.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Lark",
+        "--json",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["command"], "replace");
+    assert_eq!(report["find"], "draft");
+    assert_eq!(report["with"], "final");
+    assert_eq!(report["tracked_by"], "Lark");
+    assert_eq!(report["occurrences"], 4);
+    assert_eq!(report["paragraphs"], 3);
+    assert_eq!(report["refused"].as_array().unwrap().len(), 0);
+}
+
+#[test]
+fn replace_json_names_each_refusal() {
+    let dir = tempfile::tempdir().unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.path().join("field.json");
+    std::fs::write(
+        &content,
+        r#"{"blocks": [
+            {"type": "paragraph", "content": [{"type": "text", "text": "plain draft here"}]},
+            {"type": "table", "rows": [{"cells": [
+                {"content": [{"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF a \\h", "result": "draft"}
+                ]}]}
+            ]}]}
+        ]}"#,
+    )
+    .unwrap();
+    // A field result the sweep cannot cut through.
+    let fielded = dir.path().join("fielded.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        fielded.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("out.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        fielded.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--json",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    // Programs get the same refusals as people: the JSON report still
+    // prints on stdout while the diagnostic stays on stderr.
+    assert!(stderr.contains("refused 1 paragraph"), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let refused = report["refused"].as_array().unwrap();
+    assert_eq!(refused.len(), 1, "{report}");
+    assert_eq!(refused[0]["reason"], "field", "{report}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_json_reports_failed_validation() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    // An empty find, a bad tracking author, a missing input and an
+    // unresolved block all fail before any sweep: with --json each
+    // still prints one parseable zeros report on stdout, keeps the
+    // diagnostic on stderr, exits 3 and writes nothing.
+    let missing = dir.path().join("missing.docx");
+    let cases: Vec<(Vec<String>, &str)> = vec![
+        (
+            vec!["--find".into(), "".into(), "--with".into(), "final".into()],
+            "cannot replace an empty string",
+        ),
+        (
+            vec![
+                "--find".into(),
+                "draft".into(),
+                "--with".into(),
+                "final".into(),
+                "--author".into(),
+                "La\x01rk".into(),
+            ],
+            "tracking author",
+        ),
+        (
+            vec![
+                "--find".into(),
+                "draft".into(),
+                "--with".into(),
+                "final".into(),
+                "--block".into(),
+                "p:00000000".into(),
+            ],
+            "no block matches",
+        ),
+    ];
+    for (flags, diagnostic) in &cases {
+        let out = dir.path().join("out.docx");
+        let mut args = vec![
+            "replace".to_string(),
+            drafted.to_str().unwrap().to_string(),
+            out.to_str().unwrap().to_string(),
+        ];
+        args.extend(flags.clone());
+        args.push("--json".to_string());
+        let args: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
+        let (code, stdout, stderr) = run(&args);
+        assert_eq!(code, Some(3), "{stderr}");
+        assert!(stderr.contains(diagnostic), "{stderr}");
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(report["command"], "replace", "{report}");
+        assert_eq!(report["occurrences"], 0, "{report}");
+        assert_eq!(report["paragraphs"], 0, "{report}");
+        assert_eq!(report["refused"].as_array().unwrap().len(), 0, "{report}");
+        assert!(!out.exists());
+    }
+    // The author echo survives validation failure.
+    let out = dir.path().join("author.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "La\x01rk",
+        "--json",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["tracked_by"], "La\x01rk", "{report}");
+    assert!(!out.exists());
+    // A missing input reports zeros too.
+    let out = dir.path().join("gone.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        missing.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--json",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["occurrences"], 0, "{report}");
+    assert!(!out.exists());
+}
+
+#[test]
+fn replace_json_pins_foreign_and_multiword_reasons() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let pip = dir.path().join("pip.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        pip.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Pip",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // Another author's tracked text refuses as a foreign revision.
+    let out = dir.path().join("out.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        pip.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "final",
+        "--with",
+        "ultimate",
+        "--author",
+        "Max",
+        "--json",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let refused = report["refused"].as_array().unwrap();
+    assert!(!refused.is_empty(), "{report}");
+    assert!(
+        refused.iter().all(|r| r["reason"] == "foreign-revision"),
+        "{report}"
+    );
+    assert!(stderr.contains("pending change"), "{stderr}");
+    assert!(!out.exists());
+    // Without tracking the same text refuses by obstruction name, with
+    // spaces as dashes.
+    let plain = dir.path().join("plain.docx");
+    let (code, stdout, stderr) = run(&[
+        "replace",
+        pip.to_str().unwrap(),
+        plain.to_str().unwrap(),
+        "--find",
+        "final",
+        "--with",
+        "ultimate",
+        "--json",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    let refused = report["refused"].as_array().unwrap();
+    assert!(!refused.is_empty(), "{report}");
+    assert!(
+        refused.iter().all(|r| r["reason"] == "inserted-revision"),
+        "{report}"
+    );
+}
+
+/// A document with a single Lark move pair between its two body
+/// paragraphs, with range markers: the source holds the moveFrom
+/// record, the destination the moveTo record.
+fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
+    use nebu_docx::xml::NodeId;
+    let drafted = drafted_doc(dir);
+    let bytes = std::fs::read(&drafted).unwrap();
+    let mut doc = nebu_docx::Document::from_bytes(bytes).unwrap();
+    let (source, dest) = {
+        let views = doc.views().unwrap();
+        let node = |needle: &str| {
+            views
+                .paragraphs()
+                .iter()
+                .find(|p| p.text.contains(needle))
+                .unwrap_or_else(|| panic!("no paragraph holds {needle:?}"))
+                .node
+        };
+        (node("A draft plan"), node("Another draft"))
+    };
+    let set_runs = |doc: &mut nebu_docx::Document, para: NodeId, xml: &str| {
+        let main = doc.main_part().to_string();
+        let tree = doc.xml(&main).unwrap();
+        let runs: Vec<NodeId> = tree
+            .elements(para)
+            .unwrap()
+            .filter(|&n| tree.is(n, Some(nebu_docx::ns::W), "r").unwrap_or(false))
+            .collect();
+        for r in runs {
+            tree.detach(r).unwrap();
+        }
+        for n in tree
+            .parse_fragment(xml, &[("w", nebu_docx::ns::W)])
+            .unwrap()
+        {
+            tree.append(para, n).unwrap();
+        }
+    };
+    set_runs(
+        &mut doc,
+        source,
+        concat!(
+            "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/>",
+            "<w:moveFrom w:id=\"11\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+            "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
+            "<w:moveFromRangeEnd w:id=\"10\"/>",
+            "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
+        ),
+    );
+    set_runs(
+        &mut doc,
+        dest,
+        concat!(
+            "<w:r><w:t xml:space=\"preserve\">goes </w:t></w:r>",
+            "<w:moveTo w:id=\"21\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
+            "<w:r><w:t>rover</w:t></w:r></w:moveTo>",
+        ),
+    );
+    // The paragraph-mark move lives in the destination's own properties;
+    // the destination range markers wrap the whole paragraph.
+    let main = doc.main_part().to_string();
+    let tree = doc.xml(&main).unwrap();
+    let props = tree
+        .elements(dest)
+        .unwrap()
+        .find(|&n| tree.is(n, Some(nebu_docx::ns::W), "pPr").unwrap_or(false))
+        .expect("destination properties");
+    for n in tree
+        .parse_fragment(
+            "<w:rPr><w:moveTo w:id=\"22\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/></w:rPr>",
+            &[("w", nebu_docx::ns::W)],
+        )
+        .unwrap()
+    {
+        tree.append(props, n).unwrap();
+    }
+    for (xml, before) in [
+        (
+            "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/>",
+            true,
+        ),
+        ("<w:moveToRangeEnd w:id=\"20\"/>", false),
+    ] {
+        let mut marker = None;
+        for n in tree
+            .parse_fragment(xml, &[("w", nebu_docx::ns::W)])
+            .unwrap()
+        {
+            marker = Some(n);
+        }
+        let marker = marker.expect("a range marker");
+        if before {
+            tree.insert_before(dest, marker).unwrap();
+        } else {
+            tree.insert_after(dest, marker).unwrap();
+        }
+    }
+    let moved = dir.join("moved.docx");
+    std::fs::write(&moved, doc.to_bytes().unwrap()).unwrap();
+    moved
+}
+
+/// The decompressed word/document.xml of a saved document.
+fn document_xml(doc: &std::path::Path) -> String {
+    use std::io::Read;
+    let bytes = std::fs::read(doc).unwrap();
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
+    let mut xml = String::new();
+    archive
+        .by_name("word/document.xml")
+        .unwrap()
+        .read_to_string(&mut xml)
+        .unwrap();
+    xml
+}
+
+/// The start tag of the first element with this local name.
+fn marker_tag<'a>(xml: &'a str, local: &str) -> &'a str {
+    let at = xml
+        .find(local)
+        .unwrap_or_else(|| panic!("no {local} in the document"));
+    let end = xml[at..].find('>').expect("a tag end");
+    &xml[at..at + end]
+}
+
+/// The preserved ranges keep Word's shape: starts carry the id, name,
+/// author and date, ends carry only the id.
+fn assert_valid_ranges(xml: &str) {
+    for (local, id) in [("w:moveFromRangeStart", "10"), ("w:moveToRangeStart", "20")] {
+        let tag = marker_tag(xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(tag.contains("w:name=\"m1\""), "{tag}");
+        assert!(tag.contains("w:author=\"Lark\""), "{tag}");
+        assert!(tag.contains("w:date=\"2026-11-20T12:00:00Z\""), "{tag}");
+    }
+    for (local, id) in [("w:moveFromRangeEnd", "10"), ("w:moveToRangeEnd", "20")] {
+        let tag = marker_tag(xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(!tag.contains("w:name"), "{tag}");
+    }
+}
+
+#[test]
+fn accept_settles_a_move_pair() {
+    let dir = tempfile::tempdir().unwrap();
+    let moved = moved_doc(dir.path());
+    let out = dir.path().join("accepted.docx");
+    let (code, stdout, stderr) = run(&[
+        "accept",
+        moved.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--author",
+        "Lark",
+        "--json",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // The pair counts its two records.
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["command"], "accept");
+    assert_eq!(report["author"], "Lark");
+    assert_eq!(report["settled"], 2, "{report}");
+    // The destination keeps the text and the source loses it. The
+    // text records settle; the paragraph-mark revision stays pending
+    // inside its destination range, with the matching source range.
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("goes rover"), "{text}");
+    assert!(!text.contains("rover stays"), "{text}");
+    let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
+    let pending = revisions["revisions"].as_array().unwrap();
+    assert_eq!(pending.len(), 1, "{revisions}");
+    assert_eq!(pending[0]["kind"], "move_to", "{revisions}");
+    assert_eq!(pending[0]["author"], "Lark", "{revisions}");
+    let xml = document_xml(&out);
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
+    assert_valid_ranges(&xml);
+}
+
+#[test]
+fn reject_restores_a_move_pair() {
+    let dir = tempfile::tempdir().unwrap();
+    let moved = moved_doc(dir.path());
+    let out = dir.path().join("rejected.docx");
+    let (code, stdout, stderr) = run(&["reject", moved.to_str().unwrap(), out.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("rejected 2 revisions"), "{stdout}");
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("rover stays"), "{text}");
+    assert!(!text.contains("goes rover"), "{text}");
+    let xml = document_xml(&out);
+    assert!(!xml.contains("w:moveFrom w:id"), "{xml}");
+    assert!(!xml.contains("w:moveTo w:id=\"21\""), "{xml}");
+    assert!(xml.contains("w:moveFromRangeStart"), "{xml}");
+    assert!(xml.contains("w:moveFromRangeEnd"), "{xml}");
+    let start = xml.find("w:moveToRangeStart").expect("a destination start");
+    let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
+    let end = xml.find("w:moveToRangeEnd").expect("a destination end");
+    assert!(start < record && record < end, "{xml}");
+    assert_valid_ranges(&xml);
+}
+
+#[test]
+fn settle_moves_respect_the_author() {
+    let dir = tempfile::tempdir().unwrap();
+    let moved = moved_doc(dir.path());
+    // Another author's move stays whole: nothing settles and the file
+    // keeps both records with the text where the move left it.
+    let out = dir.path().join("wren.docx");
+    let (code, stdout, stderr) = run(&[
+        "accept",
+        moved.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--author",
+        "Wren",
+        "--json",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["settled"], 0, "{report}");
+    let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
+    assert_eq!(revisions["revisions"].as_array().unwrap().len(), 2);
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("goes rover"), "{text}");
+    // Lark's own accept settles the pair.
+    let lark = dir.path().join("lark.docx");
+    let (code, stdout, stderr) = run(&[
+        "accept",
+        out.to_str().unwrap(),
+        lark.to_str().unwrap(),
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("accepted 2 revisions"), "{stdout}");
+}
+
+#[test]
+fn settle_json_reports_a_failed_save() {
+    let dir = tempfile::tempdir().unwrap();
+    let moved = moved_doc(dir.path());
+    // Saving into an existing directory fails: with --json the report
+    // still prints, saying nothing was saved, and the diagnostic stays
+    // on stderr.
+    let out = dir.path().join("existing");
+    std::fs::create_dir(&out).unwrap();
+    for command in ["accept", "reject"] {
+        let (code, stdout, stderr) = run(&[
+            command,
+            moved.to_str().unwrap(),
+            out.to_str().unwrap(),
+            "--json",
+        ]);
+        assert_ne!(code, Some(0), "{stderr}");
+        let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+        assert_eq!(report["command"], command, "{report}");
+        assert_eq!(report["settled"], 0, "{report}");
+        assert!(!stderr.is_empty(), "the diagnostic stays");
+    }
+}
+
+#[test]
+fn accept_settles_tracked_revisions() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let tracked = dir.path().join("tracked.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        tracked.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("accepted.docx");
+    let (code, stdout, stderr) = run(&["accept", tracked.to_str().unwrap(), out.to_str().unwrap()]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // Four matches make four deletions and four insertions.
+    assert!(stdout.contains("accepted 8 revisions"), "{stdout}");
+    let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
+    assert_eq!(revisions["revisions"].as_array().unwrap().len(), 0);
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("A final plan"), "{text}");
+}
+
+#[test]
+fn reject_restores_the_original_text() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let tracked = dir.path().join("tracked.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        tracked.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("rejected.docx");
+    let (code, stdout, stderr) = run(&[
+        "reject",
+        tracked.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--author",
+        "Lark",
+        "--json",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(report["command"], "reject");
+    assert_eq!(report["author"], "Lark");
+    assert_eq!(report["settled"], 8);
+    let (_, text, _) = run(&["text", out.to_str().unwrap()]);
+    assert!(text.contains("A draft plan"), "{text}");
+    assert!(!text.contains("final"), "{text}");
+}
+
+#[test]
+fn accept_scopes_to_one_author_and_tolerates_a_clean_document() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    // Lark tracks "draft" and Wren tracks "plan": disjoint matches, so
+    // each replacement settles one author's revisions only.
+    let lark = dir.path().join("lark.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        drafted.to_str().unwrap(),
+        lark.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let both = dir.path().join("both.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        lark.to_str().unwrap(),
+        both.to_str().unwrap(),
+        "--find",
+        "plan",
+        "--with",
+        "scheme",
+        "--author",
+        "Wren",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let out = dir.path().join("lark-accepted.docx");
+    let (code, stdout, stderr) = run(&[
+        "accept",
+        both.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("accepted 8 revisions"), "{stdout}");
+    // Wren's revisions stay pending.
+    let (code, revisions, err) = run(&["inspect", out.to_str().unwrap(), "revisions", "--json"]);
+    assert_eq!(code, Some(0), "{err}");
+    let revisions: serde_json::Value = serde_json::from_str(&revisions).unwrap();
+    let authors: Vec<&str> = revisions["revisions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["author"].as_str().unwrap())
+        .collect();
+    assert!(!authors.is_empty(), "{revisions}");
+    assert!(authors.iter().all(|a| *a == "Wren"), "{revisions}");
+    // Wren's insertion is still pending: the rejected text holds the
+    // pre-move source word it replaced.
+    let (_, rejected, _) = run(&["text", out.to_str().unwrap(), "--revisions", "rejected"]);
+    assert!(rejected.contains("A final plan"), "{rejected}");
+    // Accepting again settles nothing and still succeeds.
+    let clean = dir.path().join("clean.docx");
+    let (code, stdout, stderr) = run(&[
+        "accept",
+        out.to_str().unwrap(),
+        clean.to_str().unwrap(),
+        "--author",
+        "Lark",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(stdout.contains("no revisions to accept"), "{stdout}");
+}
+
+#[test]
 fn bench_reports_timings_without_writing() {
     // The 40 ms gate has three orders of magnitude of headroom on these
     // fixtures (single replacements time in microseconds), so the exit

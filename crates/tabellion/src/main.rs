@@ -205,9 +205,10 @@ enum Command {
     /// Every occurrence of the find text is replaced in each paragraph of
     /// every story but comments: the body with its tables and text boxes,
     /// headers and footers, footnotes and endnotes. Runs keep their
-    /// formatting. A paragraph that refuses — a match inside a field, a
-    /// hyperlink or another object — aborts the command and names every
-    /// refused paragraph, and nothing is written.
+    /// formatting. With an author the replacement is tracked. A paragraph
+    /// that refuses — a match inside a field, a hyperlink or another
+    /// object — aborts the command and names every refused paragraph,
+    /// and nothing is written.
     Replace {
         /// The document to read.
         input: PathBuf,
@@ -222,6 +223,46 @@ enum Command {
         /// Only paragraphs of the block the locator names.
         #[arg(long, value_name = "LOCATOR")]
         block: Option<String>,
+        /// Track the replacement by this author.
+        #[arg(long, value_name = "AUTHOR")]
+        author: Option<String>,
+        /// Print the report as JSON for programs.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Accept tracked revisions.
+    ///
+    /// Settles every insertion, deletion and move by the author — or by
+    /// anyone, when no author is given — and prints how many records
+    /// settled.
+    Accept {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// Only revisions by this author.
+        #[arg(long, value_name = "AUTHOR")]
+        author: Option<String>,
+        /// Print the report as JSON for programs.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Reject tracked revisions.
+    ///
+    /// Settles every insertion, deletion and move by the author — or by
+    /// anyone, when no author is given — and prints how many records
+    /// settled.
+    Reject {
+        /// The document to read.
+        input: PathBuf,
+        /// Where to write the result.
+        output: PathBuf,
+        /// Only revisions by this author.
+        #[arg(long, value_name = "AUTHOR")]
+        author: Option<String>,
+        /// Print the report as JSON for programs.
+        #[arg(long)]
+        json: bool,
     },
     /// Open a document, save it unchanged, and compare the two files.
     ///
@@ -736,9 +777,64 @@ fn short(error: &nebu_docx::Error) -> String {
         .to_string()
 }
 
+/// A stable machine-readable refusal reason for `--json` reports.
+/// Human prose keeps `short`; programs match on this: the obstruction
+/// with spaces as dashes, or `foreign-revision` for another author's
+/// pending change, or `other` for what the sweep never names.
+fn refusal_kind(error: &nebu_docx::Error) -> String {
+    if matches!(error, nebu_docx::Error::ForeignRevision { .. }) {
+        return "foreign-revision".to_string();
+    }
+    let message = error.to_string();
+    if let Some(what) = message.strip_prefix("cannot replace text that contains ") {
+        let what = what
+            .strip_prefix("an ")
+            .or_else(|| what.strip_prefix("a "))
+            .unwrap_or(what);
+        return what.replace(' ', "-");
+    }
+    "other".to_string()
+}
+
 /// `1 occurrence` or `2 occurrences`.
 fn count(word: &str, n: usize) -> String {
     format!("{n} {word}{}", if n == 1 { "" } else { "s" })
+}
+
+/// Prints a machine report for programs; serialization of a report
+/// built from strings and counts cannot fail in practice.
+fn print_json(report: serde_json::Value) {
+    println!(
+        "{}",
+        serde_json::to_string(&report).unwrap_or_else(|_| "{}".to_string())
+    );
+}
+
+/// The machine report for a replace sweep: inputs echoed back, what
+/// the sweep changed, and every refused paragraph with its reason.
+/// Before a sweep produces results the counts are zero and nothing is
+/// refused.
+fn replace_report(
+    find: &str,
+    with: &str,
+    block: Option<&str>,
+    author: Option<&str>,
+    occurrences: usize,
+    paragraphs: usize,
+    refused: &[(String, String)],
+) -> serde_json::Value {
+    serde_json::json!({
+        "command": "replace",
+        "find": find,
+        "with": with,
+        "block": block,
+        "tracked_by": author,
+        "occurrences": occurrences,
+        "paragraphs": paragraphs,
+        "refused": refused.iter().map(|(paragraph, reason)| {
+            serde_json::json!({"paragraph": paragraph, "reason": reason})
+        }).collect::<Vec<_>>(),
+    })
 }
 
 fn replace_text(
@@ -747,12 +843,41 @@ fn replace_text(
     find: &str,
     with: &str,
     block: Option<&str>,
+    author: Option<&str>,
+    json: bool,
 ) -> Result<bool, String> {
     use nebu_docx::{StoryKind, revise};
-    revise::validate(find, with, None).map_err(|e| format!("{}: {e}", input.display()))?;
-    let mut doc = open(input)?;
+    let rev = author.map(nebu_docx::Track::now);
+    let rev = rev.as_ref();
+    // With --json every invocation that reaches the handler reports,
+    // even one that fails before the sweep: programs get one parseable
+    // shape with the inputs echoed back and zero counts.
+    let zeros = || replace_report(find, with, block, author, 0, 0, &[]);
+    if let Err(e) = revise::validate(find, with, rev) {
+        if json {
+            print_json(zeros());
+        }
+        return Err(format!("{}: {e}", input.display()));
+    }
+    let mut doc = match open(input) {
+        Ok(doc) => doc,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
-    let (targets, _wanted) = sweep_targets(&mut doc, input, block)?;
+    let (targets, _wanted) = match sweep_targets(&mut doc, input, block) {
+        Ok(targets) => targets,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     // Every refusal is collected before anything is reported, so one
     // message names them all; nothing is saved unless all can be. One
     // walk per story seeds every paragraph, so the sweep costs a story
@@ -761,18 +886,26 @@ fn replace_text(
     // the sweep's edits and restores.
     let counts = block_counts(&targets);
     let nodes: Vec<nebu_docx::xml::NodeId> = targets.iter().map(|p| p.node).collect();
-    let report = revise::replace_all(&mut doc, &nodes, find, with, None).map_err(at)?;
+    let report = match revise::replace_all(&mut doc, &nodes, find, with, rev).map_err(at) {
+        Ok(report) => report,
+        Err(e) => {
+            if json {
+                print_json(zeros());
+            }
+            return Err(e);
+        }
+    };
     let mut occurrences = 0usize;
     let mut changed = 0usize;
-    let mut refused: Vec<String> = Vec::new();
+    let mut refused: Vec<(String, String)> = Vec::new();
     for (_, n) in report.replaced {
         occurrences += n;
         if n > 0 {
             changed += 1;
         }
     }
-    for (node, error) in report.refused {
-        let paragraph = targets.iter().find(|p| p.node == node);
+    for (node, error) in &report.refused {
+        let paragraph = targets.iter().find(|p| p.node == *node);
         let shared = paragraph.is_some_and(|p| {
             p.location.story == StoryKind::Main
                 && counts.get(&p.location.block).is_some_and(|&n| n > 1)
@@ -780,14 +913,31 @@ fn replace_text(
         let where_ = paragraph
             .map(|p| describe(p, shared))
             .unwrap_or_else(|| "?".into());
-        refused.push(format!("{where_} ({})", short(&error)));
+        refused.push((where_, refusal_kind(error)));
     }
-    if !refused.is_empty() {
+    if json {
+        print_json(replace_report(
+            find,
+            with,
+            block,
+            author,
+            occurrences,
+            changed,
+            &refused,
+        ));
+    }
+    if !report.refused.is_empty() {
+        let listed: Vec<String> = report
+            .refused
+            .iter()
+            .zip(refused.iter())
+            .map(|((_, error), (where_, _))| format!("{where_} ({})", short(error)))
+            .collect();
         return Err(format!(
             "{}: refused {}: {}",
             input.display(),
-            count("paragraph", refused.len()),
-            refused.join(", ")
+            count("paragraph", listed.len()),
+            listed.join(", ")
         ));
     }
     if occurrences == 0 {
@@ -797,13 +947,89 @@ fn replace_text(
         });
     }
     doc.save(output).map_err(|e| e.to_string())?;
-    let scope = block.map(|b| format!(" in {b}")).unwrap_or_default();
-    println!(
-        "{}: replaced {find:?} with {with:?}{scope} ({} in {})",
-        output.display(),
-        count("occurrence", occurrences),
-        count("paragraph", changed),
-    );
+    if !json {
+        let scope = block.map(|b| format!(" in {b}")).unwrap_or_default();
+        let tracked = author
+            .map(|a| format!(", tracked by {a}"))
+            .unwrap_or_default();
+        println!(
+            "{}: replaced {find:?} with {with:?}{scope} ({} in {}{tracked})",
+            output.display(),
+            count("occurrence", occurrences),
+            count("paragraph", changed),
+        );
+    }
+    Ok(true)
+}
+
+/// Accepts or rejects tracked revisions and writes the result.
+/// Prints how many records settled; settling nothing still succeeds,
+/// so accepting an already clean document is a no-op.
+fn settle_revisions(
+    input: &Path,
+    output: &Path,
+    accept: bool,
+    author: Option<&str>,
+    json: bool,
+) -> Result<bool, String> {
+    use nebu_docx::revise;
+    let verb = if accept { "accept" } else { "reject" };
+    let past = if accept { "accepted" } else { "rejected" };
+    // With --json every invocation reports, even one that fails before
+    // settling: programs get one parseable shape with zero settled.
+    let zeros = || {
+        print_json(serde_json::json!({
+            "command": verb,
+            "author": author,
+            "settled": 0,
+        }))
+    };
+    let mut doc = match open(input) {
+        Ok(doc) => doc,
+        Err(e) => {
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    };
+    let at = |e: nebu_docx::Error| format!("{}: {e}", input.display());
+    let settled = match revise::settle(&mut doc, accept, author).map_err(at) {
+        Ok(settled) => settled,
+        Err(e) => {
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    };
+    match doc.save(output).map_err(|e| e.to_string()) {
+        Ok(()) => {}
+        Err(e) => {
+            // Nothing was saved, so the report says so.
+            if json {
+                zeros();
+            }
+            return Err(e);
+        }
+    }
+    if json {
+        print_json(serde_json::json!({
+            "command": verb,
+            "author": author,
+            "settled": settled,
+        }));
+        return Ok(true);
+    }
+    if settled == 0 {
+        println!("{}: no revisions to {verb}", output.display());
+    } else {
+        println!(
+            "{}: {past} {}",
+            output.display(),
+            count("revision", settled),
+        );
+    }
     Ok(true)
 }
 
@@ -1125,7 +1351,29 @@ fn main() -> ExitCode {
                 find,
                 with,
                 block,
-            } => replace_text(input, output, find, with, block.as_deref()),
+                author,
+                json,
+            } => replace_text(
+                input,
+                output,
+                find,
+                with,
+                block.as_deref(),
+                author.as_deref(),
+                *json,
+            ),
+            Command::Accept {
+                input,
+                output,
+                author,
+                json,
+            } => settle_revisions(input, output, true, author.as_deref(), *json),
+            Command::Reject {
+                input,
+                output,
+                author,
+                json,
+            } => settle_revisions(input, output, false, author.as_deref(), *json),
             Command::Insert {
                 input,
                 output,
