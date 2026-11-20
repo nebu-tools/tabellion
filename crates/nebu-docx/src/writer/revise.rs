@@ -11,6 +11,9 @@ use crate::view::walk;
 use crate::xml::{NodeId, Tree, XML_NS};
 use crate::{Document, Error, ns};
 
+use super::Track;
+use super::fields::copy_element;
+use super::ids::Ids;
 use super::place;
 use super::xml::run_text;
 
@@ -40,6 +43,99 @@ const WRAPPERS: &[&str] = &["customXml", "smartTag", "dir", "bdo", "ruby", "ruby
 
 /// Alternate-content containers, always part of the wrapper chain.
 const BRANCHES: &[&str] = &["AlternateContent", "Choice", "Fallback"];
+
+/// The author a revision element belongs to: `w:author` of an
+/// insertion, a move or a property change. Missing or empty means
+/// hand-made markup, which counts as someone else's; the reporting
+/// layer names it, never the identity check.
+fn revision_author(tree: &Tree, node: NodeId) -> Result<Option<String>, Error> {
+    Ok(tree
+        .attribute(node, Some(W), "author")?
+        .map(|v| v.into_owned())
+        .filter(|a| !a.is_empty()))
+}
+
+/// Adds an author once.
+fn push_author(authors: &mut Vec<String>, author: String) {
+    if !authors.contains(&author) {
+        authors.push(author);
+    }
+}
+
+/// The authors of pending changes a match would disturb: insertions
+/// and moves holding covered text that belong to someone else — moves
+/// always do — and property changes on covered runs that belong to
+/// someone else. Sorted and deduplicated for a stable message.
+fn foreign_authors(
+    tree: &Tree,
+    scope: NodeId,
+    pieces: &[Piece],
+    first: usize,
+    last: usize,
+    rev: &Track,
+) -> Result<Vec<String>, Error> {
+    let mut authors: Vec<String> = Vec::new();
+    // Covered runs, once each.
+    let mut runs: Vec<NodeId> = Vec::new();
+    for piece in &pieces[first..=last] {
+        let node = piece.node.expect("a boundary text node");
+        let mut run = tree.parent(node)?;
+        while let Some(r) = run {
+            if tree.is(r, Some(W), "r")? {
+                break;
+            }
+            run = tree.parent(r)?;
+        }
+        let Some(run) = run else {
+            return Err(Error::Invalid("a run without a paragraph".to_string()));
+        };
+        if !runs.contains(&run) {
+            runs.push(run);
+        }
+    }
+    for run in runs {
+        // A property change on the run itself. A missing author counts
+        // as someone else's; only an explicit match is its own.
+        if let Some(rpr) = tree.child(run, Some(W), "rPr")?
+            && let Some(change) = tree.child(rpr, Some(W), "rPrChange")?
+        {
+            let author = revision_author(tree, change)?;
+            if author.as_deref() != Some(rev.author.as_str()) {
+                push_author(
+                    &mut authors,
+                    author.unwrap_or_else(|| "unknown".to_string()),
+                );
+            }
+        }
+        // Insertions and moves holding the run, up to the story: the
+        // paragraph itself may sit in a tracked insertion. Moves always
+        // belong to someone else: the engine never rewrites moved text.
+        let mut ancestor = tree.parent(run)?;
+        while let Some(a) = ancestor {
+            if a == scope {
+                break;
+            }
+            let name = tree.name(a)?;
+            let tracked = name
+                .as_ref()
+                .is_some_and(|n| n.namespace == Some(W) && matches!(n.local, "ins" | "moveTo"));
+            if tracked {
+                let author = revision_author(tree, a)?;
+                let foreign = name.as_ref().is_some_and(|n| n.local == "moveTo")
+                    || author.as_deref() != Some(rev.author.as_str());
+                if foreign {
+                    push_author(
+                        &mut authors,
+                        author.unwrap_or_else(|| "unknown".to_string()),
+                    );
+                }
+            }
+            ancestor = tree.parent(a)?;
+        }
+    }
+    authors.sort();
+    Ok(authors)
+}
 
 /// What a match refuses to cut through, in plain words.
 fn obstruction_name(local: &str) -> &'static str {
@@ -111,25 +207,164 @@ pub fn validate(find: &str, with: &str) -> Result<(), Error> {
 /// that touches it is an error that names it. Anything else a match
 /// would have to cut through is an error too, and the document is
 /// unchanged.
+///
+/// With a tracking author, the covered runs are wrapped in a deletion
+/// by that author instead of removed, and the replacement goes in an
+/// insertion after it; a match that would disturb another author's
+/// pending change is a [`Error::ForeignRevision`].
 pub fn replace_in_paragraph(
     doc: &mut Document,
     para: NodeId,
     find: &str,
     with: &str,
+    rev: Option<&Track>,
 ) -> Result<usize, Error> {
+    let mut report = replace_all(doc, &[para], find, with, rev)?;
+    if let Some((_, error)) = report.refused.pop() {
+        return Err(error);
+    }
+    Ok(report.replaced.pop().map(|(_, n)| n).unwrap_or(0))
+}
+
+/// What replacing many paragraphs did: the count per paragraph that
+/// changed, and the error per paragraph that refused.
+#[derive(Debug, Default)]
+pub struct BatchReport {
+    /// The paragraphs replaced with their counts, in sweep order.
+    pub replaced: Vec<(NodeId, usize)>,
+    /// The paragraphs refused with why, in sweep order.
+    pub refused: Vec<(NodeId, Error)>,
+}
+
+/// Replaces every non-overlapping occurrence of `find` with `with` in
+/// each paragraph and reports what each did.
+///
+/// Paragraphs come from the document's views, in any stories; each is
+/// replaced as [`replace_in_paragraph`] would replace it, with the same
+/// refusals. One walk per story seeds every paragraph's field depth,
+/// and one snapshot per part rolls a paragraph back if it fails, so a
+/// sweep costs a story walk and a part copy rather than both per
+/// paragraph. Paragraphs are independent subtrees: a refusal leaves the
+/// others as they were.
+pub fn replace_all(
+    doc: &mut Document,
+    paras: &[NodeId],
+    find: &str,
+    with: &str,
+    rev: Option<&Track>,
+) -> Result<BatchReport, Error> {
+    use std::collections::HashMap;
     validate(find, with)?;
     let stories = place::stories(doc)?;
-    let Some((part, _)) = stories
-        .iter()
-        .find(|(p, _)| doc.parsed(p).is_some_and(|t| t.kind(para).is_ok()))
-        .cloned()
-    else {
-        return Err(Error::Invalid(
-            "the paragraph is a node of no story of this document; take it from this document's views".into(),
-        ));
-    };
+    // Group the paragraphs by part, keeping sweep order.
+    let mut by_part: Vec<(String, Vec<NodeId>)> = Vec::new();
+    let mut report = BatchReport::default();
+    for &para in paras {
+        match stories
+            .iter()
+            .find(|(p, _)| doc.parsed(p).is_some_and(|t| t.kind(para).is_ok()))
+        {
+            Some((part, _)) => match by_part.iter_mut().find(|(p, _)| p == part) {
+                Some((_, paras)) => paras.push(para),
+                None => by_part.push((part.clone(), vec![para])),
+            },
+            None => report.refused.push((
+                para,
+                Error::Invalid(
+                    "the paragraph is a node of no story of this document; take it from this document's views"
+                        .into(),
+                ),
+            )),
+        }
+    }
+    for (part, paras) in by_part {
+        let mut ids = match rev {
+            Some(_) => Some(Ids::collect(
+                doc,
+                std::slice::from_ref(&part),
+                super::ids::seed(doc),
+            )?),
+            None => None,
+        };
+        // Seed every paragraph in one walk per scope.
+        let mut scoped: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
+        {
+            let tree = doc.xml(&part)?;
+            for &para in &paras {
+                scoped
+                    .entry(scope_root(tree, para)?)
+                    .or_default()
+                    .push(para);
+            }
+        }
+        let mut seeds: HashMap<NodeId, (NodeId, i32)> = HashMap::new();
+        for (scope, paras) in &scoped {
+            let tree = doc.xml(&part)?;
+            // A scope detached from the part — a text box pulled out of
+            // the tree, for example — holds no replaceable paragraphs:
+            // the seed walk below would find them anyway, and the edit
+            // would never serialize. They report as detached below.
+            if !reachable(tree, *scope)? {
+                continue;
+            }
+            let mut depth = 0i32;
+            let mut pending: std::collections::HashSet<NodeId> = paras.iter().copied().collect();
+            for node in tree.descendants(*scope)? {
+                if pending.remove(&node) {
+                    seeds.insert(node, (*scope, depth));
+                    if pending.is_empty() {
+                        break;
+                    }
+                    continue;
+                }
+                if !tree.is(node, Some(W), "fldChar")? {
+                    continue;
+                }
+                if excluded(tree, *scope, node, false)? {
+                    continue;
+                }
+                match tree.attribute(node, Some(W), "fldCharType")?.as_deref() {
+                    Some("begin") => depth += 1,
+                    Some("end") => depth = (depth - 1).max(0),
+                    _ => {}
+                }
+            }
+        }
+        for &para in &paras {
+            let Some(&(scope, seed)) = seeds.get(&para) else {
+                // Detached or otherwise unreachable: reported, not skipped.
+                report.refused.push((
+                    para,
+                    Error::Invalid("the paragraph is not attached to its story".to_string()),
+                ));
+                continue;
+            };
+            match replace_one(doc, &part, scope, seed, para, find, with, rev, ids.as_mut()) {
+                Ok(n) => report.replaced.push((para, n)),
+                Err(e) => report.refused.push((para, e)),
+            }
+        }
+    }
+    Ok(report)
+}
+
+/// Replaces every match in one paragraph whose seeds are known: checks
+/// the paragraph, validates every match, then applies them right to
+/// left under one part snapshot.
+#[allow(clippy::too_many_arguments)]
+fn replace_one(
+    doc: &mut Document,
+    part: &str,
+    scope: NodeId,
+    seed: i32,
+    para: NodeId,
+    find: &str,
+    with: &str,
+    rev: Option<&Track>,
+    mut ids: Option<&mut Ids>,
+) -> Result<usize, Error> {
     {
-        let tree = doc.xml(&part)?;
+        let tree = doc.xml(part)?;
         let Some(name) = tree.name(para)? else {
             return Err(Error::Invalid("the paragraph is not an element".into()));
         };
@@ -147,12 +382,9 @@ pub fn replace_in_paragraph(
     // text, and text outside the chosen alternate-content branch, is left
     // out entirely. Field ownership starts from the story, so a field
     // that began in an earlier paragraph still holds its result here.
-    let (scope, seed, pieces, offsets) = {
-        let tree = doc.xml(&part)?;
-        let scope = scope_root(tree, para)?;
-        let seed = field_seed(tree, scope, para)?;
-        let (pieces, offsets) = pieces_of(tree, scope, seed, para)?;
-        (scope, seed, pieces, offsets)
+    let (pieces, offsets) = {
+        let tree = doc.xml(part)?;
+        pieces_of(tree, scope, seed, para, rev)?
     };
     let haystack: String = pieces.iter().map(|p| p.text.as_str()).collect();
     let mut matches = Vec::new();
@@ -167,26 +399,65 @@ pub fn replace_in_paragraph(
     // Validate every match before changing anything. The seed cannot
     // move: an edit never touches a field marker outside the paragraph.
     {
-        let tree = doc.xml(&part)?;
+        let tree = doc.xml(part)?;
         for start in &matches {
-            locate(tree, para, &pieces, &offsets, *start, find.len())?;
+            locate(
+                tree,
+                scope,
+                para,
+                &pieces,
+                &offsets,
+                *start,
+                find.len(),
+                rev,
+            )?;
         }
     }
-    let backup = doc.snapshot();
+    // One part snapshot rolls the paragraph back if a match fails;
+    // handles into other parts stay good, and the views are read again.
+    let backup = doc.snapshot_part(part)?;
     let mut count = 0;
     // Right to left, so an edit never moves an earlier match. Each match
     // walks the paragraph afresh, so every node and offset is current;
     // the backup puts the document back if one fails.
     for start in matches.into_iter().rev() {
-        match apply_match(doc, &part, scope, seed, para, start, find.len(), with) {
+        match apply_match(
+            doc,
+            part,
+            scope,
+            seed,
+            para,
+            start,
+            find.len(),
+            with,
+            rev,
+            ids.as_deref_mut(),
+        ) {
             Ok(()) => count += 1,
             Err(e) => {
-                doc.restore(backup);
+                doc.restore_part(part, backup);
                 return Err(e);
             }
         }
     }
     Ok(count)
+}
+
+/// Whether a scope container is attached to its part: the story
+/// containers the walk starts from, and anything they hold, serialize.
+/// A detached container — or a paragraph in one — reports as detached
+/// instead of seeding matches that would never be written.
+fn reachable(tree: &Tree, scope: NodeId) -> Result<bool, Error> {
+    let root = tree.root_element();
+    if scope == root {
+        return Ok(true);
+    }
+    for a in tree.ancestors(scope)? {
+        if a == root {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The story container that holds a paragraph: the body, a header or
@@ -272,41 +543,20 @@ fn excluded(tree: &Tree, stop: NodeId, node: NodeId, for_text: bool) -> Result<b
     Ok(false)
 }
 
-/// The field depth at the start of a paragraph: `fldChar` begin and end
-/// markers in document order from the story container, nested fields
-/// nesting the count, floored at zero for malformed files. Markers in
-/// left-out content change nothing.
-fn field_seed(tree: &Tree, scope: NodeId, para: NodeId) -> Result<i32, Error> {
-    let mut depth = 0i32;
-    for node in tree.descendants(scope)? {
-        if node == para {
-            break;
-        }
-        if !tree.is(node, Some(W), "fldChar")? {
-            continue;
-        }
-        if excluded(tree, scope, node, false)? {
-            continue;
-        }
-        match tree.attribute(node, Some(W), "fldCharType")?.as_deref() {
-            Some("begin") => depth += 1,
-            Some("end") => depth = (depth - 1).max(0),
-            _ => {}
-        }
-    }
-    Ok(depth)
-}
-
 /// Collects the text pieces of a paragraph: every `w:t` and `w:tab` in
 /// document order that the views show, except inside deleted and
 /// moved-away revisions and nested block structures. Non-editable text
 /// reports what holds it; complex-field ownership starts at `seed`, the
-/// depth from the story.
+/// depth from the story. With a tracking author, text inside that
+/// author's insertions stays editable: replacing it wraps it like any
+/// other text, and only another author's pending change refuses the
+/// match.
 fn pieces_of(
     tree: &Tree,
     scope: NodeId,
     seed: i32,
     para: NodeId,
+    rev: Option<&Track>,
 ) -> Result<(Vec<Piece>, Vec<usize>), Error> {
     // A paragraph the views do not show has no replaceable text. The
     // nested-block rule does not apply here: cells hold paragraphs.
@@ -339,9 +589,16 @@ fn pieces_of(
     let mut pieces: Vec<Piece> = Vec::new();
     for (node, owned) in texts {
         let mut blocked: Option<&'static str> = if owned { Some("a field") } else { None };
+        // Insertions, moves and content controls hold the paragraph from
+        // above it too: a tracked-inserted paragraph is wrapped in `w:ins`
+        // around the paragraph itself. Walk to the story container, not
+        // just the paragraph. With a tracking author, that author's own
+        // insertions stay editable and never block; anything else a match
+        // touches is refused, by name without tracking and as a foreign
+        // revision with it.
         let mut ancestor = tree.parent(node)?;
         while let Some(a) = ancestor {
-            if a == para {
+            if a == scope {
                 break;
             }
             let name = tree.name(a)?;
@@ -349,8 +606,19 @@ fn pieces_of(
             match local {
                 Some((Some(W), "hyperlink")) => blocked = blocked.or(Some("a hyperlink")),
                 Some((Some(W), "fldSimple")) => blocked = blocked.or(Some("a field")),
-                Some((Some(W), "ins")) => blocked = blocked.or(Some("an inserted revision")),
-                Some((Some(W), "moveTo")) => blocked = blocked.or(Some("a moved revision")),
+                Some((Some(W), "ins")) => {
+                    // Without tracking every insertion refuses; with it,
+                    // authorship is decided per match, so only another
+                    // author's pending change refuses.
+                    if rev.is_none() {
+                        blocked = blocked.or(Some("an inserted revision"));
+                    }
+                }
+                Some((Some(W), "moveTo")) => {
+                    if rev.is_none() {
+                        blocked = blocked.or(Some("a moved revision"));
+                    }
+                }
                 Some((Some(W), "sdt" | "sdtContent")) => {
                     blocked = blocked.or(Some("a content control"))
                 }
@@ -411,14 +679,19 @@ fn wrapper_chain(tree: &Tree, para: NodeId, node: NodeId) -> Result<Vec<NodeId>,
 /// Validates one match and locates the nodes it covers.
 ///
 /// Refuses anything but plain editable text runs with only empty
-/// markers around the match.
+/// markers around the match. With a tracking author, a match that
+/// would disturb another author's pending change is a foreign
+/// revision instead of an invalid edit.
+#[allow(clippy::too_many_arguments)]
 fn locate(
     tree: &Tree,
+    scope: NodeId,
     para: NodeId,
     pieces: &[Piece],
     offsets: &[usize],
     start: usize,
     len: usize,
+    rev: Option<&Track>,
 ) -> Result<Located, Error> {
     let end = start + len;
     let first = offsets
@@ -443,6 +716,14 @@ fn locate(
             return Err(Error::Invalid(format!(
                 "cannot replace text that contains {why}"
             )));
+        }
+    }
+    // A match that would disturb another author's pending change is a
+    // foreign revision, not an invalid edit.
+    if let Some(rev) = rev {
+        let authors = foreign_authors(tree, scope, pieces, first, last, rev)?;
+        if !authors.is_empty() {
+            return Err(Error::ForeignRevision { authors });
         }
     }
     // Every covered piece must sit in the same wrappers: a match that
@@ -504,6 +785,9 @@ fn locate(
             || tree.is(node, Some(W), "tab")?
             || tree.is(node, Some(W), "rPr")?
             || tree.is(node, Some(W), "pPr")?
+            // A tracked match may cross the author's own insertions:
+            // the covered runs are wrapped where they stand.
+            || (rev.is_some() && tree.is(node, Some(W), "ins")?)
         {
             continue;
         }
@@ -543,7 +827,9 @@ fn locate(
 }
 
 /// Applies one match: splits the boundary text nodes, clears what the
-/// match covers, and writes the replacement into its first run.
+/// match covers, and writes the replacement into its first run. With a
+/// tracking author, the covered runs are wrapped in a deletion instead
+/// of detached, and the replacement goes in an insertion after it.
 ///
 /// Walks the paragraph afresh so every node and offset is current. The
 /// field seed cannot move: an edit never touches a marker outside the
@@ -558,10 +844,12 @@ fn apply_match(
     start: usize,
     len: usize,
     with: &str,
+    rev: Option<&Track>,
+    ids: Option<&mut Ids>,
 ) -> Result<(), Error> {
     let tree = doc.xml(part)?;
-    let (pieces, offsets) = pieces_of(tree, scope, seed, para)?;
-    let located = locate(tree, para, &pieces, &offsets, start, len)?;
+    let (pieces, offsets) = pieces_of(tree, scope, seed, para, rev)?;
+    let located = locate(tree, scope, para, &pieces, &offsets, start, len, rev)?;
     let end = start + len;
     // Split the boundary text nodes so the covered ones hold exactly
     // the match. The boundaries are always text: a match holds no tabs.
@@ -598,14 +886,371 @@ fn apply_match(
         }
         covered.push(last_node);
     }
-    // The replacement goes where the match began; the rest goes away.
-    if !with.is_empty() {
-        for node in tree.parse_fragment(&run_text(with), &[("w", W)])? {
-            tree.insert_before(covered[0], node)?;
+    match rev {
+        None => {
+            // The replacement goes where the match began; the rest goes away.
+            if !with.is_empty() {
+                for node in tree.parse_fragment(&run_text(with), &[("w", W)])? {
+                    tree.insert_before(covered[0], node)?;
+                }
+            }
+            for node in covered {
+                tree.detach(node)?;
+            }
+        }
+        Some(rev) => apply_tracked(
+            tree,
+            &covered,
+            with,
+            rev,
+            ids.expect("revision ids with a tracking author"),
+        )?,
+    }
+    Ok(())
+}
+
+/// The runs holding covered text nodes, in document order.
+fn covered_runs(tree: &Tree, covered: &[NodeId]) -> Result<Vec<NodeId>, Error> {
+    let mut runs: Vec<NodeId> = Vec::new();
+    for &node in covered {
+        let mut run = tree.parent(node)?;
+        while let Some(r) = run {
+            if tree.is(r, Some(W), "r")? {
+                break;
+            }
+            run = tree.parent(r)?;
+        }
+        let Some(run) = run else {
+            return Err(Error::Invalid("a run without a paragraph".to_string()));
+        };
+        if runs.last() != Some(&run) {
+            runs.push(run);
         }
     }
-    for node in covered {
+    Ok(runs)
+}
+
+/// Gives every revision mark in a copied properties element a fresh
+/// id: the mark records the same change on a new run, so it needs its
+/// own identity rather than sharing the original's.
+fn fresh_revision_ids(tree: &mut Tree, rpr: NodeId, ids: &mut Ids) -> Result<(), Error> {
+    let mut marks: Vec<NodeId> = Vec::new();
+    for node in tree.descendants(rpr)? {
+        if tree.name(node)?.is_some_and(|n| {
+            n.namespace == Some(W)
+                && matches!(n.local, "ins" | "del" | "moveFrom" | "moveTo" | "rPrChange")
+        }) && tree.attribute(node, Some(W), "id")?.is_some()
+        {
+            marks.push(node);
+        }
+    }
+    for mark in marks {
+        tree.set_attribute(mark, Some(W), "w:id", &ids.revision().to_string())?;
+    }
+    Ok(())
+}
+
+/// Splits a run before a child node: the run keeps the children ahead
+/// of it, and a twin with copied properties takes the node and what
+/// follows it. Markers keep their side of the split.
+fn split_run_before(
+    tree: &mut Tree,
+    run: NodeId,
+    node: NodeId,
+    ids: &mut Ids,
+) -> Result<NodeId, Error> {
+    let twin = tree.create_element(Some(W), "w:r")?;
+    if let Some(rpr) = tree.child(run, Some(W), "rPr")? {
+        let twin_props = copy_element(tree, rpr)?;
+        tree.append(twin, twin_props)?;
+        fresh_revision_ids(tree, twin_props, ids)?;
+    }
+    tree.insert_after(run, twin)?;
+    let kids: Vec<NodeId> = tree.children(run)?.collect();
+    let mut moving = false;
+    for child in kids {
+        if child == node {
+            moving = true;
+        }
+        if moving {
+            tree.append(twin, child)?;
+        }
+    }
+    Ok(twin)
+}
+
+/// Applies one tracked match: isolates the covered runs, wraps them in
+/// a deletion, and writes the replacement into an insertion after it.
+/// Runs keep their properties; a run inside the author's own insertion
+/// stays where it is, so the deletion nests like Word nests it.
+fn apply_tracked(
+    tree: &mut Tree,
+    covered: &[NodeId],
+    with: &str,
+    rev: &Track,
+    ids: &mut Ids,
+) -> Result<(), Error> {
+    // Isolate the covered runs: split the boundary runs at the edges of
+    // the match so every covered run holds exactly matched text.
+    let mut runs = covered_runs(tree, covered)?;
+    let first_run = runs[0];
+    let kids: Vec<NodeId> = tree.elements(first_run)?.collect();
+    let first_at = kids
+        .iter()
+        .position(|&k| k == covered[0])
+        .expect("covered text in its run");
+    let content_at = kids
+        .iter()
+        .position(|&k| !tree.is(k, Some(W), "rPr").unwrap_or(false))
+        .unwrap_or(kids.len());
+    if first_at > content_at {
+        split_run_before(tree, first_run, covered[0], ids)?;
+        runs = covered_runs(tree, covered)?;
+    }
+    let last_run = *runs.last().expect("a covered run");
+    let kids: Vec<NodeId> = tree.elements(last_run)?.collect();
+    let last_at = kids
+        .iter()
+        .position(|&k| k == covered[covered.len() - 1])
+        .expect("covered text in its run");
+    if last_at + 1 < kids.len() {
+        split_run_before(tree, last_run, kids[last_at + 1], ids)?;
+        runs = covered_runs(tree, covered)?;
+    }
+    // Wrap each run group in a deletion where it stands. Runs that
+    // share a parent with nothing between them go in one deletion, so
+    // rejecting one puts every run back exactly where it stood. Range
+    // markers travel with their runs, and paragraph-level markers stay
+    // put.
+    let mut first_del = None;
+    let mut group: Vec<NodeId> = Vec::new();
+    let mut kids: Vec<NodeId> = Vec::new();
+    for &run in &runs {
+        let parent = tree
+            .parent(run)?
+            .ok_or_else(|| Error::Invalid("a run without a paragraph".to_string()))?;
+        let continues = match group.last() {
+            None => true,
+            Some(_) => {
+                // Same parent, and nothing between the runs: the group's
+                // children list is walked once per parent.
+                let same = tree.parent(group[0])? == Some(parent);
+                same && {
+                    if kids.is_empty() {
+                        kids = tree.children(parent)?.collect();
+                    }
+                    adjacent_positions(&kids, group[group.len() - 1], run)
+                }
+            }
+        };
+        if !continues {
+            let del = wrap_deletion(tree, &group, rev, ids)?;
+            first_del = first_del.or(Some(del));
+            group.clear();
+            kids.clear();
+        }
+        group.push(run);
+    }
+    if !group.is_empty() {
+        let del = wrap_deletion(tree, &group, rev, ids)?;
+        first_del = first_del.or(Some(del));
+    }
+    // The replacement goes in an insertion after the first deletion.
+    if !with.is_empty() {
+        let Some(del) = first_del else {
+            return Err(Error::Invalid("a match without a paragraph".to_string()));
+        };
+        let ins = tree.create_element(Some(W), "w:ins")?;
+        set_revision(tree, ins, rev, ids)?;
+        let run = tree.create_element(Some(W), "w:r")?;
+        if let Some(rpr) = tree.child(runs[0], Some(W), "rPr")? {
+            let run_props = copy_element(tree, rpr)?;
+            tree.append(run, run_props)?;
+            fresh_revision_ids(tree, run_props, ids)?;
+        }
+        for node in tree.parse_fragment(&run_text(with), &[("w", W)])? {
+            tree.append(run, node)?;
+        }
+        tree.append(ins, run)?;
+        tree.insert_after(del, ins)?;
+    }
+    Ok(())
+}
+
+/// Whether one child comes right after another with nothing between
+/// them: runs, text, comments and processing instructions all hold a
+/// deletion group apart.
+fn adjacent_positions(kids: &[NodeId], first: NodeId, second: NodeId) -> bool {
+    match (
+        kids.iter().position(|&k| k == first),
+        kids.iter().position(|&k| k == second),
+    ) {
+        (Some(a), Some(b)) => b == a + 1,
+        _ => false,
+    }
+}
+
+/// Wraps runs in a deletion where they stand and renames their text to
+/// deleted text, returning the deletion. The runs share one parent
+/// with nothing between them.
+fn wrap_deletion(
+    tree: &mut Tree,
+    runs: &[NodeId],
+    rev: &Track,
+    ids: &mut Ids,
+) -> Result<NodeId, Error> {
+    let del = tree.create_element(Some(W), "w:del")?;
+    set_revision(tree, del, rev, ids)?;
+    tree.insert_before(runs[0], del)?;
+    for &run in runs {
+        // Deleted text reads back as deleted text.
+        let mut texts: Vec<NodeId> = Vec::new();
+        for node in tree.descendants(run)? {
+            if tree.is(node, Some(W), "t")? {
+                texts.push(node);
+            }
+        }
+        for text in texts {
+            tree.set_name(text, Some(W), "w:delText")?;
+        }
+        tree.append(del, run)?;
+    }
+    Ok(del)
+}
+
+/// Stamps a revision element with a fresh id, the author and the date.
+fn set_revision(tree: &mut Tree, node: NodeId, rev: &Track, ids: &mut Ids) -> Result<(), Error> {
+    tree.set_attribute(node, Some(W), "w:id", &ids.revision().to_string())?;
+    tree.set_attribute(node, Some(W), "w:author", &rev.author)?;
+    tree.set_attribute(node, Some(W), "w:date", &rev.date)?;
+    Ok(())
+}
+
+/// Accepts or rejects tracked revisions and reports how many records
+/// settled.
+///
+/// Every story is walked: insertions and deletions of text that belong
+/// to `author` — or to anyone, when no author is given — are accepted
+/// or rejected. Accepting unwraps an insertion and removes a deletion;
+/// rejecting removes an insertion and unwraps a deletion, turning
+/// deleted text back into text. A record inside another settles with
+/// the outer one first: dropping the outer record drops what it holds.
+/// Moves and property marks are left as they are, as are records in
+/// properties, such as paragraph-mark revisions.
+pub fn settle(doc: &mut Document, accept: bool, author: Option<&str>) -> Result<usize, Error> {
+    let stories = place::stories(doc)?;
+    let mut settled = 0usize;
+    for (part, _) in &stories {
+        let tree = doc.xml(part)?;
+        let root = tree.root_element();
+        let kids: Vec<NodeId> = tree.children(root)?.collect();
+        for kid in kids {
+            settle_node(tree, kid, accept, author, &mut settled)?;
+        }
+    }
+    Ok(settled)
+}
+
+/// Settles one node and, when it survives unwrapped, what it holds.
+fn settle_node(
+    tree: &mut Tree,
+    node: NodeId,
+    accept: bool,
+    author: Option<&str>,
+    settled: &mut usize,
+) -> Result<(), Error> {
+    let Some(name) = tree.name(node)? else {
+        return Ok(());
+    };
+    if name.namespace != Some(W) {
+        return settle_children(tree, node, accept, author, settled);
+    }
+    // Property records stay: only text revisions settle, and paragraph
+    // marks with them are left for a later slice.
+    if name.local.ends_with("Pr") {
+        return Ok(());
+    }
+    // Moves stay, whoever made them.
+    if matches!(name.local, "moveFrom" | "moveTo") {
+        return Ok(());
+    }
+    if matches!(name.local, "ins" | "del") {
+        // An empty or missing author never matches a named filter, as in
+        // foreign-revision detection; without a filter everything settles.
+        let mine = match &author {
+            None => true,
+            Some(want) => revision_author(tree, node)?.as_deref() == Some(*want),
+        };
+        if !mine {
+            return settle_children(tree, node, accept, author, settled);
+        }
+        if name.local == "ins" && accept || name.local == "del" && !accept {
+            // Unwrap: the content stays, the record goes.
+            if name.local == "del" {
+                restore_deleted(tree, node)?;
+            }
+            let moved: Vec<NodeId> = tree.children(node)?.collect();
+            for child in &moved {
+                tree.insert_before(node, *child)?;
+            }
+            tree.detach(node)?;
+            for child in moved {
+                settle_node(tree, child, accept, author, settled)?;
+            }
+            *settled += 1;
+            return Ok(());
+        }
+        // Drop: the content goes with the record.
         tree.detach(node)?;
+        *settled += 1;
+        return Ok(());
+    }
+    settle_children(tree, node, accept, author, settled)
+}
+
+/// Settles the children of a node that itself stands.
+fn settle_children(
+    tree: &mut Tree,
+    node: NodeId,
+    accept: bool,
+    author: Option<&str>,
+    settled: &mut usize,
+) -> Result<(), Error> {
+    let kids: Vec<NodeId> = tree.children(node)?.collect();
+    for kid in kids {
+        settle_node(tree, kid, accept, author, settled)?;
+    }
+    Ok(())
+}
+
+/// Turns deleted text back into text for a rejected deletion. Nested
+/// deletions and moves keep their own records: settlement handles each
+/// surviving revision separately.
+fn restore_deleted(tree: &mut Tree, del: NodeId) -> Result<(), Error> {
+    let kids: Vec<NodeId> = tree.children(del)?.collect();
+    for kid in kids {
+        restore_in(tree, kid)?;
+    }
+    Ok(())
+}
+
+/// Restores deleted text below one node, stopping at nested deletions
+/// and moves.
+fn restore_in(tree: &mut Tree, node: NodeId) -> Result<(), Error> {
+    let name = tree.name(node)?;
+    if name
+        .is_some_and(|n| n.namespace == Some(W) && matches!(n.local, "del" | "moveFrom" | "moveTo"))
+    {
+        return Ok(());
+    }
+    if tree.is(node, Some(W), "delText")? {
+        tree.set_name(node, Some(W), "w:t")?;
+    } else if tree.is(node, Some(W), "delInstrText")? {
+        tree.set_name(node, Some(W), "w:instrText")?;
+    }
+    let kids: Vec<NodeId> = tree.children(node)?.collect();
+    for kid in kids {
+        restore_in(tree, kid)?;
     }
     Ok(())
 }

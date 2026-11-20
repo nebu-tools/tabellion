@@ -156,6 +156,13 @@ pub enum Error {
     /// block or several, an unknown option.
     #[error("{0}")]
     Invalid(String),
+    /// An edit that would disturb another author's pending change, with
+    /// the authors' names.
+    #[error("cannot replace text with a pending change by {authors:?}")]
+    ForeignRevision {
+        /// Who made the pending change.
+        authors: Vec<String>,
+    },
 }
 
 fn location(part: &Option<String>, line: usize, column: usize) -> String {

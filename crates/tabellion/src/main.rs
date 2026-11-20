@@ -755,24 +755,33 @@ fn replace_text(
         .cloned()
         .collect();
     // Every refusal is collected before anything is reported, so one
-    // message names them all; nothing is saved unless all can be. The
-    // counts come from the initial snapshot, so locations stay stable
-    // across the sweep's edits and restores.
+    // message names them all; nothing is saved unless all can be. One
+    // walk per story seeds every paragraph, so the sweep costs a story
+    // walk and a part copy rather than both per paragraph. The counts
+    // come from the initial snapshot, so locations stay stable across
+    // the sweep's edits and restores.
     let counts = block_counts(&targets);
+    let nodes: Vec<nebu_docx::xml::NodeId> = targets.iter().map(|p| p.node).collect();
+    let report = revise::replace_all(&mut doc, &nodes, find, with, None).map_err(at)?;
     let mut occurrences = 0usize;
     let mut changed = 0usize;
     let mut refused: Vec<String> = Vec::new();
-    for p in &targets {
-        let shared = p.location.story == StoryKind::Main
-            && counts.get(&p.location.block).is_some_and(|&n| n > 1);
-        match revise::replace_in_paragraph(&mut doc, p.node, find, with) {
-            Ok(0) => {}
-            Ok(n) => {
-                occurrences += n;
-                changed += 1;
-            }
-            Err(e) => refused.push(format!("{} ({})", describe(p, shared), short(&e))),
+    for (_, n) in report.replaced {
+        occurrences += n;
+        if n > 0 {
+            changed += 1;
         }
+    }
+    for (node, error) in report.refused {
+        let paragraph = targets.iter().find(|p| p.node == node);
+        let shared = paragraph.is_some_and(|p| {
+            p.location.story == StoryKind::Main
+                && counts.get(&p.location.block).is_some_and(|&n| n > 1)
+        });
+        let where_ = paragraph
+            .map(|p| describe(p, shared))
+            .unwrap_or_else(|| "?".into());
+        refused.push(format!("{where_} ({})", short(&error)));
     }
     if !refused.is_empty() {
         return Err(format!(

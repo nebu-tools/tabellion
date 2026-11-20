@@ -724,7 +724,7 @@ fn update_inner(
 /// Copies an element and everything it holds into a detached twin, so
 /// run properties travel with a run split in two. Comments and
 /// processing instructions do not travel; runs do not hold any.
-fn copy_element(t: &mut Tree, src: NodeId) -> Result<NodeId, Error> {
+pub(crate) fn copy_element(t: &mut Tree, src: NodeId) -> Result<NodeId, Error> {
     fn qualified(namespace: Option<&str>, prefix: &str, local: &str) -> String {
         let _ = namespace;
         if prefix.is_empty() {

@@ -256,6 +256,20 @@ impl Package {
         }
     }
 
+    /// A copy of one parsed part's tree, with its identity, to put back
+    /// if an edit of that part fails half-way. Parses the part first,
+    /// like [`Package::xml`].
+    pub(crate) fn snapshot_part(&mut self, name: &str) -> Result<Tree, Error> {
+        Ok(self.xml(name)?.snapshot())
+    }
+
+    /// Puts back a part tree taken by [`Package::snapshot_part`].
+    pub(crate) fn restore_part(&mut self, name: &str, tree: Tree) {
+        if let Ok(i) = self.entry(name) {
+            self.entries[i].body = Body::Xml(Box::new(tree));
+        }
+    }
+
     /// Adds a new part. The caller has checked the name and that it is free.
     pub(crate) fn add(&mut self, name: &str, bytes: Vec<u8>) {
         self.index
