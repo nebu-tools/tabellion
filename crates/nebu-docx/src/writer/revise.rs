@@ -246,16 +246,17 @@ pub struct BatchReport {
     pub refused: Vec<(NodeId, Error)>,
 }
 
-/// Replaces every non-overlapping occurrence of `find` with `with` in
-/// each paragraph and reports what each did.
+/// Replaces `find` with `with` in each paragraph and reports what
+/// each did.
 ///
 /// Paragraphs come from the document's views, in any stories; each is
 /// replaced as [`replace_in_paragraph`] would replace it, with the same
 /// refusals. One walk per story seeds every paragraph's field depth,
-/// and one snapshot per part rolls a paragraph back if it fails, so a
-/// sweep costs a story walk and a part copy rather than both per
-/// paragraph. Paragraphs are independent subtrees: a refusal leaves the
-/// others as they were.
+/// and one undo log per paragraph rolls a paragraph back if one of its
+/// matches fails. The sweep is atomic: a refusal or error anywhere
+/// restores the whole document through the document snapshot, so a
+/// caller holding the handle never sees partial edits. Snapshots keep
+/// tree identity, so paragraph handles stay good across the restore.
 pub fn replace_all(
     doc: &mut Document,
     paras: &[NodeId],
@@ -263,8 +264,34 @@ pub fn replace_all(
     with: &str,
     rev: Option<&Track>,
 ) -> Result<BatchReport, Error> {
-    use std::collections::HashMap;
     validate(find, with, rev)?;
+    let backup = doc.snapshot();
+    match replace_each(doc, paras, find, with, rev) {
+        Ok(report) => {
+            if report.refused.is_empty() {
+                Ok(report)
+            } else {
+                doc.restore(backup);
+                Ok(report)
+            }
+        }
+        Err(error) => {
+            doc.restore(backup);
+            Err(error)
+        }
+    }
+}
+
+/// The sweep itself: groups paragraphs by part, seeds every scope in
+/// one walk, and replaces right to left within each paragraph.
+fn replace_each(
+    doc: &mut Document,
+    paras: &[NodeId],
+    find: &str,
+    with: &str,
+    rev: Option<&Track>,
+) -> Result<BatchReport, Error> {
+    use std::collections::HashMap;
     let stories = place::stories(doc)?;
     // Group the paragraphs by part, keeping sweep order.
     let mut by_part: Vec<(String, Vec<NodeId>)> = Vec::new();

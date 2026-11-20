@@ -856,6 +856,33 @@ mod tests {
     }
 
     #[test]
+    fn refuses_are_atomic_through_the_handle() {
+        let bytes = sample();
+        let dir = tempfile::tempdir().unwrap();
+        let input = dir.path().join("in.docx");
+        std::fs::write(&input, &bytes).unwrap();
+        let mut doc = open_docx(input.to_str().unwrap()).unwrap();
+        add_paragraph(&mut doc, "A draft plan.", None).unwrap();
+        let fielded = nebu_docx::content::Content::from_json(
+            br#"{"blocks": [
+                {"type": "paragraph", "content": [
+                    {"type": "text", "text": "See "},
+                    {"type": "field", "code": "REF a \\h", "result": "draft"}
+                ]}
+            ]}"#,
+        )
+        .unwrap();
+        doc.insert(Place::End, &fielded.blocks, &WriteOptions::default())
+            .unwrap();
+        // The sweep replaces the editable paragraph, then refuses the
+        // field: the error names the field, and the handle still reads
+        // draft in the editable paragraph.
+        let err = replace_text(&mut doc, "draft", "final", None).unwrap_err();
+        assert!(err.to_string().contains("a field"), "{err:?}");
+        assert!(docx_text(&mut doc).unwrap().contains("A draft plan."));
+    }
+
+    #[test]
     fn replaces_text_and_settles_revisions() {
         let bytes = sample();
         let dir = tempfile::tempdir().unwrap();
