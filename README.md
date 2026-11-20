@@ -197,6 +197,47 @@ Describe the survey sites, the counting method and the data here.
 [1] Counted from song between 05:00 and 08:00.
 ```
 
+`tabellion table IN OUT --target LABEL --csv FILE` replaces the table
+under the caption that carries the label with the CSV rows; the
+caption and the table style stay. `tabellion image IN OUT --target
+LABEL --file PICTURE` swaps the figure's picture for a file of the
+same kind. `tabellion replace IN OUT --find TEXT --with TEXT` swaps
+literal text in every story but comments — the body with its tables
+and text boxes, headers and footers, footnotes and endnotes — and
+refuses matches it cannot cut through, such as a field, a hyperlink
+or another object, writing nothing then. The replacement takes the
+first run's formatting:
+
+```console
+$ tabellion table survey.docx survey-table.docx --target tab-sites --csv samples/sites.csv
+survey-table.docx: replaced table tab-sites (3 × 2)
+$ tabellion image survey-table.docx survey-image.docx --target fig-wren --file samples/wren.png
+survey-image.docx: replaced image fig-wren (word/media/image-d65fbbadf928bb1d.png)
+$ tabellion replace survey-image.docx survey-final.docx --find dawn --with daybreak
+survey-final.docx: replaced "dawn" with "daybreak" (1 occurrence in 1 paragraph)
+$ tabellion text survey-final.docx
+Breeding bird survey
+By {{author}}, {{date}}.
+Summary
+The summary goes here.
+Results
+Counts by site
+The north site held the most breeding pairs (Table 1); Figure 1 shows a wren there.
+Table 1: Breeding pairs by site
+Site	Visits
+North	12
+East	9
+Walk the transect at daybreak
+slowly
+stopping every 100 m
+Count singing males as pairs
+
+Figure 1: A wren at the north site
+The method follows the survey guide; the counts are above.
+Methods
+Describe the survey sites, the counting method and the data here.
+```
+
 `tabellion roundtrip IN OUT` opens a document, saves it unchanged and checks
 that the copy is the same file, byte for byte:
 

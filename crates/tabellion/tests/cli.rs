@@ -1409,6 +1409,53 @@ fn replace_refuses_and_writes_nothing() {
 }
 
 #[test]
+fn replace_refuses_a_hyperlink_match() {
+    let dir = tempfile::tempdir().unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.path().join("linked.json");
+    std::fs::write(
+        &content,
+        r#"{"blocks": [
+            {"type": "paragraph", "content": [
+                {"type": "text", "text": "plain draft here "},
+                {"type": "link", "target": {"url": "https://example.com/wren"}, "content": [
+                    {"type": "text", "text": "a linked draft"}
+                ]}
+            ]}
+        ]}"#,
+    )
+    .unwrap();
+    let doc = dir.path().join("linked.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    // The match inside the hyperlink aborts the command: the paragraph
+    // is named with its obstruction and nothing is written.
+    let out = dir.path().join("out.docx");
+    let (code, _, stderr) = run(&[
+        "replace",
+        doc.to_str().unwrap(),
+        out.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("refused 1 paragraph"), "{stderr}");
+    assert!(stderr.contains("(hyperlink)"), "{stderr}");
+    assert!(!out.exists());
+}
+
+#[test]
 fn replace_names_the_flag_for_bad_arguments() {
     let dir = tempfile::tempdir().unwrap();
     let drafted = drafted_doc(dir.path());

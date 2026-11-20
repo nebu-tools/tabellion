@@ -2,7 +2,7 @@
 % Please edit documentation in R/tabellion.R
 \name{replace_text}
 \alias{replace_text}
-\title{Replace literal text wherever a reader sees it.}
+\title{Replace literal text in the paragraphs a reader sees.}
 \usage{
 replace_text(doc, find, with, author = NULL)
 }
@@ -22,8 +22,9 @@ The document, invisibly.
 \description{
 Every occurrence of the find text is replaced in each paragraph of
 every story but comments: the body with its tables and text boxes,
-headers and footers, footnotes and endnotes. Runs keep their
-formatting. With an author the replacement is tracked. A paragraph
-that refuses — a match inside a field, a hyperlink or another
-object — aborts with every refused paragraph named.
+headers and footers, footnotes and endnotes. The replacement takes
+the first run's formatting. With an author the replacement is
+tracked. A paragraph that refuses — a match inside a field, a
+hyperlink or another object — aborts with every refused paragraph
+named.
 }
