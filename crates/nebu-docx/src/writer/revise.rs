@@ -904,7 +904,9 @@ fn record_move(tree: &Tree, undo: &mut Vec<Undo>, node: NodeId) -> Result<(), Er
 /// detached. Truncating the arena then drops them for good and restores
 /// the node budget; restoring the recorded flags keeps the serializer
 /// from rewriting what the edit never touched — including earlier
-/// paragraphs' successful edits, whose dirt stays dirty.
+/// paragraphs' successful edits, whose dirt stays dirty. The edits
+/// counter stays bumped so cached views recompute rather than trust
+/// handles from the rolled-back attempt.
 fn rollback(
     tree: &mut Tree,
     undo: Vec<Undo>,

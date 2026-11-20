@@ -1221,6 +1221,42 @@ fn replace_survives_the_node_limit() {
 }
 
 #[test]
+fn replace_rollback_keeps_the_original_bytes() {
+    // The node-limit test above compares saved bytes, but the fixture's
+    // own compression happens to match what the writer produces — so a
+    // rollback that restores the nodes yet leaves the tree dirty still
+    // passes. Repacking at another deflate level makes a rewrite
+    // observable: the failed edit must leave the archive byte-identical.
+    let bytes = support::sample_with(&[("word/styles.xml", None), ("word/numbering.xml", None)]);
+    let files = support::entries(&bytes);
+    let specs: Vec<support::zipraw::Spec> = files
+        .iter()
+        .map(|(n, d)| support::zipraw::Spec::new(n, d))
+        .collect();
+    let bytes = support::zipraw::build(&specs, &support::zipraw::Layout::default());
+    let arena = {
+        let mut probe = Document::from_bytes(bytes.clone()).unwrap();
+        let main = probe.main_part().to_string();
+        let tree = probe.xml(&main).unwrap();
+        tree.descendants(tree.document()).unwrap().count() + 1
+    };
+    let mut doc = Document::from_bytes_with_limits(
+        bytes,
+        nebu_docx::Limits {
+            max_xml_nodes: arena + 9,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let para = paragraph_with(&mut doc, "summary");
+    let before = doc.to_bytes().unwrap();
+    let err =
+        replace_in_paragraph(&mut doc, para, "summary", "findings", Some(&tracking())).unwrap_err();
+    assert!(matches!(err, nebu_docx::Error::Limit { .. }), "{err:?}");
+    assert_eq!(doc.to_bytes().unwrap(), before);
+}
+
+#[test]
 fn validate_names_a_bad_tracking_stamp() {
     let bad = Track {
         author: "Max\x01".into(),
