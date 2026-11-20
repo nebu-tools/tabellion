@@ -1900,10 +1900,10 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         &mut doc,
         source,
         concat!(
-            "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\"/>",
+            "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/>",
             "<w:moveFrom w:id=\"11\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
             "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
-            "<w:moveFromRangeEnd w:id=\"10\" w:name=\"m1\"/>",
+            "<w:moveFromRangeEnd w:id=\"10\"/>",
             "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
         ),
     );
@@ -1935,8 +1935,11 @@ fn moved_doc(dir: &std::path::Path) -> std::path::PathBuf {
         tree.append(props, n).unwrap();
     }
     for (xml, before) in [
-        ("<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>", true),
-        ("<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>", false),
+        (
+            "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\" w:author=\"Lark\" w:date=\"2026-11-20T12:00:00Z\"/>",
+            true,
+        ),
+        ("<w:moveToRangeEnd w:id=\"20\"/>", false),
     ] {
         let mut marker = None;
         for n in tree
@@ -1969,6 +1972,32 @@ fn document_xml(doc: &std::path::Path) -> String {
         .read_to_string(&mut xml)
         .unwrap();
     xml
+}
+
+/// The start tag of the first element with this local name.
+fn marker_tag<'a>(xml: &'a str, local: &str) -> &'a str {
+    let at = xml
+        .find(local)
+        .unwrap_or_else(|| panic!("no {local} in the document"));
+    let end = xml[at..].find('>').expect("a tag end");
+    &xml[at..at + end]
+}
+
+/// The preserved ranges keep Word's shape: starts carry the id, name,
+/// author and date, ends carry only the id.
+fn assert_valid_ranges(xml: &str) {
+    for (local, id) in [("w:moveFromRangeStart", "10"), ("w:moveToRangeStart", "20")] {
+        let tag = marker_tag(xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(tag.contains("w:name=\"m1\""), "{tag}");
+        assert!(tag.contains("w:author=\"Lark\""), "{tag}");
+        assert!(tag.contains("w:date=\"2026-11-20T12:00:00Z\""), "{tag}");
+    }
+    for (local, id) in [("w:moveFromRangeEnd", "10"), ("w:moveToRangeEnd", "20")] {
+        let tag = marker_tag(xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(!tag.contains("w:name"), "{tag}");
+    }
 }
 
 #[test]
@@ -2012,6 +2041,7 @@ fn accept_settles_a_move_pair() {
     let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
     let end = xml.find("w:moveToRangeEnd").expect("a destination end");
     assert!(start < record && record < end, "{xml}");
+    assert_valid_ranges(&xml);
 }
 
 #[test]
@@ -2034,6 +2064,7 @@ fn reject_restores_a_move_pair() {
     let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
     let end = xml.find("w:moveToRangeEnd").expect("a destination end");
     assert!(start < record && record < end, "{xml}");
+    assert_valid_ranges(&xml);
 }
 
 #[test]

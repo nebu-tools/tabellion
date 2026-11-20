@@ -1156,10 +1156,10 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
         source,
         &format!(
             concat!(
-                "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\"/>",
+                "<w:moveFromRangeStart w:id=\"10\" w:name=\"m1\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\"/>",
                 "<w:moveFrom w:id=\"11\" w:author=\"{a}\" w:date=\"2026-11-20T12:00:00Z\" w:name=\"m1\">",
                 "<w:r><w:t>rover</w:t></w:r></w:moveFrom>",
-                "<w:moveFromRangeEnd w:id=\"10\" w:name=\"m1\"/>",
+                "<w:moveFromRangeEnd w:id=\"10\"/>",
                 "<w:r><w:t xml:space=\"preserve\"> stays</w:t></w:r>",
             ),
             a = author,
@@ -1197,14 +1197,20 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
     {
         tree.append(props, n).unwrap();
     }
-    // The destination range markers wrap the whole paragraph.
+    // The destination range markers wrap the whole paragraph. Starts
+    // carry the name with the author and date; ends carry only the id.
     for (xml, place) in [
-        ("<w:moveToRangeStart w:id=\"20\" w:name=\"m1\"/>", true),
-        ("<w:moveToRangeEnd w:id=\"20\" w:name=\"m1\"/>", false),
+        (
+            format!(
+                "<w:moveToRangeStart w:id=\"20\" w:name=\"m1\" w:author=\"{author}\" w:date=\"2026-11-20T12:00:00Z\"/>"
+            ),
+            true,
+        ),
+        ("<w:moveToRangeEnd w:id=\"20\"/>".to_string(), false),
     ] {
         let mut marker = None;
         for n in tree
-            .parse_fragment(xml, &[("w", nebu_docx::ns::W)])
+            .parse_fragment(xml.as_str(), &[("w", nebu_docx::ns::W)])
             .unwrap()
         {
             marker = Some(n);
@@ -1216,6 +1222,15 @@ fn moved_pair(doc: &mut Document, source: NodeId, dest: NodeId, author: &str) {
             tree.insert_after(dest, marker).unwrap();
         }
     }
+}
+
+/// The start tag of the first element with this local name: the
+/// preserved markers keep the shape Word writes, with the author and
+/// date on starts and nothing but the id on ends.
+fn marker_tag<'a>(xml: &'a str, local: &str) -> &'a str {
+    let at = xml.find(local).unwrap_or_else(|| panic!("no {local}"));
+    let end = xml[at..].find('>').expect("a tag end");
+    &xml[at..at + end]
 }
 
 #[test]
@@ -1234,10 +1249,8 @@ fn settle_accepts_a_move_pair() {
     assert_eq!(text_of(&mut doc, source), " stays");
     assert_eq!(text_of(&mut doc, dest), "goes rover");
     // The two text records settle; the paragraph-mark revision stays
-    // put, as do no range markers. Views never surface property-nested
-    // moves, so preservation shows in the XML.
-    // The two text records settle; the paragraph-mark revision stays
-    // pending.
+    // pending. Views never surface property-nested moves, so
+    // preservation shows in the XML.
     let revisions = doc.views().unwrap().revisions();
     assert_eq!(revisions.len(), 1, "{revisions:?}");
     assert_eq!(revisions[0].kind, RevisionKind::MoveTo, "{revisions:?}");
@@ -1258,6 +1271,19 @@ fn settle_accepts_a_move_pair() {
     let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
     let end = xml.find("w:moveToRangeEnd").expect("a destination end");
     assert!(start < record && record < end, "{xml}");
+    // The starts keep the author and date; the ends carry only the id.
+    for (local, id) in [("w:moveFromRangeStart", "10"), ("w:moveToRangeStart", "20")] {
+        let tag = marker_tag(&xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(tag.contains("w:name=\"m1\""), "{tag}");
+        assert!(tag.contains("w:author=\"Lark\""), "{tag}");
+        assert!(tag.contains("w:date=\"2026-11-20T12:00:00Z\""), "{tag}");
+    }
+    for (local, id) in [("w:moveFromRangeEnd", "10"), ("w:moveToRangeEnd", "20")] {
+        let tag = marker_tag(&xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(!tag.contains("w:name"), "{tag}");
+    }
 }
 
 #[test]
@@ -1276,10 +1302,8 @@ fn settle_rejects_a_move_pair() {
     assert_eq!(text_of(&mut doc, source), "rover stays");
     assert_eq!(text_of(&mut doc, dest), "goes ");
     // The two text records settle; the paragraph-mark revision stays
-    // put, as do no range markers. Views never surface property-nested
-    // moves, so preservation shows in the XML.
-    // The two text records settle; the paragraph-mark revision stays
-    // pending.
+    // pending. Views never surface property-nested moves, so
+    // preservation shows in the XML.
     let revisions = doc.views().unwrap().revisions();
     assert_eq!(revisions.len(), 1, "{revisions:?}");
     assert_eq!(revisions[0].kind, RevisionKind::MoveTo, "{revisions:?}");
@@ -1300,6 +1324,19 @@ fn settle_rejects_a_move_pair() {
     let record = xml.find("w:moveTo w:id=\"22\"").expect("id 22");
     let end = xml.find("w:moveToRangeEnd").expect("a destination end");
     assert!(start < record && record < end, "{xml}");
+    // The starts keep the author and date; the ends carry only the id.
+    for (local, id) in [("w:moveFromRangeStart", "10"), ("w:moveToRangeStart", "20")] {
+        let tag = marker_tag(&xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(tag.contains("w:name=\"m1\""), "{tag}");
+        assert!(tag.contains("w:author=\"Lark\""), "{tag}");
+        assert!(tag.contains("w:date=\"2026-11-20T12:00:00Z\""), "{tag}");
+    }
+    for (local, id) in [("w:moveFromRangeEnd", "10"), ("w:moveToRangeEnd", "20")] {
+        let tag = marker_tag(&xml, local);
+        assert!(tag.contains(&format!("w:id=\"{id}\"")), "{tag}");
+        assert!(!tag.contains("w:name"), "{tag}");
+    }
 }
 
 #[test]
