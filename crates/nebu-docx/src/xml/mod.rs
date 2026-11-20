@@ -297,6 +297,36 @@ impl Tree {
         t.id = self.id;
         t
     }
+
+    /// The number of nodes the tree holds now. Nodes created after this
+    /// point can be dropped again with [`Tree::truncate`].
+    pub(crate) fn checkpoint(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// Drops every node appended after [`Tree::checkpoint`], reclaiming
+    /// their share of the node limit. Scopes, names and URIs interned
+    /// since stay reserved, which is harmless: nothing references them.
+    /// Callers first unlink the dropped subtrees and put back every
+    /// moved original, so no kept node points at a dropped one.
+    pub(crate) fn truncate(&mut self, len: usize) {
+        self.nodes.truncate(len);
+    }
+
+    /// The dirty flags of every node, to put back after a rolled-back
+    /// edit so serialization treats untouched parts as untouched. A
+    /// fraction of the cost of cloning the tree.
+    pub(crate) fn flags_snapshot(&self) -> Vec<u8> {
+        self.nodes.iter().map(|n| n.flags).collect()
+    }
+
+    /// Puts back flags taken by [`Tree::flags_snapshot`]. Extra nodes
+    /// are simply not covered; callers truncate first.
+    pub(crate) fn restore_flags(&mut self, flags: &[u8]) {
+        for (n, &f) in self.nodes.iter_mut().zip(flags.iter()) {
+            n.flags = f;
+        }
+    }
 }
 
 const DOCUMENT: Ix = 0;
@@ -843,6 +873,53 @@ impl Tree {
             e.name = name;
             e.renamed = true;
         }
+        self.touch(i, CHANGED);
+        Ok(())
+    }
+
+    /// The qualified name an element was written with, and whether
+    /// [`Tree::set_name`] has renamed it since. [`Tree::restore_name`]
+    /// puts both back without allocating tree nodes.
+    pub(crate) fn saved_name(
+        &self,
+        id: NodeId,
+    ) -> Result<(Option<String>, String, String, bool), Error> {
+        let i = self.ix(id)?;
+        let Data::Element(e) = &self.n(i).data else {
+            return Err(Error::Edit("only elements have names to save".into()));
+        };
+        let n = self.name_of(e.name);
+        Ok((
+            n.namespace.map(str::to_owned),
+            n.prefix.to_owned(),
+            n.local.to_owned(),
+            e.renamed,
+        ))
+    }
+
+    /// Puts back a name saved by [`Tree::saved_name`], with its renamed
+    /// state. Interning may allocate maps, but never tree nodes, so
+    /// this cannot fail for lack of room.
+    pub(crate) fn restore_name(
+        &mut self,
+        id: NodeId,
+        namespace: Option<&str>,
+        prefix: &str,
+        local: &str,
+        renamed: bool,
+    ) -> Result<(), Error> {
+        let i = self.ix(id)?;
+        if !matches!(self.n(i).data, Data::Element(_)) {
+            return Err(Error::Edit("only elements have names to restore".into()));
+        }
+        let ns = namespace.map(|u| self.intern_uri(u));
+        let name = self.intern_name(prefix, local, ns);
+        self.attrs_mut(i)?;
+        let Data::Element(e) = &mut self.n_mut(i).data else {
+            unreachable!("checked as an element above");
+        };
+        e.name = name;
+        e.renamed = renamed;
         self.touch(i, CHANGED);
         Ok(())
     }

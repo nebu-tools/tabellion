@@ -1555,3 +1555,109 @@ fn replace_sweeps_headers_and_leaves_comments_alone() {
     assert!(stderr.contains(r#"no occurrences of "Both""#), "{stderr}");
     assert!(!silent.exists());
 }
+
+#[test]
+fn bench_reports_timings_without_writing() {
+    // The 40 ms gate has three orders of magnitude of headroom on these
+    // fixtures (single replacements time in microseconds), so the exit
+    // code does not meaningfully depend on the wall clock here; the
+    // release-only perf test guards the real budget.
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let (code, stdout, stderr) = run(&[
+        "bench",
+        drafted.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains(r#"bench "draft" with "final" (4 occurrences in 3 paragraphs"#),
+        "{stdout}"
+    );
+    assert!(stdout.contains("against a 20ms budget"), "{stdout}");
+}
+
+#[test]
+fn bench_tracks_with_an_author() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let (code, stdout, stderr) = run(&[
+        "bench",
+        drafted.to_str().unwrap(),
+        "--find",
+        "draft",
+        "--with",
+        "final",
+        "--author",
+        "Bench",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    assert!(
+        stdout.contains("(4 occurrences in 3 paragraphs"),
+        "{stdout}"
+    );
+}
+
+#[test]
+fn bench_reports_no_occurrences() {
+    let dir = tempfile::tempdir().unwrap();
+    let drafted = drafted_doc(dir.path());
+    let (code, _, stderr) = run(&[
+        "bench",
+        drafted.to_str().unwrap(),
+        "--find",
+        "nightingale",
+        "--with",
+        "thrush",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(
+        stderr.contains(r#"no occurrences of "nightingale""#),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn bench_refuses_like_replace() {
+    // A field holds the only match: bench reports the refusal exactly
+    // as replace does, without timing anything. The 40 ms gate never
+    // runs here, so this test does not depend on the wall clock.
+    let dir = tempfile::tempdir().unwrap();
+    let template = dir.path().join("template.docx");
+    std::fs::copy(SAMPLE, &template).unwrap();
+    let content = dir.path().join("field.json");
+    std::fs::write(
+        &content,
+        r#"{"blocks": [{"type": "paragraph", "content": [
+            {"type": "text", "text": "See "},
+            {"type": "field", "code": "REF tab-sites \\h", "result": "draft table"},
+            {"type": "text", "text": " now."}
+        ]}]}"#,
+    )
+    .unwrap();
+    let doc = dir.path().join("fielded.docx");
+    let (code, _, stderr) = run(&[
+        "insert",
+        template.to_str().unwrap(),
+        doc.to_str().unwrap(),
+        "--content",
+        content.to_str().unwrap(),
+        "--at",
+        "results",
+    ]);
+    assert_eq!(code, Some(0), "{stderr}");
+    let (code, _, stderr) = run(&[
+        "bench",
+        doc.to_str().unwrap(),
+        "--find",
+        "draft table",
+        "--with",
+        "final table",
+    ]);
+    assert_eq!(code, Some(3), "{stderr}");
+    assert!(stderr.contains("refused 1 paragraph"), "{stderr}");
+    assert!(stderr.contains("(field)"), "{stderr}");
+}

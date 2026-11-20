@@ -176,10 +176,13 @@ struct Piece {
 
 /// Checks the replacement strings before a sweep: the find text must
 /// not be empty, and neither string may hold a tab, a line ending or a
-/// character XML cannot write. The messages name `--find` or `--with`,
-/// so a caller sweeping many paragraphs reports one diagnostic for an
-/// argument no paragraph can take.
-pub fn validate(find: &str, with: &str) -> Result<(), Error> {
+/// character XML cannot write. With a tracking author, the author and
+/// date must be writable too, so a bad stamp fails before anything
+/// changes instead of halfway through a match. The messages name
+/// `--find` or `--with`, so a caller sweeping many paragraphs reports
+/// one diagnostic for an argument no paragraph can take.
+pub fn validate(find: &str, with: &str, rev: Option<&Track>) -> Result<(), Error> {
+    use crate::xml::chars::check_chars;
     if find.is_empty() {
         return Err(Error::Invalid("cannot replace an empty string".to_string()));
     }
@@ -189,8 +192,15 @@ pub fn validate(find: &str, with: &str) -> Result<(), Error> {
                 "cannot replace across {c:?} in {flag}: tabs and line ends are not text a run holds"
             )));
         }
-        if let Err(e) = crate::xml::chars::check_chars(s) {
+        if let Err(e) = check_chars(s) {
             return Err(Error::Invalid(format!("cannot use {flag} text: {e}")));
+        }
+    }
+    if let Some(rev) = rev {
+        for (flag, s) in [("author", &rev.author), ("date", &rev.date)] {
+            if let Err(e) = check_chars(s) {
+                return Err(Error::Invalid(format!("cannot use tracking {flag}: {e}")));
+            }
         }
     }
     Ok(())
@@ -254,7 +264,7 @@ pub fn replace_all(
     rev: Option<&Track>,
 ) -> Result<BatchReport, Error> {
     use std::collections::HashMap;
-    validate(find, with)?;
+    validate(find, with, rev)?;
     let stories = place::stories(doc)?;
     // Group the paragraphs by part, keeping sweep order.
     let mut by_part: Vec<(String, Vec<NodeId>)> = Vec::new();
@@ -278,14 +288,10 @@ pub fn replace_all(
         }
     }
     for (part, paras) in by_part {
-        let mut ids = match rev {
-            Some(_) => Some(Ids::collect(
-                doc,
-                std::slice::from_ref(&part),
-                super::ids::seed(doc),
-            )?),
-            None => None,
-        };
+        // Revision ids are collected for the part on the first tracked
+        // match that applies, not up front: most paragraphs match
+        // nothing, and the scan costs a tree walk of its own.
+        let mut ids: Option<Ids> = None;
         // Seed every paragraph in one walk per scope.
         let mut scoped: HashMap<NodeId, Vec<NodeId>> = HashMap::new();
         {
@@ -339,7 +345,7 @@ pub fn replace_all(
                 ));
                 continue;
             };
-            match replace_one(doc, &part, scope, seed, para, find, with, rev, ids.as_mut()) {
+            match replace_one(doc, &part, scope, seed, para, find, with, rev, &mut ids) {
                 Ok(n) => report.replaced.push((para, n)),
                 Err(e) => report.refused.push((para, e)),
             }
@@ -361,7 +367,7 @@ fn replace_one(
     find: &str,
     with: &str,
     rev: Option<&Track>,
-    mut ids: Option<&mut Ids>,
+    ids: &mut Option<Ids>,
 ) -> Result<usize, Error> {
     {
         let tree = doc.xml(part)?;
@@ -413,13 +419,31 @@ fn replace_one(
             )?;
         }
     }
-    // One part snapshot rolls the paragraph back if a match fails;
-    // handles into other parts stay good, and the views are read again.
-    let backup = doc.snapshot_part(part)?;
+    // One paragraph log rolls the paragraph back if a match fails:
+    // every mutation is recorded, the arena is truncated to the
+    // checkpoint, the recorded flags keep the serializer from rewriting
+    // what the edit never touched, and no node budget leaks into the
+    // next paragraph.
+    let mut undo: Vec<Undo> = Vec::new();
+    let (checkpoint, clean) = {
+        let tree = doc.xml(part)?;
+        (tree.checkpoint(), tree.flags_snapshot())
+    };
+    // Revision ids are collected on the first paragraph that actually
+    // applies a tracked match: most paragraphs match nothing, and the
+    // scan costs a tree walk of its own.
+    if rev.is_some() && ids.is_none() {
+        let owned = part.to_string();
+        *ids = Some(Ids::collect(
+            doc,
+            std::slice::from_ref(&owned),
+            super::ids::seed(doc),
+        )?);
+    }
     let mut count = 0;
     // Right to left, so an edit never moves an earlier match. Each match
     // walks the paragraph afresh, so every node and offset is current;
-    // the backup puts the document back if one fails.
+    // the undo log puts the document back if one fails.
     for start in matches.into_iter().rev() {
         match apply_match(
             doc,
@@ -431,11 +455,13 @@ fn replace_one(
             find.len(),
             with,
             rev,
-            ids.as_deref_mut(),
+            ids,
+            &mut undo,
         ) {
             Ok(()) => count += 1,
             Err(e) => {
-                doc.restore_part(part, backup);
+                let tree = doc.xml(part)?;
+                rollback(tree, undo, checkpoint, &clean)?;
                 return Err(e);
             }
         }
@@ -826,6 +852,111 @@ fn locate(
     Ok(Located { first, last })
 }
 
+/// What one apply step changed, enough to put it back. The log is
+/// paragraph-local: every mutated node belongs to the paragraph but
+/// created ones, which outlive the log only if the apply succeeds.
+/// Replay allocates nothing, so rollback itself cannot fail on limits.
+enum Undo {
+    /// An element whose children were replaced, with the originals in
+    /// order. Restoring detaches whatever is there and appends these.
+    Children { node: NodeId, old: Vec<NodeId> },
+    /// `xml:space` set on an existing node, with what it had.
+    Space { node: NodeId, old: Option<String> },
+    /// A node moved or detached, with where it was.
+    Moved {
+        node: NodeId,
+        parent: NodeId,
+        index: usize,
+    },
+    /// Text renamed to deleted text, with the qualified name and rename
+    /// state it had, so rollback restores the original spelling.
+    Renamed {
+        node: NodeId,
+        namespace: Option<String>,
+        prefix: String,
+        local: String,
+        renamed: bool,
+    },
+    /// A node created during the apply, to detach on rollback.
+    Created { node: NodeId },
+}
+
+/// Records where a node sits before the apply moves or detaches it.
+fn record_move(tree: &Tree, undo: &mut Vec<Undo>, node: NodeId) -> Result<(), Error> {
+    let parent = tree
+        .parent(node)?
+        .ok_or_else(|| Error::Invalid("a run without a paragraph".to_string()))?;
+    let kids: Vec<NodeId> = tree.children(parent)?.collect();
+    let index = kids
+        .iter()
+        .position(|&k| k == node)
+        .ok_or_else(|| Error::Invalid("a run without a paragraph".to_string()))?;
+    undo.push(Undo::Moved {
+        node,
+        parent,
+        index,
+    });
+    Ok(())
+}
+
+/// Puts back every step in reverse: original children, names and
+/// properties return, moved nodes go home, and created subtrees are
+/// detached. Truncating the arena then drops them for good and restores
+/// the node budget; restoring the recorded flags keeps the serializer
+/// from rewriting what the edit never touched — including earlier
+/// paragraphs' successful edits, whose dirt stays dirty. The edits
+/// counter stays bumped so cached views recompute rather than trust
+/// handles from the rolled-back attempt.
+fn rollback(
+    tree: &mut Tree,
+    undo: Vec<Undo>,
+    checkpoint: usize,
+    flags: &[u8],
+) -> Result<(), Error> {
+    for op in undo.into_iter().rev() {
+        match op {
+            Undo::Children { node, old } => {
+                let current: Vec<NodeId> = tree.children(node)?.collect();
+                for kid in current {
+                    tree.detach(kid)?;
+                }
+                for kid in old {
+                    tree.append(node, kid)?;
+                }
+            }
+            Undo::Space { node, old } => match old {
+                Some(value) => tree.set_attribute(node, Some(XML_NS), "xml:space", &value)?,
+                None => {
+                    let _ = tree.remove_attribute(node, Some(XML_NS), "space")?;
+                }
+            },
+            Undo::Moved {
+                node,
+                parent,
+                index,
+            } => {
+                tree.detach(node)?;
+                tree.insert(parent, index, node)?;
+            }
+            Undo::Renamed {
+                node,
+                namespace,
+                prefix,
+                local,
+                renamed,
+            } => tree.restore_name(node, namespace.as_deref(), &prefix, &local, renamed)?,
+            Undo::Created { node } => {
+                if tree.parent(node)?.is_some() {
+                    tree.detach(node)?;
+                }
+            }
+        }
+    }
+    tree.truncate(checkpoint);
+    tree.restore_flags(flags);
+    Ok(())
+}
+
 /// Applies one match: splits the boundary text nodes, clears what the
 /// match covers, and writes the replacement into its first run. With a
 /// tracking author, the covered runs are wrapped in a deletion instead
@@ -834,6 +965,10 @@ fn locate(
 /// Walks the paragraph afresh so every node and offset is current. The
 /// field seed cannot move: an edit never touches a marker outside the
 /// paragraph.
+///
+/// Every mutation is recorded, so a failure puts the paragraph back:
+/// original nodes return, created ones are detached, and the arena is
+/// truncated to the checkpoint, which restores the node budget too.
 #[allow(clippy::too_many_arguments)]
 fn apply_match(
     doc: &mut Document,
@@ -845,7 +980,8 @@ fn apply_match(
     len: usize,
     with: &str,
     rev: Option<&Track>,
-    ids: Option<&mut Ids>,
+    ids: &mut Option<Ids>,
+    undo: &mut Vec<Undo>,
 ) -> Result<(), Error> {
     let tree = doc.xml(part)?;
     let (pieces, offsets) = pieces_of(tree, scope, seed, para, rev)?;
@@ -859,12 +995,12 @@ fn apply_match(
         let text = pieces[located.first].text.clone();
         let head = start - offsets[located.first];
         if head > 0 {
-            node = split_text(tree, node, &text, head)?;
+            node = split_text(tree, node, &text, head, undo)?;
         }
         // The node starts exactly at the match; split off what follows it.
         let rest = text[head.min(text.len())..].to_string();
         if len < rest.len() {
-            split_text(tree, node, &rest, len)?;
+            split_text(tree, node, &rest, len, undo)?;
         }
         covered.push(node);
     } else {
@@ -872,7 +1008,7 @@ fn apply_match(
         let head = start - offsets[located.first];
         if head > 0 {
             let text = pieces[located.first].text.clone();
-            first_node = split_text(tree, first_node, &text, head)?;
+            first_node = split_text(tree, first_node, &text, head, undo)?;
         }
         covered.push(first_node);
         for piece in &pieces[located.first + 1..located.last] {
@@ -882,7 +1018,7 @@ fn apply_match(
         let tail = end - offsets[located.last];
         if tail < pieces[located.last].text.len() {
             let text = pieces[located.last].text.clone();
-            split_text(tree, last_node, &text, tail)?;
+            split_text(tree, last_node, &text, tail, undo)?;
         }
         covered.push(last_node);
     }
@@ -890,21 +1026,26 @@ fn apply_match(
         None => {
             // The replacement goes where the match began; the rest goes away.
             if !with.is_empty() {
-                for node in tree.parse_fragment(&run_text(with), &[("w", W)])? {
+                let new: Vec<NodeId> = tree
+                    .parse_fragment(&run_text(with), &[("w", W)])?
+                    .into_iter()
+                    .collect();
+                for &node in &new {
+                    undo.push(Undo::Created { node });
+                }
+                for node in new {
                     tree.insert_before(covered[0], node)?;
                 }
             }
             for node in covered {
+                record_move(tree, undo, node)?;
                 tree.detach(node)?;
             }
         }
-        Some(rev) => apply_tracked(
-            tree,
-            &covered,
-            with,
-            rev,
-            ids.expect("revision ids with a tracking author"),
-        )?,
+        Some(rev) => {
+            let ids = ids.as_mut().expect("revision ids with a tracking author");
+            apply_tracked(tree, &covered, with, rev, ids, undo)?
+        }
     }
     Ok(())
 }
@@ -958,21 +1099,35 @@ fn split_run_before(
     run: NodeId,
     node: NodeId,
     ids: &mut Ids,
+    undo: &mut Vec<Undo>,
 ) -> Result<NodeId, Error> {
     let twin = tree.create_element(Some(W), "w:r")?;
+    undo.push(Undo::Created { node: twin });
     if let Some(rpr) = tree.child(run, Some(W), "rPr")? {
         let twin_props = copy_element(tree, rpr)?;
+        undo.push(Undo::Created { node: twin_props });
         tree.append(twin, twin_props)?;
         fresh_revision_ids(tree, twin_props, ids)?;
     }
     tree.insert_after(run, twin)?;
+    // Every moved child sits at the split point when it moves: earlier
+    // moves shift the rest down into the same slot.
+    let at = tree
+        .children(run)?
+        .position(|k| k == node)
+        .ok_or_else(|| Error::Invalid("a run without a paragraph".to_string()))?;
     let kids: Vec<NodeId> = tree.children(run)?.collect();
-    let mut moving = false;
+    let mut started = false;
     for child in kids {
         if child == node {
-            moving = true;
+            started = true;
         }
-        if moving {
+        if started {
+            undo.push(Undo::Moved {
+                node: child,
+                parent: run,
+                index: at,
+            });
             tree.append(twin, child)?;
         }
     }
@@ -989,6 +1144,7 @@ fn apply_tracked(
     with: &str,
     rev: &Track,
     ids: &mut Ids,
+    undo: &mut Vec<Undo>,
 ) -> Result<(), Error> {
     // Isolate the covered runs: split the boundary runs at the edges of
     // the match so every covered run holds exactly matched text.
@@ -1004,7 +1160,7 @@ fn apply_tracked(
         .position(|&k| !tree.is(k, Some(W), "rPr").unwrap_or(false))
         .unwrap_or(kids.len());
     if first_at > content_at {
-        split_run_before(tree, first_run, covered[0], ids)?;
+        split_run_before(tree, first_run, covered[0], ids, undo)?;
         runs = covered_runs(tree, covered)?;
     }
     let last_run = *runs.last().expect("a covered run");
@@ -1014,7 +1170,7 @@ fn apply_tracked(
         .position(|&k| k == covered[covered.len() - 1])
         .expect("covered text in its run");
     if last_at + 1 < kids.len() {
-        split_run_before(tree, last_run, kids[last_at + 1], ids)?;
+        split_run_before(tree, last_run, kids[last_at + 1], ids, undo)?;
         runs = covered_runs(tree, covered)?;
     }
     // Wrap each run group in a deletion where it stands. Runs that
@@ -1044,7 +1200,7 @@ fn apply_tracked(
             }
         };
         if !continues {
-            let del = wrap_deletion(tree, &group, rev, ids)?;
+            let del = wrap_deletion(tree, &group, rev, ids, undo)?;
             first_del = first_del.or(Some(del));
             group.clear();
             kids.clear();
@@ -1052,7 +1208,7 @@ fn apply_tracked(
         group.push(run);
     }
     if !group.is_empty() {
-        let del = wrap_deletion(tree, &group, rev, ids)?;
+        let del = wrap_deletion(tree, &group, rev, ids, undo)?;
         first_del = first_del.or(Some(del));
     }
     // The replacement goes in an insertion after the first deletion.
@@ -1061,14 +1217,18 @@ fn apply_tracked(
             return Err(Error::Invalid("a match without a paragraph".to_string()));
         };
         let ins = tree.create_element(Some(W), "w:ins")?;
+        undo.push(Undo::Created { node: ins });
         set_revision(tree, ins, rev, ids)?;
         let run = tree.create_element(Some(W), "w:r")?;
+        undo.push(Undo::Created { node: run });
         if let Some(rpr) = tree.child(runs[0], Some(W), "rPr")? {
             let run_props = copy_element(tree, rpr)?;
+            undo.push(Undo::Created { node: run_props });
             tree.append(run, run_props)?;
             fresh_revision_ids(tree, run_props, ids)?;
         }
         for node in tree.parse_fragment(&run_text(with), &[("w", W)])? {
+            undo.push(Undo::Created { node });
             tree.append(run, node)?;
         }
         tree.append(ins, run)?;
@@ -1098,8 +1258,10 @@ fn wrap_deletion(
     runs: &[NodeId],
     rev: &Track,
     ids: &mut Ids,
+    undo: &mut Vec<Undo>,
 ) -> Result<NodeId, Error> {
     let del = tree.create_element(Some(W), "w:del")?;
+    undo.push(Undo::Created { node: del });
     set_revision(tree, del, rev, ids)?;
     tree.insert_before(runs[0], del)?;
     for &run in runs {
@@ -1111,8 +1273,17 @@ fn wrap_deletion(
             }
         }
         for text in texts {
+            let (namespace, prefix, local, renamed) = tree.saved_name(text)?;
+            undo.push(Undo::Renamed {
+                node: text,
+                namespace,
+                prefix,
+                local,
+                renamed,
+            });
             tree.set_name(text, Some(W), "w:delText")?;
         }
+        record_move(tree, undo, run)?;
         tree.append(del, run)?;
     }
     Ok(del)
@@ -1265,12 +1436,23 @@ fn text_node(piece: &Piece) -> Result<NodeId, Error> {
 
 /// Splits a text node after a byte offset, returning the node with the
 /// tail. The offset falls strictly inside the text.
-fn split_text(tree: &mut Tree, node: NodeId, text: &str, at: usize) -> Result<NodeId, Error> {
+fn split_text(
+    tree: &mut Tree,
+    node: NodeId,
+    text: &str,
+    at: usize,
+    undo: &mut Vec<Undo>,
+) -> Result<NodeId, Error> {
     let (head, tail) = text.split_at(at);
+    undo.push(Undo::Children {
+        node,
+        old: tree.children(node)?.collect(),
+    });
     tree.set_text(node, head)?;
     if (head.starts_with(' ') || head.ends_with(' '))
         && tree.attribute(node, Some(XML_NS), "space")?.is_none()
     {
+        undo.push(Undo::Space { node, old: None });
         tree.set_attribute(node, Some(XML_NS), "xml:space", "preserve")?;
     }
     let mut tail_node = None;
@@ -1279,6 +1461,7 @@ fn split_text(tree: &mut Tree, node: NodeId, text: &str, at: usize) -> Result<No
     }
     let tail_node =
         tail_node.ok_or_else(|| Error::Invalid("cannot split a text node".to_string()))?;
+    undo.push(Undo::Created { node: tail_node });
     tree.set_text(tail_node, tail)?;
     if tail.starts_with(' ') || tail.ends_with(' ') {
         tree.set_attribute(tail_node, Some(XML_NS), "xml:space", "preserve")?;
